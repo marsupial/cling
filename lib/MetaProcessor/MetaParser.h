@@ -81,38 +81,38 @@ namespace cling {
     void skipWhitespace();
 
     bool isCommandSymbol();
-    bool isCommand(MetaSema::ActionResult& actionResult,
+    bool doCommand(MetaSema::ActionResult& actionResult,
                    Value* resultValue);
-    bool isLCommand(MetaSema::ActionResult& actionResult);
-    bool isTCommand(MetaSema::ActionResult& actionResult);
-    bool isRedirectCommand(MetaSema::ActionResult& actionResult);
-    bool isExtraArgList();
-    bool isXCommand(MetaSema::ActionResult& actionResult,
+    bool doLCommand(MetaSema::ActionResult& actionResult);
+    bool doTCommand(MetaSema::ActionResult& actionResult);
+    bool doRedirectCommand(MetaSema::ActionResult& actionResult);
+    bool doExtraArgList();
+    bool doXCommand(MetaSema::ActionResult& actionResult,
                     Value* resultValue);
-    bool isAtCommand();
-    bool isqCommand();
-    bool isUCommand(MetaSema::ActionResult& actionResult);
-    bool isICommand();
-    bool isOCommand();
-    bool israwInputCommand();
-    bool isdebugCommand();
-    bool isprintDebugCommand();
-    bool isstoreStateCommand();
-    bool iscompareStateCommand();
-    bool isstatsCommand();
-    bool isundoCommand();
-    bool isdynamicExtensionsCommand();
-    bool ishelpCommand();
-    bool isfileExCommand();
-    bool isfilesCommand();
-    bool isClassCommand();
-    bool isNamespaceCommand();
-    bool isgCommand();
-    bool isTypedefCommand();
-    bool isShellCommand(MetaSema::ActionResult& actionResult,
+    bool doAtCommand();
+    bool doQCommand();
+    bool doUCommand(MetaSema::ActionResult& actionResult);
+    bool doICommand();
+    bool doOCommand();
+    bool doRawInputCommand();
+    bool doDebugCommand();
+    bool doPrintDebugCommand();
+    bool doStoreStateCommand();
+    bool doCompareStateCommand();
+    bool doStatsCommand();
+    bool doUndoCommand();
+    bool doDynamicExtensionsCommand();
+    bool doHelpCommand();
+    bool doFileExCommand();
+    bool doFilesCommand();
+    bool doClassCommand();
+    bool doNamespaceCommand();
+    bool doGCommand();
+    bool doTypedefCommand();
+    bool doShellCommand(MetaSema::ActionResult& actionResult,
                         Value* resultValue);
 
-    bool isFCommand(MetaSema::ActionResult& actionResult); // OS X framework
+    bool doFCommand(MetaSema::ActionResult& actionResult); // OS X framework
 
   public:
     MetaParser(MetaSema* Actions);
@@ -122,7 +122,7 @@ namespace cling {
     ///
     ///\returns true if it was meta command.
     ///
-    bool isMetaCommand(MetaSema::ActionResult& actionResult,
+    bool doMetaCommand(MetaSema::ActionResult& actionResult,
                        Value* resultValue);
 
     ///\brief Returns whether quit was requested via .q command

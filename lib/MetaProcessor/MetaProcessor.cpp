@@ -150,7 +150,7 @@ namespace cling {
     m_MetaParser->enterNewInputLine(input_line);
     MetaSema::ActionResult actionResult = MetaSema::AR_Success;
     if (!m_InputValidator->inBlockComment() &&
-         m_MetaParser->isMetaCommand(actionResult, result)) {
+         m_MetaParser->doMetaCommand(actionResult, result)) {
 
       if (m_MetaParser->isQuitRequested())
         return -1;
