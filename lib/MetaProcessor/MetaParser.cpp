@@ -95,9 +95,9 @@ namespace cling {
       consumeToken();
   }
 
-  bool MetaParser::isMetaCommand(MetaSema::ActionResult& actionResult,
+  bool MetaParser::doMetaCommand(MetaSema::ActionResult& actionResult,
                                  Value* resultValue) {
-    return isCommandSymbol() && isCommand(actionResult, resultValue);
+    return isCommandSymbol() && doCommand(actionResult, resultValue);
   }
 
   bool MetaParser::isQuitRequested() const {
@@ -112,31 +112,31 @@ namespace cling {
     }
     return true;
   }
-
-  bool MetaParser::isCommand(MetaSema::ActionResult& actionResult,
+  
+  bool MetaParser::doCommand(MetaSema::ActionResult& actionResult,
                              Value* resultValue) {
     if (resultValue)
       *resultValue = Value();
     // Assume success; some actions don't set it.
     actionResult = MetaSema::AR_Success;
-    return isLCommand(actionResult)
-      || isXCommand(actionResult, resultValue) ||isTCommand(actionResult)
-      || isAtCommand() || isFCommand(actionResult)
-      || isqCommand() || isUCommand(actionResult) || isICommand()
-      || isOCommand() || israwInputCommand()
-      || isdebugCommand() || isprintDebugCommand()
-      || isdynamicExtensionsCommand() || ishelpCommand() || isfileExCommand()
-      || isfilesCommand() || isClassCommand() || isNamespaceCommand() || isgCommand()
-      || isTypedefCommand()
-      || isShellCommand(actionResult, resultValue) || isstoreStateCommand()
-      || iscompareStateCommand() || isstatsCommand() || isundoCommand()
-      || isRedirectCommand(actionResult);
+    return doLCommand(actionResult)
+      || doXCommand(actionResult, resultValue) ||doTCommand(actionResult)
+      || doAtCommand() || doFCommand(actionResult)
+      || doQCommand() || doUCommand(actionResult) || doICommand()
+      || doOCommand() || doRawInputCommand()
+      || doDebugCommand() || doPrintDebugCommand()
+      || doDynamicExtensionsCommand() || doHelpCommand() || doFileExCommand()
+      || doFilesCommand() || doClassCommand() || doNamespaceCommand() || doGCommand()
+      || doTypedefCommand()
+      || doShellCommand(actionResult, resultValue) || doStoreStateCommand()
+      || doCompareStateCommand() || doStatsCommand() || doUndoCommand()
+      || doRedirectCommand(actionResult);
   }
 
   // L := 'L' FilePath Comment
   // FilePath := AnyString
   // AnyString := .*^('\t' Comment)
-  bool MetaParser::isLCommand(MetaSema::ActionResult& actionResult) {
+  bool MetaParser::doLCommand(MetaSema::ActionResult& actionResult) {
     bool result = false;
     if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("L")) {
       consumeAnyStringToken(tok::comment);
@@ -157,7 +157,7 @@ namespace cling {
   // F := 'F' FilePath Comment
   // FilePath := AnyString
   // AnyString := .*^('\t' Comment)
-  bool MetaParser::isFCommand(MetaSema::ActionResult& actionResult) {
+  bool MetaParser::doFCommand(MetaSema::ActionResult& actionResult) {
     bool result = false;
 #if defined(__APPLE__)
     if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("F")) {
@@ -180,7 +180,7 @@ namespace cling {
   // T := 'T' FilePath Comment
   // FilePath := AnyString
   // AnyString := .*^('\t' Comment)
-  bool MetaParser::isTCommand(MetaSema::ActionResult& actionResult) {
+  bool MetaParser::doTCommand(MetaSema::ActionResult& actionResult) {
     bool result = false;
     if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("T")) {
       consumeAnyStringToken();
@@ -201,7 +201,7 @@ namespace cling {
   // >RedirectCommand := '>' FilePath
   // FilePath := AnyString
   // AnyString := .*^(' ' | '\t')
-  bool MetaParser::isRedirectCommand(MetaSema::ActionResult& actionResult) {
+  bool MetaParser::doRedirectCommand(MetaSema::ActionResult& actionResult) {
 
     unsigned constant_FD = 0;
     // Default redirect is stdout.
@@ -279,7 +279,7 @@ namespace cling {
   // FilePath := AnyString
   // ArgList := (ExtraArgList) ' ' [ArgList]
   // ExtraArgList := AnyString [, ExtraArgList]
-  bool MetaParser::isXCommand(MetaSema::ActionResult& actionResult,
+  bool MetaParser::doXCommand(MetaSema::ActionResult& actionResult,
                               Value* resultValue) {
     if (resultValue)
       *resultValue = Value();
@@ -303,14 +303,14 @@ namespace cling {
   }
 
   // ExtraArgList := AnyString [, ExtraArgList]
-  bool MetaParser::isExtraArgList() {
+  bool MetaParser::doExtraArgList() {
     // This might be expanded if we need better arg parsing.
     consumeAnyStringToken(tok::r_paren);
 
     return getCurTok().is(tok::raw_ident);
   }
 
-  bool MetaParser::isqCommand() {
+  bool MetaParser::doQCommand() {
     bool result = false;
     if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("q")) {
       result = true;
@@ -319,7 +319,7 @@ namespace cling {
     return result;
   }
 
-  bool MetaParser::isUCommand(MetaSema::ActionResult& actionResult) {
+  bool MetaParser::doUCommand(MetaSema::ActionResult& actionResult) {
     if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("U")) {
       consumeAnyStringToken(tok::eof);
       llvm::StringRef path;
@@ -332,7 +332,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::isICommand() {
+  bool MetaParser::doICommand() {
     if (getCurTok().is(tok::ident) &&
         (   getCurTok().getIdent().equals("I")
          || getCurTok().getIdent().equals("include"))) {
@@ -346,7 +346,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::isOCommand() {
+  bool MetaParser::doOCommand() {
     const Token& currTok = getCurTok();
     if (currTok.is(tok::ident)) {
       llvm::StringRef ident = currTok.getIdent();
@@ -381,7 +381,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::isAtCommand() {
+  bool MetaParser::doAtCommand() {
     if (getCurTok().is(tok::at) // && getCurTok().getIdent().equals("@")
         ) {
       consumeToken();
@@ -392,7 +392,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::israwInputCommand() {
+  bool MetaParser::doRawInputCommand() {
     if (getCurTok().is(tok::ident) &&
         getCurTok().getIdent().equals("rawInput")) {
       MetaSema::SwitchMode mode = MetaSema::kToggle;
@@ -406,7 +406,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::isdebugCommand() {
+  bool MetaParser::doDebugCommand() {
     if (getCurTok().is(tok::ident) &&
         getCurTok().getIdent().equals("debug")) {
       llvm::Optional<int> mode;
@@ -420,7 +420,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::isprintDebugCommand() {
+  bool MetaParser::doPrintDebugCommand() {
     if (getCurTok().is(tok::ident) &&
         getCurTok().getIdent().equals("printDebug")) {
       MetaSema::SwitchMode mode = MetaSema::kToggle;
@@ -434,7 +434,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::isstoreStateCommand() {
+  bool MetaParser::doStoreStateCommand() {
      if (getCurTok().is(tok::ident) &&
         getCurTok().getIdent().equals("storeState")) {
        //MetaSema::SwitchMode mode = MetaSema::kToggle;
@@ -450,7 +450,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::iscompareStateCommand() {
+  bool MetaParser::doCompareStateCommand() {
     if (getCurTok().is(tok::ident) &&
         getCurTok().getIdent().equals("compareState")) {
       //MetaSema::SwitchMode mode = MetaSema::kToggle;
@@ -466,7 +466,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::isstatsCommand() {
+  bool MetaParser::doStatsCommand() {
     if (getCurTok().is(tok::ident) &&
         getCurTok().getIdent().equals("stats")) {
       consumeToken();
@@ -481,7 +481,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::isundoCommand() {
+  bool MetaParser::doUndoCommand() {
     if (getCurTok().is(tok::ident) &&
         getCurTok().getIdent().equals("undo")) {
       consumeToken();
@@ -496,7 +496,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::isdynamicExtensionsCommand() {
+  bool MetaParser::doDynamicExtensionsCommand() {
     if (getCurTok().is(tok::ident) &&
         getCurTok().getIdent().equals("dynamicExtensions")) {
       MetaSema::SwitchMode mode = MetaSema::kToggle;
@@ -510,7 +510,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::ishelpCommand() {
+  bool MetaParser::doHelpCommand() {
     const Token& Tok = getCurTok();
     if (Tok.is(tok::quest_mark) ||
         (Tok.is(tok::ident) && Tok.getIdent().equals("help"))) {
@@ -520,7 +520,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::isfileExCommand() {
+  bool MetaParser::doFileExCommand() {
     if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("fileEx")) {
       m_Actions->actOnfileExCommand();
       return true;
@@ -528,7 +528,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::isfilesCommand() {
+  bool MetaParser::doFilesCommand() {
     if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("files")) {
       m_Actions->actOnfilesCommand();
       return true;
@@ -536,7 +536,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::isClassCommand() {
+  bool MetaParser::doClassCommand() {
     const Token& Tok = getCurTok();
     if (Tok.is(tok::ident)) {
       if (Tok.getIdent().equals("class")) {
@@ -556,7 +556,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::isNamespaceCommand() {
+  bool MetaParser::doNamespaceCommand() {
     const Token& Tok = getCurTok();
     if (Tok.is(tok::ident)) {
       if (Tok.getIdent().equals("namespace")) {
@@ -570,7 +570,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::isgCommand() {
+  bool MetaParser::doGCommand() {
     if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("g")) {
       consumeToken();
       skipWhitespace();
@@ -583,7 +583,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::isTypedefCommand() {
+  bool MetaParser::doTypedefCommand() {
     const Token& Tok = getCurTok();
     if (Tok.is(tok::ident)) {
       if (Tok.getIdent().equals("typedef")) {
@@ -599,7 +599,7 @@ namespace cling {
     return false;
   }
 
-  bool MetaParser::isShellCommand(MetaSema::ActionResult& actionResult,
+  bool MetaParser::doShellCommand(MetaSema::ActionResult& actionResult,
                                   Value* resultValue) {
     if (resultValue)
       *resultValue = Value();
