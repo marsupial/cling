@@ -122,7 +122,7 @@ namespace cling {
     actionResult = MetaSema::AR_Success;
     return isLCommand(actionResult)
       || isXCommand(actionResult, resultValue) ||isTCommand(actionResult)
-      || isAtCommand()
+      || isAtCommand() || isFCommand(actionResult)
       || isqCommand() || isUCommand(actionResult) || isICommand()
       || isOCommand(actionResult) || israwInputCommand()
       || isdebugCommand() || isprintDebugCommand()
@@ -152,6 +152,29 @@ namespace cling {
       }
     }
     // TODO: Some fine grained diagnostics
+    return result;
+  }
+
+  // F := 'F' FilePath Comment
+  // FilePath := AnyString
+  // AnyString := .*^('\t' Comment)
+  bool MetaParser::isFCommand(MetaSema::ActionResult& actionResult) {
+    bool result = false;
+#if defined(__APPLE__)
+    if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("F")) {
+      consumeAnyStringToken(tok::comment);
+      if (getCurTok().is(tok::raw_ident)) {
+        result = true;
+        actionResult = m_Actions->actOnFCommand(getCurTok().getIdent());
+        consumeToken();
+        if (getCurTok().is(tok::comment)) {
+          consumeAnyStringToken(tok::eof);
+          m_Actions->actOnComment(getCurTok().getIdent());
+        }
+      }
+    }
+    // TODO: Some fine grained diagnostics
+#endif
     return result;
   }
 
