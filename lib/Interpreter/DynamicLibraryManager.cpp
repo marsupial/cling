@@ -63,7 +63,8 @@ namespace cling {
 
   DynamicLibraryManager::~DynamicLibraryManager() {}
 
-  static bool isSharedLib(llvm::StringRef LibName, bool* exists = 0) {
+  bool DynamicLibraryManager::isSharedLib(llvm::StringRef LibName,
+                                          bool* exists /*= nullptr*/) {
     using namespace llvm::sys::fs;
     file_magic Magic;
     const std::error_code Error = identify_magic(LibName, Magic);
@@ -165,39 +166,38 @@ namespace cling {
     return NPath;
   }
 
-  std::string
-  DynamicLibraryManager::lookupLibrary(llvm::StringRef libStem) const {
+  FileEntry
+  DynamicLibraryManager::lookupLibrary(FileEntry libStem) const {
+    if (libStem.resolved())
+      return libStem;
+
     // If it is an absolute path, don't try iterate over the paths.
-    if (llvm::sys::path::is_absolute(libStem)) {
-      if (isSharedLib(libStem))
-        return normalizePath(libStem);
+    const std::string &libName = libStem.mNameOrPath;
+    if (llvm::sys::path::is_absolute(libName)) {
+      if (isSharedLib(libName))
+        return FileEntry(std::move(libStem.mNameOrPath), FileEntry::kLibrarySet);
       else
-        return std::string();
+        return FileEntry(std::move(libStem.mNameOrPath), FileEntry::kResolved);
     }
 
-    std::string foundName = lookupLibMaybeAddExt(libStem);
-    if (foundName.empty() && !libStem.startswith("lib")) {
+    std::string foundName = lookupLibMaybeAddExt(libName);
+    if (foundName.empty() && libName.find("lib")!=0) {
       // try with "lib" prefix:
-      foundName = lookupLibMaybeAddExt("lib" + libStem.str());
+      foundName = lookupLibMaybeAddExt("lib" + libName);
     }
 
-    if (!foundName.empty() && isSharedLib(foundName))
-      return platform::NormalizePath(foundName);
-
-    return std::string();
+    if (isSharedLib(foundName))
+      return FileEntry(normalizePath(foundName), FileEntry::kLibrarySet);
+    return FileEntry(std::move(libStem.mNameOrPath), FileEntry::kResolved);
   }
 
   DynamicLibraryManager::LoadLibResult
-  DynamicLibraryManager::loadLibrary(const std::string& libStem,
-                                     bool permanent, bool resolved) {
-    std::string lResolved;
-    const std::string& canonicalLoadedLib = resolved ? libStem : lResolved;
-    if (!resolved) {
-      lResolved = lookupLibrary(libStem);
-      if (lResolved.empty())
-        return kLoadLibNotFound;
-    }
+  DynamicLibraryManager::loadLibrary(FileEntry libStem, bool permanent ) {
+    FileEntry file = lookupLibrary(std::move(libStem));
+    if (!file.isLibrary())
+      return kLoadLibNotFound;
 
+    const std::string &canonicalLoadedLib = file.filePath();
     if (m_LoadedLibraries.find(canonicalLoadedLib) != m_LoadedLibraries.end())
       return kLoadLibAlreadyLoaded;
 
@@ -222,12 +222,13 @@ namespace cling {
     return kLoadLibSuccess;
   }
 
-  void DynamicLibraryManager::unloadLibrary(llvm::StringRef libStem) {
-    std::string canonicalLoadedLib = lookupLibrary(libStem);
-    if (!isLibraryLoaded(canonicalLoadedLib))
+  void DynamicLibraryManager::unloadLibrary(FileEntry libStem) {
+    FileEntry file = lookupLibrary(std::move(libStem));
+    if (!isLibraryLoaded(file))
       return;
 
     DyLibHandle dyLibHandle = 0;
+    const std::string &canonicalLoadedLib = file.filePath();
     for (DyLibs::const_iterator I = m_DyLibs.begin(), E = m_DyLibs.end();
          I != E; ++I) {
       if (I->second == canonicalLoadedLib) {
@@ -252,9 +253,9 @@ namespace cling {
     m_LoadedLibraries.erase(canonicalLoadedLib);
   }
 
-  bool DynamicLibraryManager::isLibraryLoaded(llvm::StringRef fullPath) const {
-    std::string canonPath = normalizePath(fullPath);
-    if (m_LoadedLibraries.find(canonPath) != m_LoadedLibraries.end())
+  bool DynamicLibraryManager::isLibraryLoaded( const FileEntry &file ) const {
+    assert(file.resolved() && "isLibraryLoaded requires a resolved path");
+    if (m_LoadedLibraries.find(file.filePath()) != m_LoadedLibraries.end())
       return true;
     return false;
   }

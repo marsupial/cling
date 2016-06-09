@@ -42,7 +42,8 @@ namespace cling {
 
   MetaSema::ActionResult MetaSema::actOnLCommand(llvm::StringRef file,
                                              Transaction** transaction /*= 0*/){
-    ActionResult result = actOnUCommand(file);
+    FileEntry fe = m_Interpreter.lookupFileOrLibrary(file);
+    ActionResult result = actOnUCommand(file, fe);
     if (result != AR_Success)
       return result;
 
@@ -52,12 +53,13 @@ namespace cling {
     const Transaction* unloadPoint = m_Interpreter.getLastTransaction();
      // fprintf(stderr,"DEBUG: Load for %s unloadPoint is %p\n",file.str().c_str(),unloadPoint);
     // TODO: extra checks. Eg if the path is readable, if the file exists...
-    std::string canFile = m_Interpreter.lookupFileOrLibrary(file);
-    if (canFile.empty())
-      canFile = file;
-    if (m_Interpreter.loadFile(canFile, true /*allowSharedLib*/, transaction)
+
+    //if (fe.empty())
+    //  canFile = file;
+
+    if (m_Interpreter.loadFile(fe, true /*allowSharedLib*/, transaction)
         == Interpreter::kSuccess) {
-      registerUnloadPoint(unloadPoint, canFile);
+      registerUnloadPoint(unloadPoint, std::move(fe));
       return AR_Success;
     }
     return AR_Failure;
@@ -178,17 +180,10 @@ namespace cling {
     return AR_Success;
   }
 
-  MetaSema::ActionResult MetaSema::actOnUCommand(llvm::StringRef file) {
+  MetaSema::ActionResult MetaSema::actOnUCommand(const llvm::StringRef &file, FileEntry fe ) {
     // FIXME: unload, once implemented, must return success / failure
     // Lookup the file
-    clang::SourceManager& SM = m_Interpreter.getSema().getSourceManager();
-    clang::FileManager& FM = SM.getFileManager();
-
-    //Get the canonical path, taking into account interp and system search paths
-    std::string canonicalFile = m_Interpreter.lookupFileOrLibrary(file);
-    const clang::FileEntry* Entry
-      = FM.getFile(canonicalFile, /*OpenFile*/false, /*CacheFailure*/false);
-    if (Entry) {
+    if (const clang::FileEntry* Entry = fe) {
       Watermarks::iterator Pos = m_Watermarks.find(Entry);
        //fprintf(stderr,"DEBUG: unload request for %s\n",file.str().c_str());
 
@@ -226,12 +221,15 @@ namespace cling {
           }
         }
         DynamicLibraryManager* DLM = m_Interpreter.getDynamicLibraryManager();
-        if (DLM->isLibraryLoaded(canonicalFile))
-          DLM->unloadLibrary(canonicalFile);
+        DLM->unloadLibrary(std::move(fe));
         m_Watermarks.erase(Pos);
       }
     }
     return AR_Success;
+  }
+  MetaSema::ActionResult MetaSema::actOnUCommand(llvm::StringRef file) {
+    //Get the canonical path, taking into account interp and system search paths
+    return actOnUCommand(file, m_Interpreter.lookupFileOrLibrary(file));
   }
 
   void MetaSema::actOnICommand(llvm::StringRef path) const {
@@ -480,10 +478,8 @@ namespace cling {
   }
 
   void MetaSema::registerUnloadPoint(const Transaction* unloadPoint,
-                                     llvm::StringRef filename) {
-    std::string canFile = m_Interpreter.lookupFileOrLibrary(filename);
-    if (canFile.empty())
-      canFile = filename;
+                                     FileEntry file ) {
+    const std::string canFile = std::move(m_Interpreter.lookupFileOrLibrary(std::move(file)).name());
     clang::SourceManager& SM = m_Interpreter.getSema().getSourceManager();
     clang::FileManager& FM = SM.getFileManager();
     const clang::FileEntry* Entry

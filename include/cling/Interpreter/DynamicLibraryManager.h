@@ -15,6 +15,7 @@
 #include "llvm/ADT/StringSet.h"
 
 #include "llvm/Support/Path.h"
+#include "cling/Utils/FileEntry.h"
 
 namespace cling {
   class InterpreterCallbacks;
@@ -83,7 +84,7 @@ namespace cling {
     ///
     ///\returns the canonical path to the file or empty string if not found
     ///
-    std::string lookupLibrary(llvm::StringRef libStem) const;
+    FileEntry lookupLibrary(FileEntry libStem) const;
 
     ///\brief Loads a shared library.
     ///
@@ -96,15 +97,14 @@ namespace cling {
     /// was already loaded, kLoadLibError if the library cannot be found or any
     /// other error was encountered.
     ///
-    LoadLibResult loadLibrary(const std::string& libStem, bool permanent,
-                              bool resolved = false);
+    LoadLibResult loadLibrary(FileEntry libStem, bool permanent);
 
-    void unloadLibrary(llvm::StringRef libStem);
+    void unloadLibrary(FileEntry libStem);
 
     ///\brief Returns true if the file was a dynamic library and it was already
     /// loaded.
     ///
-    bool isLibraryLoaded(llvm::StringRef fullPath) const;
+    bool isLibraryLoaded(const FileEntry &file) const;
 
     ///\brief Explicitly tell the execution engine to use symbols from
     ///       a shared library that would otherwise not be used for symbol
@@ -114,6 +114,8 @@ namespace cling {
     static void ExposeHiddenSharedLibrarySymbols(void* handle);
 
     static std::string normalizePath(llvm::StringRef path);
+
+    static bool isSharedLib(llvm::StringRef LibName, bool* exists = nullptr);
   };
 } // end namespace cling
 #endif // CLING_DYNAMIC_LIBRARY_MANAGER_H
