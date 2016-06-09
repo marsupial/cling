@@ -11,6 +11,7 @@
 #define CLING_INTERPRETER_H
 
 #include "cling/Interpreter/InvocationOptions.h"
+#include "cling/Utils/FileEntry.h"
 
 #include "llvm/ADT/StringRef.h"
 
@@ -54,6 +55,7 @@ namespace clang {
   class SourceManager;
   class Type;
   class PresumedLoc;
+  class FileEntry;
 }
 
 namespace cling {
@@ -620,42 +622,40 @@ namespace cling {
 
     ///\brief Looks up a file or library according to the current interpreter
     /// include paths and system include paths.
-    ///\param[in] file - The name of the file.
+    ///\param[in] file - A FileEntry representing the path. (constructible from strings).
     ///
-    ///\returns the canonical path to the file or library or empty string if not
-    /// found.
+    ///\returns a FileEntry describing the canonical path
+    ///         or the passed in FileEntry if it was previously reolved.
     ///
-    std::string lookupFileOrLibrary(llvm::StringRef file);
+    FileEntry lookupFileOrLibrary(FileEntry file);
 
     ///\brief Loads a shared library.
     ///
-    ///\param [in] filename - The file to loaded.
-    ///\param [in] lookup - Whether to try to resolve the filepath
+    ///\param[in] file - FileEntry (constructible from strings) of the path.
+    ///\param [in] permanent - If false, the file can be unloaded later.
     ///
-    ///\returns kMoreInputExpected is returned when file could not be found
+    ///\returns kMoreInputExpected when file could not be found
     /// otherwise kSuccess or kFailure
-    ///
-    CompilationResult loadLibrary(const std::string& filename,
-                                  bool lookup = true);
+    CompilationResult loadLibrary(FileEntry file, bool permanent = false);
 
     ///\brief Loads header file
     ///
-    ///\param [in] filename - The file to loaded.
+    ///\param[in] file - FileEntry (constructible from strings) of the path.
     ///\param [out] T -  Transaction containing the loaded file.
     ///\returns result of the compilation.
     ///
-    CompilationResult loadHeader(const std::string& filename,
+    CompilationResult loadHeader(FileEntry file,
                                  Transaction** T = 0);
 
     ///\brief Loads header file or shared library.
     ///
-    ///\param [in] filename - The file to be loaded.
-    ///\param [in] allowSharedLib - Whether to try to load the file as shared
+    ///\param[in] file - FileEntry (constructible from strings) of the path.
+    ///\param[in] allowSharedLib - Whether to try to load the file as shared
     ///                             library.
-    ///\param [out] T -  Transaction containing the loaded file.
+    ///\param[out] T -  Transaction containing the loaded file.
     ///\returns result of the compilation.
     ///
-    CompilationResult loadFile(const std::string& filename,
+    CompilationResult loadFile(FileEntry file,
                                bool allowSharedLib = true,
                                Transaction** T = 0);
 

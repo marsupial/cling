@@ -48,6 +48,7 @@
 #include "clang/Lex/ExternalPreprocessorSource.h"
 #include "clang/FrontendTool/Utils.h"
 #include "clang/Lex/HeaderSearch.h"
+#include "clang/Lex/LexDiagnostic.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Parse/Parser.h"
 #include "clang/Sema/Sema.h"
@@ -78,6 +79,17 @@ extern "C" std::type_info
 using namespace clang;
 
 extern "C" void* __emutls_get_address(struct __emutls_control*);
+
+namespace cling {
+ namespace utils {
+     // This is here, to [hopefully] inline the FileEntry contruction below
+    FileEntry::FileEntry(const clang::FileEntry* FE, const char* absPath)
+      : mEntry(FE), mNameOrPath(absPath),
+      mFlags(kResolved | kExists |
+        (DynamicLibraryManager::isSharedLib(mNameOrPath) ? kIsLibrary : 0)) {
+    }
+  }
+}
 
 namespace {
 
@@ -1417,11 +1429,14 @@ namespace cling {
     return Interpreter::kSuccess;
   }
 
-  std::string Interpreter::lookupFileOrLibrary(llvm::StringRef file) {
-    std::string canonicalFile = DynamicLibraryManager::normalizePath(file);
+  FileEntry Interpreter::lookupFileOrLibrary(FileEntry file) {
+    if (file.resolved())
+      return file;
+
+    std::string canonicalFile =
+                         DynamicLibraryManager::normalizePath(file.mNameOrPath);
     if (canonicalFile.empty())
-      canonicalFile = file;
-    const FileEntry* FE = 0;
+      canonicalFile = std::move(file.mNameOrPath);
 
     //Copied from clang's PPDirectives.cpp
     bool isAngled = false;
@@ -1434,52 +1449,82 @@ namespace cling {
     Preprocessor& PP = getCI()->getPreprocessor();
     // PP::LookupFile uses it to issue 'nice' diagnostic
     SourceLocation fileNameLoc;
-    FE = PP.LookupFile(fileNameLoc, canonicalFile, isAngled, FromDir, FromFile,
+    const clang::FileEntry* FE = PP.LookupFile(fileNameLoc, canonicalFile,
+                       isAngled, FromDir, FromFile,
                        CurDir, /*SearchPath*/0, /*RelativePath*/ 0,
                        /*suggestedModule*/0, 0 /*IsMapped*/, /*SkipCache*/false,
                        /*OpenFile*/ false, /*CacheFail*/ false);
-    if (FE)
-      return FE->getName();
-    return getDynamicLibraryManager()->lookupLibrary(canonicalFile);
+    if (FE && FE->isValid()) {
+      // Just because it's valid in the cache, doesn't mean it really is
+      // ###TODO: We can avoid re-stating a file when it's actually not from
+      // cache by comparing against FileManager::NextFileUID
+      vfs::Status Stat;
+      FileManager& FM = PP.getSourceManager().getFileManager();
+      if (!FM.getNoncachedStatValue(FE->getName(), Stat)) {
+        if (Stat.isRegularFile()||Stat.isSymlink()) {
+          SmallString<512> path(FE->getName());
+          FM.makeAbsolutePath(path);
+          return FileEntry(FE, path.c_str());
+        }
+      }
+      else
+        FM.invalidateCache(const_cast<clang::FileEntry*>(FE));
+    }
+    return getDynamicLibraryManager()->lookupLibrary(std::move(canonicalFile));
   }
 
   Interpreter::CompilationResult
-  Interpreter::loadLibrary(const std::string& filename, bool lookup) {
-    DynamicLibraryManager* DLM = getDynamicLibraryManager();
-    std::string canonicalLib;
-    if (lookup)
-      canonicalLib = DLM->lookupLibrary(filename);
+  Interpreter::loadLibrary( FileEntry fileObj, bool permant) {
+    FileEntry file = lookupFileOrLibrary(std::move(fileObj));
+    if (!file.exists())
+      return kMoreInputExpected;
+    if (!file.isLibrary())
+      return kFailure;
 
-    const std::string &library = lookup ? canonicalLib : filename;
-    if (!library.empty()) {
-      switch (DLM->loadLibrary(library, /*permanent*/false, /*resolved*/true)) {
+    switch (getDynamicLibraryManager()->loadLibrary(std::move(file), permant)) {
       case DynamicLibraryManager::kLoadLibSuccess: // Intentional fall through
       case DynamicLibraryManager::kLoadLibAlreadyLoaded:
         return kSuccess;
       case DynamicLibraryManager::kLoadLibNotFound:
         assert(0 && "Cannot find library with existing canonical name!");
-        return kFailure;
       default:
-        // Not a source file (canonical name is non-empty) but can't load.
-        return kFailure;
-      }
+        break;
     }
-    return kMoreInputExpected;
+    return kFailure;
   }
 
   Interpreter::CompilationResult
-  Interpreter::loadHeader(const std::string& filename,
-                          Transaction** T /*= 0*/) {
-    std::string code;
-    code += "#include \"" + filename + "\"";
+  Interpreter::loadHeader( FileEntry fileObj, Transaction** T /*= 0*/) {
+    FileEntry file = lookupFileOrLibrary(std::move(fileObj));
+    if (!file.exists()) {
+      getSema().Diag(getSourceLocation(), clang::diag::err_pp_file_not_found)
+        << file.name();
+      return kFailure;
+    }
+
+    std::string code("#include \"");
+    code.append(file.filePath());
+    code.append("\"");
 
     CompilationOptions CO(this);
     CO.DeclarationExtraction = 0;
     CO.ValuePrinting = 0;
     CO.ResultEvaluation = 0;
     CO.CheckPointerValidity = 1;
-    CompilationResult res = DeclareInternal(code, CO, T);
-    return res;
+    return DeclareInternal(code, CO, T);
+  }
+
+  Interpreter::CompilationResult
+  Interpreter::loadFile(FileEntry fileObj, bool allowSharedLib /*=true*/,
+                        Transaction** T /*= 0*/) {
+    FileEntry file = lookupFileOrLibrary(std::move(fileObj));
+    if (file.isLibrary()) {
+      if (allowSharedLib)
+        return loadLibrary(std::move(file));
+      return kFailure;
+    }
+
+    return loadHeader(std::move(file), T);
   }
 
   void Interpreter::unload(Transaction& T) {
@@ -1567,18 +1612,6 @@ namespace cling {
 
       unload(*T);
     }
-  }
-
-  Interpreter::CompilationResult
-  Interpreter::loadFile(const std::string& filename,
-                        bool allowSharedLib /*=true*/,
-                        Transaction** T /*= 0*/) {
-    if (allowSharedLib) {
-      CompilationResult result = loadLibrary(filename, true);
-      if (result!=kMoreInputExpected)
-        return result;
-    }
-    return loadHeader(filename, T);
   }
 
   static void runAndRemoveStaticDestructorsImpl(IncrementalExecutor &executor,

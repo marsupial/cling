@@ -88,18 +88,20 @@ int main( int argc, char **argv ) {
     for (const std::string &Input : Opts.Inputs) {
       std::string Cmd;
       cling::Interpreter::CompilationResult Result;
-      const std::string Filepath = Interp.lookupFileOrLibrary(Input);
-      if (!Filepath.empty()) {
-        std::ifstream File(Filepath);
-        std::string Line;
-        std::getline(File, Line);
-        if (Line[0] == '#' && Line[1] == '!') {
-          // TODO: Check whether the filename specified after #! is the current
-          // executable.
-          while (std::getline(File, Line)) {
-            Ui.getMetaProcessor()->process(Line, Result, 0);
+      const cling::FileEntry FE = Interp.lookupFileOrLibrary(Input);
+      if (FE.exists()) {
+        if (!FE.isLibrary()) {
+          std::ifstream File(FE.filePath());
+          std::string Line;
+          std::getline(File, Line);
+          if (Line[0] == '#' && Line[1] == '!') {
+            // TODO: Check whether the filename specified after #! is the current
+            // executable.
+            while (std::getline(File, Line)) {
+              Ui.getMetaProcessor()->process(Line.c_str(), Result, 0);
+            }
+            continue;
           }
-          continue;
         }
         Cmd += ".x ";
       }
