@@ -24,6 +24,7 @@
 #include "clang/Sema/Sema.h"
 #include "clang/Serialization/ASTReader.h"
 #include "clang/Sema/SemaDiagnostic.h"
+#include "clang/Lex/HeaderSearchOptions.h"
 #include "clang/Lex/LexDiagnostic.h"
 
 #include "llvm/ADT/SmallVector.h"
@@ -37,6 +38,10 @@
 
 #include <cstdlib>
 #include <iostream>
+
+#ifdef __APPLE__
+ #include "llvm/Support/Process.h"
+#endif
 
 namespace cling {
 
@@ -82,6 +87,290 @@ namespace cling {
   void MetaSema::actOnOCommand() {
     m_MetaProcessor.getOuts() << "Current cling optimization level: "
                               << m_Interpreter.getDefaultOptLevel() << '\n';
+  }
+
+  MetaSema::ActionResult MetaSema::actOnFCommand(llvm::StringRef file,
+                                             Transaction** transaction /*= 0*/){
+#if defined(__APPLE__)
+    class FrameworkResolver {
+    public:
+      class FrameworkAction {
+      public:
+        struct FrameworkPaths {
+          std::string library, header, bundle;
+          FrameworkPaths(std::string &lib, std::string &hdr,
+                         const std::string &bndl) {
+            library.swap(lib), header.swap(hdr);
+            if (!library.empty() || !header.empty())
+              bundle = bndl;
+          }
+        };
+        virtual ~FrameworkAction() {}
+        virtual bool operator()(const FrameworkPaths &paths) = 0;
+      };
+      typedef FrameworkAction::FrameworkPaths FrameworkPaths;
+
+    private:
+      const std::string m_Extension;
+      std::string m_Name;
+      const llvm::StringRef *m_HeaderName;
+      size_t m_IsAbsolute, m_DoHeader;
+
+      // In the order in which they are seached
+      static bool getLocalFrameworks(std::string &dir,
+                                     const std::string * = 0) {
+        dir = llvm::sys::fs::getMainExecutable(
+            "cling", (void *)uintptr_t(&getLocalFrameworks));
+        if (!dir.empty()) {
+          // parent of directory containing binary
+          llvm::StringRef parent = llvm::sys::path::parent_path(dir);
+          dir = llvm::sys::path::parent_path(parent);
+          dir.append("/Frameworks");
+          return true;
+        }
+        return false;
+      }
+      static bool getUserFrameworks(std::string &dir, const std::string * = 0) {
+        llvm::SmallString<1024> tmp;
+        if (llvm::sys::path::home_directory(tmp)) {
+          dir.assign(tmp.begin(), tmp.end());
+          dir.append("/Library/Frameworks");
+          return true;
+        }
+        return false;
+      }
+      static bool getLibraryFrameworks(std::string &dir,
+                                       const std::string *sysRoot) {
+        if (sysRoot)
+          dir = *sysRoot;
+        dir.append("/Library/Frameworks");
+        return true;
+      }
+      static bool getSystemFrameworks(std::string &dir,
+                                      const std::string *sysRoot) {
+        if (sysRoot)
+          dir = *sysRoot;
+        dir.append("/System/Library/Frameworks");
+        return true;
+      }
+      static bool getDYLD_LIBRARY_PATH(std::string &dir,
+                                       const std::string * = 0) {
+        llvm::Optional<std::string> path =
+            llvm::sys::Process::GetEnv("DYLD_LIBRARY_PATH");
+        if (path.hasValue()) {
+          dir.swap(path.getValue());
+          return !dir.empty();
+        }
+        return false;
+      }
+      static bool isRegFile(const std::string &dir) {
+        return llvm::sys::fs::is_regular_file(dir);
+      }
+      static bool isDirectory(const std::string &dir) {
+        return llvm::sys::fs::is_directory(dir);
+      }
+
+      bool tryDirectory(std::string &frPath, FrameworkAction &action) const {
+        if (llvm::sys::fs::is_directory(frPath)) {
+          frPath.append("/");
+          frPath.append(m_Name);
+          frPath.append(m_Extension);
+
+          // <Path>/Name.framework is valid, try to find its children
+          if (isDirectory(frPath))
+            return action(resolve(frPath));
+        }
+        return false;
+      }
+
+    public:
+      FrameworkResolver(const llvm::StringRef &file)
+          : m_Extension(".framework"), m_HeaderName(nullptr),
+            m_IsAbsolute(false) {
+        {
+          const size_t prevLen = file.size();
+          llvm::SmallString<1024> tmp(file);
+          llvm::sys::path::replace_extension(tmp, "");
+          m_DoHeader = prevLen > tmp.size() ? prevLen - tmp.size() : 0;
+        }
+
+        if (/*file.endswith(m_Extension) &&*/ llvm::sys::fs::is_directory(
+            file)) {
+          m_Name.assign(file.data(), file.size() - m_DoHeader);
+          llvm::sys::path::filename(m_Name).str().swap(m_Name);
+          m_IsAbsolute = true; // phase2(file.str());
+        } else if (m_DoHeader) {
+          // Do we need to transform X.framework to X.h?
+          if (m_DoHeader == m_Extension.size() &&
+              std::string(file.end() - m_DoHeader, file.end()) == m_Extension) {
+            m_HeaderName = NULL;
+          } else
+            m_HeaderName = &file;
+        }
+      }
+
+      FrameworkPaths resolve(const std::string &frPath) const {
+
+        std::string libPath(frPath + "/" +
+                            m_Name); // <Path>/Name.framework/Name
+
+        // std::error_code llvm::sys::fs:identify_magic(const Twine &path,
+        // file_magic &result); macho_dynamically_linked_shared_lib ||
+        // macho_bundle
+
+        if (!isRegFile(libPath))
+          std::string().swap(libPath);
+
+        std::string headerPath;
+        if (m_DoHeader) {
+          headerPath = frPath + "/Headers/"; // <Path>/Name.framework/Headers
+          if (m_HeaderName == NULL) {
+            headerPath.append(m_Name);
+            headerPath.append(".h");
+          } else
+            headerPath.append(m_HeaderName->str());
+
+          if (!isRegFile(headerPath))
+            std::string().swap(headerPath);
+        }
+        return FrameworkPaths(libPath, headerPath, frPath);
+      }
+
+      bool resolve(const llvm::StringRef &file,
+                   const clang::HeaderSearchOptions &opts,
+                   FrameworkAction &action) {
+
+        m_Name.assign(file.begin(), file.end() - m_DoHeader);
+
+        /* Cuurent order of search paths
+          DYLD_LIBRARY_PATH, meant to ovveride anything else
+          -F directories given on command line
+          executable/../../Library/Framework
+          <user>/Library/Framework
+
+          The next are a bit of a conundrum, as isysroot will likely have the
+         headers we need,
+           For example: do we really want to load CoreFoundation from an SDKs
+         folder?
+           Or we do it from the running system, but we probably won't get the
+         headers
+
+         isysroot/Library/Frameworks
+         isysroot/System/Library/Frameworks
+         /Library/Frameworks
+         /System/Library/Frameworks
+        */
+        
+        // DYLD_LIBRARY_PATH
+        std::string paths;
+        if (getDYLD_LIBRARY_PATH(paths)) {
+          size_t pos = 0;
+          while ((pos = paths.find(':')) != std::string::npos) {
+            std::string tmp = paths.substr(0, pos);
+            if (tryDirectory(tmp, action))
+              return true;
+            paths.erase(0, pos + 1);
+          }
+          if (!paths.empty() && tryDirectory(paths, action))
+            return true;
+          
+          std::string().swap(paths);
+        }
+
+        // -F command line flags
+        for (clang::HeaderSearchOptions::Entry e : opts.UserEntries) {
+          if (e.IsFramework && !e.Path.empty()) {
+            if (tryDirectory(e.Path, action))
+              return true;
+          }
+        }
+
+
+        // -isysroot, then /
+        typedef bool (*FrameworkPaths)(std::string & dir,
+                                       const std::string *sysRoot);
+        FrameworkPaths getPaths[] = {getLocalFrameworks, getUserFrameworks,
+                                     getLibraryFrameworks, getSystemFrameworks,
+                                     0};
+
+        const std::string *sysRoot = opts.Sysroot.empty() ? nullptr :
+                                                            &opts.Sysroot;
+        for (unsigned r = 0; r < 2; ++r) {
+          for (unsigned i = 0; getPaths[i]; ++i) {
+            std::string cur;
+            if (getPaths[i](cur, sysRoot)) {
+              if (tryDirectory(cur, action))
+                return true;
+            }
+          }
+          if (!sysRoot)
+            break;
+
+          // Maybe the framework isn't in -isysroot, but the actual system root
+          sysRoot = NULL;
+          getPaths[0] = getLibraryFrameworks;
+          getPaths[1] = getSystemFrameworks;
+          getPaths[2] = NULL;
+        }
+
+        return false;
+      }
+
+      bool isAbsolute() const { return m_IsAbsolute; }
+    };
+
+    class ClingLoadFramework : public FrameworkResolver::FrameworkAction {
+      MetaSema &m_Sema;
+      Transaction **m_Transaction;
+
+    public:
+      ClingLoadFramework(MetaSema &s, Transaction **t)
+          : m_Sema(s), m_Transaction(t) {}
+
+      bool operator()(const FrameworkPaths &paths) override {
+
+        const bool haveLib = !paths.library.empty(),
+                   haveHeader = !paths.header.empty();
+        if (haveLib || haveHeader) {
+          if (m_Sema.actOnUCommand(paths.bundle) != MetaSema::AR_Success)
+            return false;
+
+          Interpreter &interp =
+              const_cast<Interpreter&>(m_Sema.getInterpreter());
+
+          Interpreter::CompilationResult iRslt =
+              haveLib ? interp.loadLibrary(paths.library, false)
+                      : Interpreter::kSuccess;
+
+          // Probably shouldn't go for the headers if the library failed already
+          if (haveHeader && iRslt == Interpreter::kSuccess) {
+            const Transaction *unloadPoint = interp.getLastTransaction();
+
+            iRslt = interp.loadHeader(paths.header, m_Transaction);
+            if (interp.getLastTransaction() != unloadPoint)
+              m_Sema.registerUnloadPoint(unloadPoint, paths.header);
+          }
+
+          return iRslt == Interpreter::kSuccess;
+        }
+        return false;
+      }
+    };
+
+    ClingLoadFramework action(*this, transaction);
+    FrameworkResolver fResolver(file);
+    if (fResolver.isAbsolute()) {
+      if (action(fResolver.resolve(file.str())))
+        return AR_Success;
+    } else if (llvm::sys::fs::is_regular_file(file))
+      return actOnLCommand(file, transaction);
+    else if (fResolver.resolve(file,
+                 m_Interpreter.getCI()->getHeaderSearchOpts(),
+                 action))
+      return AR_Success;
+
+#endif
+    return AR_Failure;
   }
 
   MetaSema::ActionResult MetaSema::actOnTCommand(llvm::StringRef inputFile,
