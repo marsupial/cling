@@ -34,6 +34,7 @@ namespace cling {
   //                            ClassCommand | GCommand | StoreStateCommand |
   //                            CompareStateCommand | StatsCommand | undoCommand
   //                 LCommand := 'L' FilePath
+  //                 FCommand := 'F' FilePath[.h|.framework] // OS X only
   //                 TCommand := 'T' FilePath FilePath
   //                 >Command := '>' FilePath
   //                 qCommand := 'q'
@@ -110,6 +111,9 @@ namespace cling {
     bool isTypedefCommand();
     bool isShellCommand(MetaSema::ActionResult& actionResult,
                         Value* resultValue);
+
+    bool isFCommand(MetaSema::ActionResult& actionResult); // OS X framework
+
   public:
     MetaParser(MetaSema* Actions);
     void enterNewInputLine(llvm::StringRef Line);
