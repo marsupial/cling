@@ -620,8 +620,8 @@ namespace cling {
       // Make that unique!
       ASTContext& Context = getCI()->getASTContext();
       SourceManager &SM = Context.getSourceManager();
-      const FileEntry *MainFile = SM.getFileEntryForID(SM.getMainFileID());
-      FileEntry* NcMainFile = const_cast<FileEntry*>(MainFile);
+      const clang::FileEntry *MainFile = SM.getFileEntryForID(SM.getMainFileID());
+      clang::FileEntry* NcMainFile = const_cast<clang::FileEntry*>(MainFile);
       // Hack to temporarily set the file entry's name to a unique name.
       assert(MainFile->getName() == *(const char**)NcMainFile
          && "FileEntry does not start with the name");

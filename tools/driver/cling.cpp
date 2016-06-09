@@ -108,9 +108,9 @@ int main( int argc, char **argv ) {
     for (const std::string &Input : Opts.Inputs) {
       std::string Cmd;
       cling::Interpreter::CompilationResult Result;
-      const std::string Filepath = Interp.lookupFileOrLibrary(Input);
-      if (!Filepath.empty()) {
-        std::ifstream File(Filepath);
+      const cling::FileEntry FE = Interp.lookupFileOrLibrary(Input);
+      if (FE.exists()) {
+        std::ifstream File(FE.filePath());
         std::string Line;
         std::getline(File, Line);
         if (Line[0] == '#' && Line[1] == '!') {
