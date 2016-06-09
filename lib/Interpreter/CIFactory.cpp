@@ -400,7 +400,7 @@ namespace {
   }
 
   ///\brief Adds standard library -I used by whatever compiler is found in PATH.
-  static void AddHostCXXIncludes(std::vector<const char*>& args) {
+  static void AddHostCXXIncludes(std::vector<const char*>& args, const char* clang ) {
     static bool IncludesSet = false;
     static std::vector<std::string> HostCXXI;
     if (!IncludesSet) {
@@ -444,12 +444,14 @@ namespace {
         }
       }
 
-      static const char *CppInclQuery =
-        "echo | LC_ALL=C " LLVM_CXX " -xc++ -E -v /dev/null 2>&1 "
+      std::string CppInclQuery("echo | LC_ALL=C ");
+      CppInclQuery.append(clang ? clang : LLVM_CXX);
+      CppInclQuery.append(" -xc++ -E -v /dev/null 2>&1 "
         "| awk '/^#include </,/^End of search"
         "/{if (!/^#include </ && !/^End of search/){ print }}' "
-        "| GREP_OPTIONS= grep -E \"(c|g)\\+\\+\"";
-      if (FILE *pf = ::popen(CppInclQuery, "r")) {
+        "| GREP_OPTIONS= grep -E \"(c|g)\\+\\+\"");
+
+      if (FILE *pf = ::popen(CppInclQuery.c_str(), "r")) {
 
         HostCXXI.push_back("-nostdinc++");
         char buf[2048];
@@ -467,6 +469,9 @@ namespace {
         }
         ::pclose(pf);
       }
+      else
+        llvm::errs() << "popen failed for '" << CppInclQuery << "'\n";
+
       // HostCXXI contains at least -nostdinc++, -I
       if (HostCXXI.size() < 3) {
         llvm::errs() << "ERROR in cling::CIFactory::createCI(): cannot extract "
@@ -474,7 +479,7 @@ namespace {
           "Invoking:\n"
           "    " << CppInclQuery << "\n"
           "results in\n";
-        int ExitCode = system(CppInclQuery);
+        int ExitCode = system(CppInclQuery.c_str());
         llvm::errs() << "with exit code " << ExitCode << "\n";
       }
 #endif // _MSC_VER
@@ -643,7 +648,16 @@ namespace {
       argvCompile.insert(argvCompile.begin() + 2, lang);
     }
 
-    AddHostCXXIncludes(argvCompile);
+    std::string clang = llvm::sys::fs::getMainExecutable("cling",
+                                       (void*)(intptr_t) locate_cling_executable
+                                                        );
+    clang = llvm::sys::path::parent_path(clang);
+    SmallString<128> P(clang);
+    llvm::sys::path::append(P, "clang");
+    clang.assign(&P[0], P.size());
+
+    AddHostCXXIncludes(argvCompile, llvm::sys::fs::is_regular_file(clang) ?
+                                    clang.data() : NULL);
 
     argvCompile.insert(argvCompile.end(),"-c");
     argvCompile.insert(argvCompile.end(),"-");
@@ -815,14 +829,12 @@ namespace {
       = FM.getDirectory(getcwd_func(cwdbuf, sizeof(cwdbuf)));
     (void)DE;
     assert(!strcmp(DE->getName(), cwdbuf) && "Unexpected name for $PWD");
-    // Build the virtual file
-    const char* Filename = "InteractiveInputLineIncluder.h";
-    const std::string& CGOptsMainFileName
-      = CI->getInvocation().getCodeGenOpts().MainFileName;
-    if (!CGOptsMainFileName.empty())
-      Filename = CGOptsMainFileName.c_str();
-    const FileEntry* FE
-      = FM.getVirtualFile(Filename, 1U << 15U, time(0));
+
+    // Build the virtual file, Give it a name that's likely not to ever
+    // be #included (so we won't get a clash in clangs cache).
+    const char* Filename = "<<< cling interactive line includer >>>";
+    const FileEntry* FE = FM.getVirtualFile(Filename, 1U << 15U, time(0));
+
     // Tell ASTReader to create a FileID even if this file does not exist:
     SM->setFileIsTransient(FE);
     FileID MainFileID = SM->createFileID(FE, SourceLocation(), SrcMgr::C_User);
