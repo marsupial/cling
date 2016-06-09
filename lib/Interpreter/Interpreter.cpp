@@ -1039,13 +1039,15 @@ namespace cling {
   }
 
   Interpreter::CompilationResult
-  Interpreter::loadFile(const std::string& filename,
-                        bool allowSharedLib /*=true*/,
-                        Transaction** T /*= 0*/) {
+  Interpreter::loadLibrary(const std::string& filename, bool lookup) {
     DynamicLibraryManager* DLM = getDynamicLibraryManager();
-    std::string canonicalLib = DLM->lookupLibrary(filename);
-    if (allowSharedLib && !canonicalLib.empty()) {
-      switch (DLM->loadLibrary(canonicalLib, /*permanent*/false, /*resolved*/true)) {
+    std::string canonicalLib;
+    if (lookup)
+      canonicalLib = DLM->lookupLibrary(filename);
+
+    const std::string &library = lookup ? canonicalLib : filename;
+    if (!library.empty()) {
+      switch (DLM->loadLibrary(library, /*permanent*/false, /*resolved*/true)) {
       case DynamicLibraryManager::kLoadLibSuccess: // Intentional fall through
       case DynamicLibraryManager::kLoadLibAlreadyLoaded:
         return kSuccess;
@@ -1057,7 +1059,12 @@ namespace cling {
         return kFailure;
       }
     }
+    return kMoreInputExpected;
+  }
 
+  Interpreter::CompilationResult
+  Interpreter::loadHeader(const std::string& filename,
+                          Transaction** T /*= 0*/) {
     std::string code;
     code += "#include \"" + filename + "\"";
 
@@ -1121,6 +1128,18 @@ namespace cling {
         break;
     }
 
+  }
+
+  Interpreter::CompilationResult
+  Interpreter::loadFile(const std::string& filename,
+                        bool allowSharedLib /*=true*/,
+                        Transaction** T /*= 0*/) {
+    if (allowSharedLib) {
+      CompilationResult result = loadLibrary(filename, true);
+      if (result!=kMoreInputExpected)
+        return result;
+    }
+    return loadHeader(filename, T);
   }
 
   static void runAndRemoveStaticDestructorsImpl(IncrementalExecutor &executor,
