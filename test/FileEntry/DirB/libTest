@@ -1,0 +1,3 @@
+const char* LoadedFrom = "DirB";
+
+extern "C" int funcFace();

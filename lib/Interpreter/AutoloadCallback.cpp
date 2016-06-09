@@ -84,11 +84,11 @@ namespace cling {
 
       assert(m_PP);
 
-      const FileEntry* FE = 0;
+      const clang::FileEntry* FE = 0;
       SourceLocation fileNameLoc;
       bool isAngled = false;
       const DirectoryLookup* FromDir = 0;
-      const FileEntry* FromFile = 0;
+      const clang::FileEntry* FromFile = 0;
       const DirectoryLookup* CurDir = 0;
       llvm::StringRef FileName = annotation.drop_front(lenAnnoTag);
       if (FileName.equals(m_PrevFileName))

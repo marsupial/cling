@@ -57,9 +57,9 @@ int main( int argc, char **argv ) {
     for (const std::string &input : opts.Inputs) {
       std::string cmd;
       cling::Interpreter::CompilationResult compRes;
-      const std::string file = interp.lookupFileOrLibrary(input);
-      if (!file.empty()) {
-        std::ifstream infile(file);
+      const cling::FileEntry fe = interp.lookupFileOrLibrary(input);
+      if (fe.exists()) {
+        std::ifstream infile(fe.filePath());
         std::string line;
         std::getline(infile, line);
         if (line[0] == '#' && line[1] == '!') {
