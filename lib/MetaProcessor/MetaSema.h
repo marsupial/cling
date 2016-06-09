@@ -67,6 +67,14 @@ namespace cling {
     ActionResult actOnLCommand(llvm::StringRef file,
                                Transaction** transaction = 0);
 
+    ///\brief F command loads the given framework and optioanlly its root header (OS X only)
+    ///
+    ///\param[in] file - The frameowrk to b eloaded
+    ///\param[out] transaction - Transaction containing the loaded file.
+    ///
+    ActionResult actOnFCommand(llvm::StringRef file,
+                               Transaction** transaction = 0);
+
     ///\brief T command prepares the tag files for giving semantic hints.
     ///
     ///\param[in] inputFile - The source file of the map.
