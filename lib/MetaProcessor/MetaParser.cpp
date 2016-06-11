@@ -117,20 +117,92 @@ namespace cling {
                              Value* resultValue) {
     if (resultValue)
       *resultValue = Value();
+
     // Assume success; some actions don't set it.
     actionResult = MetaSema::AR_Success;
-    return doLCommand(actionResult)
-      || doXCommand(actionResult, resultValue) ||doTCommand(actionResult)
-      || doAtCommand() || doFCommand(actionResult)
-      || doQCommand() || doUCommand(actionResult) || doICommand()
-      || doOCommand() || doRawInputCommand()
-      || doDebugCommand() || doPrintDebugCommand()
-      || doDynamicExtensionsCommand() || doHelpCommand() || doFileExCommand()
-      || doFilesCommand() || doClassCommand() || doNamespaceCommand() || doGCommand()
-      || doTypedefCommand()
-      || doShellCommand(actionResult, resultValue) || doStoreStateCommand()
-      || doCompareStateCommand() || doStatsCommand() || doUndoCommand()
-      || doRedirectCommand(actionResult);
+    const Token &tok = getCurTok();
+    switch ( tok.getKind() ) {
+      case tok::ident: {
+        const llvm::StringRef ident = getCurTok().getIdent();
+        // .X commands
+        switch ( ident.size()==1 ? ident[0] : 0 ) {
+          case 'g':
+            return doGCommand();
+          case 'F':
+            return doFCommand(actionResult);
+          case 'I':
+            return doICommand();
+          case 'L':
+            return doLCommand(actionResult);
+          case 'T':
+            return doTCommand(actionResult);
+          case 'U':
+            return doUCommand(actionResult);
+
+          case 'q':
+          case 'Q':
+            return doQCommand();
+          case 'x':
+          case 'X':
+            return doXCommand(actionResult, resultValue);
+        
+          default:
+            break;
+        }
+
+        // string commands
+        if ( ident.equals("rawInput") )
+            return doRawInputCommand();
+        else if ( ident.equals("help") )
+          return doHelpCommand();
+        else if ( ident.equals("undo") )
+          return doUndoCommand();
+        else if ( ident.startswith("O") )
+          return doOCommand();
+        else if ( ident.equals("include") )
+          return doICommand();
+
+        else if ( ident.equals("class") || ident.equals("Class") )
+          return doClassCommand();
+        else if ( ident.equals("files") )
+          return doFilesCommand();
+        else if ( ident.equals("fileEx") )
+          return doFileExCommand();
+        else if ( ident.equals("namespace") )
+          return doNamespaceCommand();
+        else if ( ident.equals("typedef") )
+          return doTypedefCommand();
+
+        else if ( ident.equals("debug") )
+          return doDebugCommand();
+        else if ( ident.equals("dynamicExtensions") )
+          return doDynamicExtensionsCommand();
+        else if ( ident.equals("printDebug") )
+          return doPrintDebugCommand();
+        else if ( ident.equals("stats") )
+          return doStatsCommand();
+        else if ( ident.equals("storeState") )
+          return doStoreStateCommand();
+        else if ( ident.equals("compareState") )
+          return doCompareStateCommand();
+      }
+
+      case tok::quest_mark:
+        return doHelpCommand();
+      case tok::at:
+        return doAtCommand();
+      case tok::excl_mark:
+        return doShellCommand(actionResult, resultValue);
+
+      case tok::constant:
+      case tok::ampersand:
+      case tok::greater:
+        return doRedirectCommand(actionResult);
+
+      default:
+        break;
+    }
+    return false;
   }
 
   // L := 'L' FilePath Comment
