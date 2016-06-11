@@ -62,12 +62,23 @@ namespace cling {
   }
 
   NamedDecl* Transaction::containsNamedDecl(llvm::StringRef name) const {
-    for (auto I = decls_begin(), E = decls_end(); I < E; ++I)
+    for (auto I = decls_begin(), E = decls_end(); I < E; ++I) {
       for (auto DI : I->m_DGR) {
-        if (NamedDecl* ND = dyn_cast<NamedDecl>(DI))
+        if (DI->getKind() == Decl::LinkageSpec) {
+          for (Decl* DI : LinkageSpecDecl::castToDeclContext(
+                static_cast<LinkageSpecDecl*>(DI))->decls()) {
+            if (NamedDecl* ND = dyn_cast<NamedDecl>(DI)) {
+              if (name.equals(ND->getNameAsString()))
+                return ND;
+            }
+          }
+        }
+        else if (NamedDecl* ND = dyn_cast<NamedDecl>(DI)) {
           if (name.equals(ND->getNameAsString()))
             return ND;
+        }
       }
+    }
     return 0;
   }
 
