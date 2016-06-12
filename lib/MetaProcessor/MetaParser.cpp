@@ -205,69 +205,103 @@ namespace cling {
     return false;
   }
 
+  llvm::StringRef static tokenAsString( const Token &tk ) {
+    switch ( tk.getKind() ) {
+      case tok::ident:
+      case tok::raw_ident:
+        return tk.getIdent();
+      case tok::stringlit:
+        return tk.getIdentNoQuotes();
+      default:
+        break;
+    }
+    return llvm::StringRef();
+  }
+
+  llvm::StringRef MetaParser::consumeToNextString() {
+    return tokenAsString( skipToNextToken() );
+  }
+
+  int MetaParser::modeToken() {
+    return skipToNextToken().is(tok::constant) ? getCurTok().getConstantAsBool() : MetaSema::kToggle;
+  }
+
+  static bool actOnRemainingArguments( MetaParser &mp, MetaSema &ms, void (MetaSema::*action)(llvm::StringRef) const, bool canBeEmpty = true ) {
+    llvm::StringRef tName = mp.consumeToNextString();
+    if ( !tName.empty() ) {
+      do {
+          (ms.*action)(tName);
+          tName = mp.consumeToNextString();
+        } while ( !tName.empty() );
+    }
+    else if ( !canBeEmpty )
+      return false;
+    else
+      (ms.*action)(tName);
+
+    return true;
+  }
+  static bool actOnRemainingArguments( MetaParser &mp, MetaSema &ms, MetaSema::ActionResult (MetaSema::*action)(llvm::StringRef), MetaSema::ActionResult &actionResult ) {
+    llvm::StringRef tName = mp.consumeToNextString();
+    if ( tName.empty() )
+      return false;
+
+    do {
+      actionResult = (ms.*action)(tName);
+      tName = mp.consumeToNextString();
+    } while ( !tName.empty() && actionResult == MetaSema::AR_Success );
+
+    return true;
+  }
+
   // L := 'L' FilePath Comment
   // FilePath := AnyString
   // AnyString := .*^('\t' Comment)
   bool MetaParser::doLCommand(MetaSema::ActionResult& actionResult) {
-    bool result = false;
-    if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("L")) {
-      consumeAnyStringToken(tok::comment);
-      if (getCurTok().is(tok::raw_ident)) {
-        result = true;
-        actionResult = m_Actions->actOnLCommand(getCurTok().getIdent());
-        consumeToken();
-        if (getCurTok().is(tok::comment)) {
-          consumeAnyStringToken(tok::eof);
-          m_Actions->actOnComment(getCurTok().getIdent());
-        }
+    llvm::StringRef file = consumeToNextString();
+    if ( file.empty() )
+      return false;  // TODO: Some fine grained diagnostics
+
+    do {
+      actionResult = m_Actions->actOnLCommand(file);
+      if (skipToNextToken().is(tok::comment)) {
+        m_Actions->actOnComment(consumeToTokenNext(tok::eof).getIdent());
+        break;
       }
-    }
-    // TODO: Some fine grained diagnostics
-    return result;
+      file = tokenAsString(getCurTok());
+    } while ( !file.empty() && actionResult == MetaSema::AR_Success );
+
+    return true;
+  }
+
+  bool MetaParser::doUCommand(MetaSema::ActionResult& actionResult) {
+    return actOnRemainingArguments(*this, *m_Actions, &MetaSema::actOnUCommand, actionResult);
   }
 
   // F := 'F' FilePath Comment
   // FilePath := AnyString
   // AnyString := .*^('\t' Comment)
   bool MetaParser::doFCommand(MetaSema::ActionResult& actionResult) {
-    bool result = false;
 #if defined(__APPLE__)
-    if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("F")) {
-      consumeAnyStringToken(tok::comment);
-      if (getCurTok().is(tok::raw_ident)) {
-        result = true;
-        actionResult = m_Actions->actOnFCommand(getCurTok().getIdent());
-        consumeToken();
-        if (getCurTok().is(tok::comment)) {
-          consumeAnyStringToken(tok::eof);
-          m_Actions->actOnComment(getCurTok().getIdent());
-        }
-      }
-    }
-    // TODO: Some fine grained diagnostics
+    return actOnRemainingArguments(*this, *m_Actions, &MetaSema::actOnFCommand, actionResult);
 #endif
-    return result;
+    return false;
   }
 
   // T := 'T' FilePath Comment
   // FilePath := AnyString
   // AnyString := .*^('\t' Comment)
   bool MetaParser::doTCommand(MetaSema::ActionResult& actionResult) {
-    bool result = false;
-    if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("T")) {
-      consumeAnyStringToken();
-      if (getCurTok().is(tok::raw_ident)) {
-        std::string inputFile = getCurTok().getIdent();
-        consumeAnyStringToken(tok::eof);
-        if (getCurTok().is(tok::raw_ident)) {
-          result = true;
-          std::string outputFile = getCurTok().getIdent();
-          actionResult = m_Actions->actOnTCommand(inputFile, outputFile);
-        }
+    const llvm::StringRef inputFile = tokenAsString(consumeToTokenNext());
+    if (!inputFile.empty()) {
+      const llvm::StringRef outputFile = tokenAsString(consumeToTokenNext());
+      if (!outputFile.empty()) {
+        actionResult = m_Actions->actOnTCommand(inputFile, outputFile);
+        return true;
       }
     }
     // TODO: Some fine grained diagnostics
-    return result;
+    return false;
   }
 
   // >RedirectCommand := '>' FilePath
@@ -351,339 +385,173 @@ namespace cling {
                               Value* resultValue) {
     if (resultValue)
       *resultValue = Value();
-    const Token& Tok = getCurTok();
-    if (Tok.is(tok::ident) && (Tok.getIdent().equals("x")
-                               || Tok.getIdent().equals("X"))) {
-      // There might be ArgList
-      consumeAnyStringToken(tok::l_paren);
-      llvm::StringRef file(getCurTok().getIdent());
-      consumeToken();
-      // '(' to end of string:
 
-      std::string args = getCurTok().getBufStart();
-      if (args.empty())
-        args = "()";
-      actionResult = m_Actions->actOnxCommand(file, args, resultValue);
-      return true;
-    }
+    // There might be ArgList
+    consumeAnyStringToken(tok::l_paren);
+    llvm::StringRef file(getCurTok().getIdent());
+    consumeToken();
+    // '(' to end of string:
 
-    return false;
+    std::string args = getCurTok().getBufStart();
+    if (args.empty())
+      args = "()";
+    actionResult = m_Actions->actOnxCommand(file, args, resultValue);
+    return true;
   }
 
   // ExtraArgList := AnyString [, ExtraArgList]
   bool MetaParser::doExtraArgList() {
     // This might be expanded if we need better arg parsing.
-    consumeAnyStringToken(tok::r_paren);
-
-    return getCurTok().is(tok::raw_ident);
+    return consumeToTokenNext(tok::r_paren).is(tok::raw_ident);
   }
 
   bool MetaParser::doQCommand() {
-    bool result = false;
-    if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("q")) {
-      result = true;
-      m_Actions->actOnqCommand();
-    }
-    return result;
-  }
-
-  bool MetaParser::doUCommand(MetaSema::ActionResult& actionResult) {
-    if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("U")) {
-      consumeAnyStringToken(tok::eof);
-      llvm::StringRef path;
-      if (getCurTok().is(tok::raw_ident)) {
-        path = getCurTok().getIdent();
-        actionResult = m_Actions->actOnUCommand(path);
-        return true;
-      }
-    }
-    return false;
+    m_Actions->actOnqCommand();
+    return true;
   }
 
   bool MetaParser::doICommand() {
-    if (getCurTok().is(tok::ident) &&
-        (   getCurTok().getIdent().equals("I")
-         || getCurTok().getIdent().equals("include"))) {
-      consumeAnyStringToken(tok::eof);
-      llvm::StringRef path;
-      if (getCurTok().is(tok::raw_ident))
-        path = getCurTok().getIdent();
-      m_Actions->actOnICommand(path);
-      return true;
-    }
-    return false;
+    return actOnRemainingArguments(*this, *m_Actions, &MetaSema::actOnICommand);
   }
 
   bool MetaParser::doOCommand() {
-    const Token& currTok = getCurTok();
-    if (currTok.is(tok::ident)) {
-      llvm::StringRef ident = currTok.getIdent();
-      if (ident.startswith("O")) {
-        if (ident.size() > 1) {
+    llvm::StringRef ident = getCurTok().getIdent();
+    if (ident.size() > 1) {
+      int level = 0;
+      if (!ident.substr(1).getAsInteger(10, level) && level >= 0) {
+        if (consumeToTokenNext(tok::eof).is(tok::raw_ident))
+          return false;
+        //TODO: Process .OXXX here as .O with level XXX.
+        return true;
+      }
+    } else {
+      if (consumeToTokenNext(tok::eof).is(tok::raw_ident)) {
+        const Token& lastStringToken = getCurTok();
+        if (lastStringToken.getLength()) {
           int level = 0;
-          if (!ident.substr(1).getAsInteger(10, level) && level >= 0) {
-            consumeAnyStringToken(tok::eof);
-            if (getCurTok().is(tok::raw_ident))
-              return false;
-            //TODO: Process .OXXX here as .O with level XXX.
+          if (!lastStringToken.getIdent().getAsInteger(10, level) && level >= 0) {
+            //TODO: process .O XXX
             return true;
           }
         } else {
-          consumeAnyStringToken(tok::eof);
-          const Token& lastStringToken = getCurTok();
-          if (lastStringToken.is(tok::raw_ident)
-              && lastStringToken.getLength()) {
-            int level = 0;
-            if (!lastStringToken.getIdent().getAsInteger(10, level) && level >= 0) {
-              //TODO: process .O XXX
-              return true;
-            }
-          } else {
-            //TODO: process .O
-            return true;
-          }
+          //TODO: process .O
+          return true;
         }
       }
     }
-
     return false;
   }
 
   bool MetaParser::doAtCommand() {
-    if (getCurTok().is(tok::at) // && getCurTok().getIdent().equals("@")
-        ) {
-      consumeToken();
-      skipWhitespace();
-      m_Actions->actOnAtCommand();
-      return true;
-    }
-    return false;
+    consumeToken();
+    skipWhitespace();
+    m_Actions->actOnAtCommand();
+    return true;
   }
 
   bool MetaParser::doRawInputCommand() {
-    if (getCurTok().is(tok::ident) &&
-        getCurTok().getIdent().equals("rawInput")) {
-      MetaSema::SwitchMode mode = MetaSema::kToggle;
-      consumeToken();
-      skipWhitespace();
-      if (getCurTok().is(tok::constant))
-        mode = (MetaSema::SwitchMode)getCurTok().getConstantAsBool();
-      m_Actions->actOnrawInputCommand(mode);
-      return true;
-    }
-    return false;
+    m_Actions->actOnrawInputCommand(MetaSema::SwitchMode(modeToken()));
+    return true;
   }
 
   bool MetaParser::doDebugCommand() {
-    if (getCurTok().is(tok::ident) &&
-        getCurTok().getIdent().equals("debug")) {
-      llvm::Optional<int> mode;
-      consumeToken();
-      skipWhitespace();
-      if (getCurTok().is(tok::constant))
-        mode = getCurTok().getConstant();
-      m_Actions->actOndebugCommand(mode);
-      return true;
-    }
-    return false;
+    llvm::Optional<int> mode;
+    if (skipToNextToken().is(tok::constant))
+      mode = getCurTok().getConstant();
+    m_Actions->actOndebugCommand(mode);
+    return true;
   }
 
   bool MetaParser::doPrintDebugCommand() {
-    if (getCurTok().is(tok::ident) &&
-        getCurTok().getIdent().equals("printDebug")) {
-      MetaSema::SwitchMode mode = MetaSema::kToggle;
-      consumeToken();
-      skipWhitespace();
-      if (getCurTok().is(tok::constant))
-        mode = (MetaSema::SwitchMode)getCurTok().getConstantAsBool();
-      m_Actions->actOnprintDebugCommand(mode);
-      return true;
-    }
-    return false;
+    m_Actions->actOnprintDebugCommand(MetaSema::SwitchMode(modeToken()));
+    return true;
   }
 
   bool MetaParser::doStoreStateCommand() {
-     if (getCurTok().is(tok::ident) &&
-        getCurTok().getIdent().equals("storeState")) {
-       //MetaSema::SwitchMode mode = MetaSema::kToggle;
-      consumeToken();
-      skipWhitespace();
-      if (!getCurTok().is(tok::stringlit))
+    const llvm::StringRef ident = consumeToNextString();
+    if ( ident.empty() )
         return false; // FIXME: Issue proper diagnostics
-      std::string ident = getCurTok().getIdentNoQuotes();
-      consumeToken();
-      m_Actions->actOnstoreStateCommand(ident);
-      return true;
-    }
-    return false;
+
+    m_Actions->actOnstoreStateCommand(ident);
+    return true;
   }
 
   bool MetaParser::doCompareStateCommand() {
-    if (getCurTok().is(tok::ident) &&
-        getCurTok().getIdent().equals("compareState")) {
-      //MetaSema::SwitchMode mode = MetaSema::kToggle;
-      consumeToken();
-      skipWhitespace();
-      if (!getCurTok().is(tok::stringlit))
-        return false; // FIXME: Issue proper diagnostics
-      std::string ident = getCurTok().getIdentNoQuotes();
-      consumeToken();
-      m_Actions->actOncompareStateCommand(ident);
-      return true;
-    }
-    return false;
+    return actOnRemainingArguments(*this, *m_Actions, &MetaSema::actOncompareStateCommand, false);
+    consumeToken();
   }
 
   bool MetaParser::doStatsCommand() {
-    if (getCurTok().is(tok::ident) &&
-        getCurTok().getIdent().equals("stats")) {
-      consumeToken();
-      skipWhitespace();
-      if (!getCurTok().is(tok::ident))
-        return false; // FIXME: Issue proper diagnostics
-      std::string ident = getCurTok().getIdent();
-      consumeToken();
-      m_Actions->actOnstatsCommand(ident);
-      return true;
-    }
-    return false;
+    return actOnRemainingArguments(*this, *m_Actions, &MetaSema::actOnstatsCommand, false);
+    consumeToken();
   }
 
   bool MetaParser::doUndoCommand() {
-    if (getCurTok().is(tok::ident) &&
-        getCurTok().getIdent().equals("undo")) {
-      consumeToken();
-      skipWhitespace();
-      const Token& next = getCurTok();
-      if (next.is(tok::constant))
-        m_Actions->actOnUndoCommand(next.getConstant());
-      else
-        m_Actions->actOnUndoCommand();
-      return true;
-    }
-    return false;
+    if (consumeToTokenNext(tok::eof).is(tok::constant))
+      m_Actions->actOnUndoCommand(getCurTok().getConstant());
+    else
+      m_Actions->actOnUndoCommand();
+    return true;
   }
 
   bool MetaParser::doDynamicExtensionsCommand() {
-    if (getCurTok().is(tok::ident) &&
-        getCurTok().getIdent().equals("dynamicExtensions")) {
-      MetaSema::SwitchMode mode = MetaSema::kToggle;
-      consumeToken();
-      skipWhitespace();
-      if (getCurTok().is(tok::constant))
-        mode = (MetaSema::SwitchMode)getCurTok().getConstantAsBool();
-      m_Actions->actOndynamicExtensionsCommand(mode);
-      return true;
-    }
-    return false;
+    m_Actions->actOndynamicExtensionsCommand(MetaSema::SwitchMode(modeToken()));
+    return true;
   }
 
   bool MetaParser::doHelpCommand() {
-    const Token& Tok = getCurTok();
-    if (Tok.is(tok::quest_mark) ||
-        (Tok.is(tok::ident) && Tok.getIdent().equals("help"))) {
-      m_Actions->actOnhelpCommand();
-      return true;
-    }
-    return false;
+    m_Actions->actOnhelpCommand();
+    return true;
   }
 
   bool MetaParser::doFileExCommand() {
-    if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("fileEx")) {
-      m_Actions->actOnfileExCommand();
-      return true;
-    }
-    return false;
+    m_Actions->actOnfileExCommand();
+    return true;
   }
 
   bool MetaParser::doFilesCommand() {
-    if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("files")) {
-      m_Actions->actOnfilesCommand();
-      return true;
-    }
-    return false;
+    m_Actions->actOnfilesCommand();
+    return true;
+  }
+  
+  bool MetaParser::doNamespaceCommand() {
+    if (consumeToTokenNext(tok::eof).is(tok::raw_ident))
+      return false;
+
+    m_Actions->actOnNamespaceCommand();
+    return true;
   }
 
   bool MetaParser::doClassCommand() {
-    const Token& Tok = getCurTok();
-    if (Tok.is(tok::ident)) {
-      if (Tok.getIdent().equals("class")) {
-        consumeAnyStringToken(tok::eof);
-        const Token& NextTok = getCurTok();
-        llvm::StringRef className;
-        if (NextTok.is(tok::raw_ident))
-          className = NextTok.getIdent();
-        m_Actions->actOnclassCommand(className);
-        return true;
-      }
-      else if (Tok.getIdent().equals("Class")) {
-        m_Actions->actOnClassCommand();
-        return true;
-      }
-    }
-    return false;
+    llvm::StringRef className;
+    if ( getCurTok().getIdent().startswith("c") )
+      return actOnRemainingArguments(*this, *m_Actions, &MetaSema::actOnclassCommand);
+
+    m_Actions->actOnClassCommand();
+    return true;
   }
 
-  bool MetaParser::doNamespaceCommand() {
-    const Token& Tok = getCurTok();
-    if (Tok.is(tok::ident)) {
-      if (Tok.getIdent().equals("namespace")) {
-        consumeAnyStringToken(tok::eof);
-        if (getCurTok().is(tok::raw_ident))
-          return false;
-        m_Actions->actOnNamespaceCommand();
-        return true;
-      }
-    }
-    return false;
-  }
 
   bool MetaParser::doGCommand() {
-    if (getCurTok().is(tok::ident) && getCurTok().getIdent().equals("g")) {
-      consumeToken();
-      skipWhitespace();
-      llvm::StringRef varName;
-      if (getCurTok().is(tok::ident))
-        varName = getCurTok().getIdent();
-      m_Actions->actOngCommand(varName);
-      return true;
-    }
-    return false;
+    return actOnRemainingArguments(*this, *m_Actions, &MetaSema::actOngCommand);
   }
 
   bool MetaParser::doTypedefCommand() {
-    const Token& Tok = getCurTok();
-    if (Tok.is(tok::ident)) {
-      if (Tok.getIdent().equals("typedef")) {
-        consumeAnyStringToken(tok::eof);
-        const Token& NextTok = getCurTok();
-        llvm::StringRef typedefName;
-        if (NextTok.is(tok::raw_ident))
-          typedefName = NextTok.getIdent();
-        m_Actions->actOnTypedefCommand(typedefName);
-        return true;
-      }
-    }
-    return false;
+    return actOnRemainingArguments(*this, *m_Actions, &MetaSema::actOnTypedefCommand);
   }
 
   bool MetaParser::doShellCommand(MetaSema::ActionResult& actionResult,
                                   Value* resultValue) {
     if (resultValue)
       *resultValue = Value();
-    const Token& Tok = getCurTok();
-    if (Tok.is(tok::excl_mark)) {
-      consumeAnyStringToken(tok::eof);
-      const Token& NextTok = getCurTok();
-      if (NextTok.is(tok::raw_ident)) {
-         llvm::StringRef commandLine(NextTok.getIdent());
-         if (!commandLine.empty())
-            actionResult = m_Actions->actOnShellCommand(commandLine,
-                                                        resultValue);
-      }
-      return true;
-    }
-    return false;
+
+  const Token &tk = skipToNextToken();
+    const llvm::StringRef commandLine = tk.is(tok::slash) ? tk.getBufStart() : tokenAsString(tk);
+    if ( commandLine.empty() )
+      return false;
+    
+    actionResult = m_Actions->actOnShellCommand(commandLine, resultValue);
+    return true;
   }
 
 } // end namespace cling

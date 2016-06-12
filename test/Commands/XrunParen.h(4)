@@ -1,0 +1,6 @@
+
+extern "C" int printf(const char*,...);
+
+void XrunParen( const char *arg) {
+ printf("%s(%s)\n", __func__, arg);
+}

@@ -1,0 +1,10 @@
+
+extern "C" int printf(const char*,...);
+
+void Lload(const char* arg0, const char* arg1) {
+  printf("Lload: '%s', '%s'\n", arg0, arg1);
+}
+
+void LOADED_FUNC() {
+ printf("Lload: %s\n", __func__);
+}
