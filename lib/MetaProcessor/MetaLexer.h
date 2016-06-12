@@ -16,33 +16,33 @@ namespace cling {
 
   namespace tok {
     enum TokenKind {
-      l_square,   // "["
-      r_square,   // "]"
-      l_paren,    // "("
-      r_paren,    // ")"
-      l_brace,    // "{"
-      r_brace,    // "}"
-      stringlit,  // ""...""
-      charlit,    // "'.'"
-      comma,      // ","
-      dot,        // "."
-      excl_mark,  // "!"
-      quest_mark, // "?"
-      slash,      // "/"
-      backslash,  // "\"
-      greater,    // ">"
-      ampersand,  // "&"
-      hash,       // "#"
-      ident,      // (a-zA-Z)[(0-9a-zA-Z)*]
-      raw_ident,  // .*^(' '|'\t')
-      comment,    // //
-      space,      // (' ' | '\t')*
-      constant,   // {0-9}
-      at,         // @
-      asterik,    // *
-      semicolon,  // ;
-      eof,
-      unknown
+      l_square   = 1 << 0,   // "["
+      r_square   = 1 << 1,   // "]"
+      l_paren    = 1 << 2,   // "("
+      r_paren    = 1 << 3,   // ")"
+      l_brace    = 1 << 4,   // "{"
+      r_brace    = 1 << 5,   // "}"
+      stringlit  = 1 << 6,   // ""...""
+      charlit    = 1 << 7,   // "'.'"
+      comma      = 1 << 8,   // ","
+      dot        = 1 << 9,   // "."
+      excl_mark  = 1 << 10,  // "!"
+      quest_mark = 1 << 11,  // "?"
+      slash      = 1 << 12,  // "/"
+      backslash  = 1 << 13,  // "\"
+      greater    = 1 << 14,  // ">"
+      ampersand  = 1 << 15,  // "&"
+      hash       = 1 << 16,  // "#"
+      ident      = 1 << 17,  // (a-zA-Z)[(0-9a-zA-Z)*]
+      raw_ident  = 1 << 18,  // .*^(' '|'\t')
+      comment    = 1 << 19,  // //
+      space      = 1 << 20,  // (' ' | '\t')*
+      constant   = 1 << 21,  // {0-9}
+      at         = 1 << 22,  // @
+      asterik    = 1 << 23,  // *
+      semicolon  = 1 << 24,  // ;
+      eof        = 1 << 25,  // 0
+      unknown    = 1 << 26,
     };
   }
 
@@ -68,6 +68,7 @@ namespace cling {
 
     bool isNot(tok::TokenKind K) const { return kind != K; }
     bool is(tok::TokenKind K) const { return kind == K; }
+    bool isOneOf(int K) const { return kind & K; }
 
     llvm::StringRef getIdent() const;
     llvm::StringRef getIdentNoQuotes() const {
