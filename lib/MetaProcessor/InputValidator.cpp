@@ -166,14 +166,14 @@ namespace cling {
             commentTok = tok::asterik;
         }
 
-        if (kind >= (int)tok::l_square && kind <= (int)tok::r_brace) {
-          // The closing paren kind is open paren kind + 1 (i.e odd number)
-          if (kind % 2) {
-            int prev = m_ParenStack.empty() ? -1: m_ParenStack.back();
-            // closing the right one?
-            if (prev != kind - 1) {
+        // Balance braces
+        if (kind >= tok::l_square && kind <= tok::r_brace) {
+          if (kind & (tok::r_square|tok::r_paren|tok::r_brace)) {
+            // closing the proper one?
+            if (m_ParenStack.empty() || m_ParenStack.back() != (kind >> 1)) {
               if (multilineComment)
                 continue;
+
               Res = kMismatch;
               break;
             }
@@ -207,9 +207,8 @@ namespace cling {
           if (m_ParenStack.size() == 1 && m_ParenStack.back()==tok::greater)
             m_ParenStack.pop_back();
         }
-        else if (kind >= (int)tok::stringlit && kind <= (int)tok::charlit) {
+        else if (Tok.isOneOf(tok::stringlit|tok::charlit))
           MetaLexer::LexQuotedStringAndAdvance(curPos, Tok);
-        }
       }
     } while (Tok.isNot(tok::eof));
 

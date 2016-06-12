@@ -23,9 +23,426 @@
 
 namespace cling {
 
-  MetaParser::MetaParser(MetaSema* Actions) : m_Lexer("") {
-    m_Actions.reset(Actions);
-    const InvocationOptions& Opts = Actions->getInterpreter().getOptions();
+typedef Token Argument;
+
+llvm::StringRef static argumentAsString(const Argument &tk) {
+  switch (tk.getKind()) {
+    case tok::ident:
+    case tok::raw_ident:
+      return tk.getIdent();
+    case tok::stringlit:
+      return tk.getIdentNoQuotes();
+    default:
+      break;
+  }
+  return llvm::StringRef();
+}
+
+class MetaParser::CommandParamters
+{
+  MetaParser             &m_Parser;
+
+  const Token& skipToNextToken() {
+    m_Parser.consumeToken();
+    m_Parser.skipWhitespace();
+    return m_Parser.getCurTok();
+  }
+  
+public:
+  MetaSema               &execute;
+  MetaSema::ActionResult &result;
+  Value                  *value;
+
+  CommandParamters(MetaParser &p, MetaSema &s, MetaSema::ActionResult &r, Value *v) :
+    m_Parser(p), execute(s), result(r), value(v) {
+      // Assume success; some actions don't set it.
+    result = MetaSema::AR_Success;
+      if (value) *value = Value();
+  }
+
+  const Argument&  cmdArg ()     { return m_Parser.getCurTok(); }
+  llvm::StringRef  commandName() { return cmdArg().getIdent(); }
+
+  const Argument&  nextArg(unsigned tk) {
+    m_Parser.consumeAnyStringToken(tok::TokenKind(tk));
+    return m_Parser.getCurTok();
+  }
+
+  llvm::StringRef  remaining()   { return argumentAsString(nextArg(tok::eof)); }
+  const Argument&  nextArg()     { return skipToNextToken(); }
+  llvm::StringRef  nextString()  { return argumentAsString(nextArg(tok::space)); }
+  bool             hadMore()     { return nextArg(tok::eof).is(tok::raw_ident); }
+
+  llvm::Optional<int> optionalInt() {
+    llvm::Optional<int> value ;
+    const Argument      &arg = nextArg();
+    if (arg.is(tok::constant))
+      value = arg.getConstant();
+    else if (arg.is(tok::ident)) {
+      int tmp;
+      if (!arg.getIdent().getAsInteger(10, tmp))
+        value = tmp;
+    }
+
+    return value;
+  }
+
+  MetaSema::SwitchMode modeToken() {
+    llvm::Optional<int> mode = optionalInt();
+    return mode.hasValue() ? MetaSema::SwitchMode(mode.getValue()) : MetaSema::kToggle;
+  }
+};
+
+namespace {
+  
+  // Command syntax: MetaCommand := <CommandSymbol><Command>
+  //                 CommandSymbol := '.' | '//.'
+  //                 Command := LCommand | XCommand | qCommand | UCommand |
+  //                            ICommand | OCommand | RawInputCommand |
+  //                            PrintDebugCommand | DynamicExtensionsCommand |
+  //                            HelpCommand | FileExCommand | FilesCommand |
+  //                            ClassCommand | GCommand | StoreStateCommand |
+  //                            CompareStateCommand | StatsCommand | undoCommand
+  //                 LCommand := 'L' FilePath
+  //                 FCommand := 'F' FilePath[.h|.framework] // OS X only
+  //                 TCommand := 'T' FilePath FilePath
+  //                 >Command := '>' FilePath
+  //                 qCommand := 'q'
+  //                 XCommand := 'x' FilePath[ArgList] | 'X' FilePath[ArgList]
+  //                 UCommand := 'U' FilePath
+  //                 ICommand := 'I' [FilePath]
+  //                 OCommand := 'O'[' ']Constant
+  //                 RawInputCommand := 'rawInput' [Constant]
+  //                 PrintDebugCommand := 'printDebug' [Constant]
+  //                 DebugCommand := 'debug' [Constant]
+  //                 StoreStateCommand := 'storeState' "Ident"
+  //                 CompareStateCommand := 'compareState' "Ident"
+  //                 StatsCommand := 'stats' ['ast']
+  //                 undoCommand := 'undo' [Constant]
+  //                 DynamicExtensionsCommand := 'dynamicExtensions' [Constant]
+  //                 HelpCommand := 'help'
+  //                 FileExCommand := 'fileEx'
+  //                 FilesCommand := 'files'
+  //                 ClassCommand := 'class' AnyString | 'Class'
+  //                 GCommand := 'g' [Ident]
+  //                 FilePath := AnyString
+  //                 ArgList := (ExtraArgList) ' ' [ArgList]
+  //                 ExtraArgList := AnyString [, ExtraArgList]
+  //                 AnyString := *^(' ' | '\t')
+  //                 Constant := {0-9}
+  //                 Ident := a-zA-Z{a-zA-Z0-9}
+  //
+
+  static bool actOnRemainingArguments(MetaParser::CommandParamters &params,
+                                void (MetaSema::*action)(llvm::StringRef) const,
+                                bool canBeEmpty = true) {
+    llvm::StringRef tName = params.nextString();
+    if (!tName.empty()) {
+      do {
+        (params.execute.*action)(tName);
+        tName = params.nextString();
+      } while (!tName.empty());
+    } else if (!canBeEmpty)
+      return false;
+    else
+      (params.execute.*action)(tName);
+
+    return true;
+  }
+
+  static bool actOnRemainingArguments(MetaParser::CommandParamters &params,
+                  MetaSema::ActionResult (MetaSema::*action)(llvm::StringRef)) {
+    llvm::StringRef tName = params.nextString();
+    if (tName.empty())
+      return false;
+
+    do {
+      params.result =(params.execute.*action)(tName);
+      tName = params.nextString();
+    } while (!tName.empty() && params.result == MetaSema::AR_Success);
+
+    return true;
+  }
+
+  static bool doLCommand(MetaParser::CommandParamters& params) {
+    llvm::StringRef file =
+                      argumentAsString(params.nextArg(tok::comment|tok::space));
+    if (file.empty())
+        return false;  // TODO: Some fine grained diagnostics
+
+    do {
+      params.result = params.execute.actOnLCommand(file);
+
+      const Argument &arg = params.nextArg(tok::comment|tok::space);
+      if (arg.is(tok::comment)) {
+        params.execute.actOnComment(params.remaining());
+        break;
+      }
+
+      file = argumentAsString(arg);
+    } while (!file.empty() && params.result == MetaSema::AR_Success);
+
+    return true;
+  }
+
+  static bool doUCommand(MetaParser::CommandParamters& params) {
+    return actOnRemainingArguments(params, &MetaSema::actOnUCommand);
+  }
+
+  // F := 'F' FilePath Comment
+  // FilePath := AnyString
+  // AnyString := .*^('\t' Comment)
+  static bool doFCommand(MetaParser::CommandParamters& params) {
+#if defined(__APPLE__)
+    return actOnRemainingArguments(params, &MetaSema::actOnFCommand);
+#endif
+    return false;
+  }
+
+  // T := 'T' FilePath Comment
+  // FilePath := AnyString
+  // AnyString := .*^('\t' Comment)
+  static bool doTCommand(MetaParser::CommandParamters& params) {
+    const llvm::StringRef inputFile = params.nextString();
+    if (!inputFile.empty()) {
+      const llvm::StringRef outputFile = params.nextString();
+      if (!outputFile.empty()) {
+        params.result = params.execute.actOnTCommand(inputFile, outputFile);
+        return true;
+      }
+    }
+    // TODO: Some fine grained diagnostics
+    return false;
+  }
+
+  // >RedirectCommand := '>' FilePath
+  // FilePath := AnyString
+  // AnyString := .*^(' ' | '\t')
+  static bool doRedirectCommand(MetaParser::CommandParamters& params) {
+
+    unsigned constant_FD = 0;
+    // Default redirect is stdout.
+    MetaProcessor::RedirectionScope stream = MetaProcessor::kSTDOUT;
+
+    const Argument *arg = &params.cmdArg();
+    if (arg->is(tok::constant)) {
+      // > or 1> the redirection is for stdout stream
+      // 2> redirection for stderr stream
+      constant_FD = arg->getConstant();
+      if (constant_FD == 2) {
+        stream = MetaProcessor::kSTDERR;
+      // Wrong constant_FD, do not redirect.
+      } else if (constant_FD != 1) {
+        llvm::errs() << "cling::MetaParser::isRedirectCommand():"
+                     << "invalid file descriptor number " << constant_FD <<"\n";
+        return true;
+      }
+      arg = &params.nextArg();
+    }
+    // &> redirection for both stdout & stderr
+    if (arg->is(tok::ampersand)) {
+      if (constant_FD != 2) {
+        stream = MetaProcessor::kSTDBOTH;
+      }
+      arg = &params.nextArg();
+    }
+    if (arg->is(tok::greater)) {
+      bool append = false;
+      arg = &params.nextArg();
+      // check for syntax like: 2>&1
+      if (arg->is(tok::ampersand)) {
+        if (constant_FD != 2) {
+          stream = MetaProcessor::kSTDBOTH;
+        }
+        arg = &params.nextArg();
+      } else {
+        // check whether we have >>
+        if (arg->is(tok::greater)) {
+          append = true;
+          arg = &params.nextArg();
+        }
+      }
+      llvm::StringRef file;
+      if (arg->is(tok::constant)) {
+        if (arg->getConstant() != 1)
+          return false;
+        file = llvm::StringRef("_IO_2_1_stdout_");
+      } else
+      file = argumentAsString(*arg);
+
+      // Empty file means std.
+      params.result =
+          params.execute.actOnRedirectCommand(file/*file*/,
+                                          stream/*which stream to redirect*/,
+                                          append/*append mode*/);
+      return true;
+    }
+    return false;
+  }
+
+  // XCommand := 'x' FilePath[ArgList] | 'X' FilePath[ArgList]
+  // FilePath := AnyString
+  // ArgList := (ExtraArgList) ' ' [ArgList]
+  // ExtraArgList := AnyString [, ExtraArgList]
+  static bool doXCommand(MetaParser::CommandParamters& params) {
+    // There might be ArgList
+    llvm::StringRef file = argumentAsString(params.nextArg(tok::l_paren));
+    // '(' to end of string:
+
+    std::string args = params.nextArg().getBufStart();
+    if (args.empty())
+      args = "()";
+    params.result = params.execute.actOnxCommand(file, args, params.value);
+    return true;
+  }
+  
+  static bool doQCommand(MetaParser::CommandParamters& params) {
+    params.execute.actOnqCommand();
+    return true;
+  }
+
+  static bool doICommand(MetaParser::CommandParamters& params) {
+    return actOnRemainingArguments(params, &MetaSema::actOnICommand);
+  }
+
+  static bool doOCommand(MetaParser::CommandParamters& params) {
+    llvm::StringRef cmd = params.commandName();
+    int             level = -1;
+    if (cmd.size() == 1) {
+      const Argument &arg = params.nextArg(tok::constant);
+      if (arg.is(tok::constant))
+        level = arg.getConstant();
+    }
+    else if (cmd.substr(1).getAsInteger(10, level) || level < 0)
+      return false;
+
+    return true;
+    // ### TODO something.... with level and maybe more
+    llvm::StringRef fName = params.nextString();
+    if (!fName.empty()) {
+      do {
+        fName = params.nextString();
+      } while (!fName.empty());
+    }
+    return true;
+  }
+
+  static bool doAtCommand(MetaParser::CommandParamters& params) {
+    // consumeToken();
+    // skipWhitespace();
+    params.execute.actOnAtCommand();
+    return true;
+  }
+  
+  static bool doRawInputCommand(MetaParser::CommandParamters& params) {
+    params.execute.actOnrawInputCommand(params.modeToken());
+    return true;
+  }
+
+  static bool doDebugCommand(MetaParser::CommandParamters& params) {
+    params.execute.actOndebugCommand(params.optionalInt());
+    return true;
+  }
+
+  static bool doPrintDebugCommand(MetaParser::CommandParamters& params) {
+    params.execute.actOnprintDebugCommand(params.modeToken());
+    return true;
+  }
+
+  static bool doStoreStateCommand(MetaParser::CommandParamters& params) {
+    const llvm::StringRef name = params.nextString();
+    if (name.empty())
+        return false; // FIXME: Issue proper diagnostics
+
+    params.execute.actOnstoreStateCommand(name);
+    return true;
+  }
+
+  static bool doCompareStateCommand(MetaParser::CommandParamters& params) {
+    return actOnRemainingArguments(params, &MetaSema::actOncompareStateCommand,
+                                   false);
+  }
+
+  static bool doStatsCommand(MetaParser::CommandParamters& params) {
+    return actOnRemainingArguments(params, &MetaSema::actOnstatsCommand, false);
+  }
+
+  static bool doUndoCommand(MetaParser::CommandParamters& params) {
+    llvm::Optional<int> arg = params.optionalInt();
+    if (arg.hasValue())
+      params.execute.actOnUndoCommand(arg.getValue());
+    else
+      params.execute.actOnUndoCommand();
+    return true;
+  }
+
+  static bool doDynamicExtensionsCommand(MetaParser::CommandParamters& params) {
+    params.execute.actOndynamicExtensionsCommand(params.modeToken());
+    return true;
+  }
+  
+  static bool doHelpCommand(MetaParser::CommandParamters& params) {
+    params.execute.actOnhelpCommand();
+    return true;
+  }
+
+  static bool doFileExCommand(MetaParser::CommandParamters& params) {
+    params.execute.actOnfileExCommand();
+    return true;
+  }
+  
+  static bool doFilesCommand(MetaParser::CommandParamters& params) {
+    params.execute.actOnfilesCommand();
+    return true;
+  }
+
+  static bool doNamespaceCommand(MetaParser::CommandParamters& params) {
+    if (params.hadMore())
+      return false;
+
+    params.execute.actOnNamespaceCommand();
+    return true;
+  }
+  
+  static bool doClassCommand(MetaParser::CommandParamters& params) {
+    if (params.commandName().startswith("c"))
+      return actOnRemainingArguments(params, &MetaSema::actOnclassCommand);
+
+    params.execute.actOnClassCommand();
+    return true;
+  }
+
+  static bool doGCommand(MetaParser::CommandParamters& params) {
+    return actOnRemainingArguments(params, &MetaSema::actOngCommand);
+  }
+
+  static bool doTypedefCommand(MetaParser::CommandParamters& params) {
+    return actOnRemainingArguments(params, &MetaSema::actOnTypedefCommand);
+  }
+  
+  static bool doShellCommand(MetaParser::CommandParamters& params) {
+    llvm::StringRef commandLine;
+    const Argument *arg = &params.cmdArg();
+    if (!arg->is(tok::slash)) {
+      arg = &params.nextArg();
+      commandLine = arg->is(tok::slash) ? arg->getBufStart() :
+                                          argumentAsString(*arg);
+    }
+    else
+      commandLine = arg->getBufStart();
+
+    if (commandLine.empty())
+      return false;
+
+    params.result = params.execute.actOnShellCommand(commandLine, params.value);
+    return true;
+  }
+}
+
+
+  MetaParser::MetaParser(Interpreter& interp, MetaProcessor& proc) :
+    m_Actions(new MetaSema(interp, proc)), m_Lexer("") {
+    const InvocationOptions& Opts = interp.getOptions();
     MetaLexer metaSymbolLexer(Opts.MetaString);
     Token Tok;
     while(true) {
@@ -56,14 +473,14 @@ namespace cling {
     // Add the new token in which we will merge the others.
     Token& MergedTok = m_TokenCache.front();
 
-    if (MergedTok.is(stopAt) || MergedTok.is(tok::eof)
-        || MergedTok.is(tok::comment))
+    if (MergedTok.isOneOf(stopAt) || MergedTok.is(tok::eof)
+        || MergedTok.is(tok::comment) || MergedTok.is(tok::stringlit))
       return;
 
     //look ahead for the next token without consuming it
     Token Tok = lookAhead(1);
     Token PrevTok = Tok;
-    while (Tok.isNot(stopAt) && Tok.isNot(tok::eof)){
+    while (!Tok.isOneOf(stopAt) && Tok.isNot(tok::eof)){
       //MergedTok.setLength(MergedTok.getLength() + Tok.getLength());
       m_TokenCache.erase(m_TokenCache.begin() + 1);
       PrevTok = Tok;
@@ -115,443 +532,97 @@ namespace cling {
   
   bool MetaParser::doCommand(MetaSema::ActionResult& actionResult,
                              Value* resultValue) {
-    if (resultValue)
-      *resultValue = Value();
 
-    // Assume success; some actions don't set it.
-    actionResult = MetaSema::AR_Success;
+    CommandParamters params(*this, *m_Actions, actionResult, resultValue);
+
     const Token &tok = getCurTok();
-    switch ( tok.getKind() ) {
+    switch (tok.getKind()) {
       case tok::ident: {
         const llvm::StringRef ident = getCurTok().getIdent();
         // .X commands
-        switch ( ident.size()==1 ? ident[0] : 0 ) {
+        switch (ident.size()==1 ? ident[0] : 0) {
           case 'g':
-            return doGCommand();
+            return doGCommand(params);
           case 'F':
-            return doFCommand(actionResult);
+            return doFCommand(params);
           case 'I':
-            return doICommand();
+            return doICommand(params);
           case 'L':
-            return doLCommand(actionResult);
+            return doLCommand(params);
+          case 'O':
+            return doOCommand(params);
           case 'T':
-            return doTCommand(actionResult);
+            return doTCommand(params);
           case 'U':
-            return doUCommand(actionResult);
+            return doUCommand(params);
 
           case 'q':
           case 'Q':
-            return doQCommand();
+            return doQCommand(params);
           case 'x':
           case 'X':
-            return doXCommand(actionResult, resultValue);
+            return doXCommand(params);
         
           default:
             break;
         }
 
         // string commands
-        if ( ident.equals("rawInput") )
-            return doRawInputCommand();
-        else if ( ident.equals("help") )
-          return doHelpCommand();
-        else if ( ident.equals("undo") )
-          return doUndoCommand();
-        else if ( ident.startswith("O") )
-          return doOCommand();
-        else if ( ident.equals("include") )
-          return doICommand();
+        if (ident.equals("rawInput"))
+            return doRawInputCommand(params);
+        else if (ident.equals("help"))
+          return doHelpCommand(params);
+        else if (ident.equals("undo"))
+          return doUndoCommand(params);
+        else if (ident.startswith("O"))
+          return doOCommand(params);
+        else if (ident.equals("include"))
+          return doICommand(params);
+        else if (ident.equals("files"))
+          return doFilesCommand(params);
+        else if (ident.equals("fileEx"))
+          return doFileExCommand(params);
+        else if (ident.equals("namespace"))
+          return doNamespaceCommand(params);
+        else if (ident.equals("typedef"))
+          return doTypedefCommand(params);
+        else if (ident.equals("class") || ident.equals("Class"))
+          return doClassCommand(params);
 
-        else if ( ident.equals("class") || ident.equals("Class") )
-          return doClassCommand();
-        else if ( ident.equals("files") )
-          return doFilesCommand();
-        else if ( ident.equals("fileEx") )
-          return doFileExCommand();
-        else if ( ident.equals("namespace") )
-          return doNamespaceCommand();
-        else if ( ident.equals("typedef") )
-          return doTypedefCommand();
+        else if (ident.equals("debug"))
+          return doDebugCommand(params);
+        else if (ident.equals("dynamicExtensions"))
+          return doDynamicExtensionsCommand(params);
+        else if (ident.equals("printDebug"))
+          return doPrintDebugCommand(params);
+        else if (ident.equals("stats"))
+          return doStatsCommand(params);
+        else if (ident.equals("storeState"))
+          return doStoreStateCommand(params);
+        else if (ident.equals("compareState"))
+          return doCompareStateCommand(params);
 
-        else if ( ident.equals("debug") )
-          return doDebugCommand();
-        else if ( ident.equals("dynamicExtensions") )
-          return doDynamicExtensionsCommand();
-        else if ( ident.equals("printDebug") )
-          return doPrintDebugCommand();
-        else if ( ident.equals("stats") )
-          return doStatsCommand();
-        else if ( ident.equals("storeState") )
-          return doStoreStateCommand();
-        else if ( ident.equals("compareState") )
-          return doCompareStateCommand();
+        return false;
       }
 
       case tok::quest_mark:
-        return doHelpCommand();
+      return doHelpCommand(params);
       case tok::at:
-        return doAtCommand();
+        return doAtCommand(params);
+
       case tok::excl_mark:
-        return doShellCommand(actionResult, resultValue);
+      case tok::slash:
+        return doShellCommand(params);
 
       case tok::constant:
       case tok::ampersand:
       case tok::greater:
-        return doRedirectCommand(actionResult);
+        return doRedirectCommand(params);
 
       default:
         break;
     }
     return false;
-  }
-
-  llvm::StringRef static tokenAsString( const Token &tk ) {
-    switch ( tk.getKind() ) {
-      case tok::ident:
-      case tok::raw_ident:
-        return tk.getIdent();
-      case tok::stringlit:
-        return tk.getIdentNoQuotes();
-      default:
-        break;
-    }
-    return llvm::StringRef();
-  }
-
-  llvm::StringRef MetaParser::consumeToNextString() {
-    return tokenAsString( skipToNextToken() );
-  }
-
-  int MetaParser::modeToken() {
-    return skipToNextToken().is(tok::constant) ? getCurTok().getConstantAsBool() : MetaSema::kToggle;
-  }
-
-  static bool actOnRemainingArguments( MetaParser &mp, MetaSema &ms, void (MetaSema::*action)(llvm::StringRef) const, bool canBeEmpty = true ) {
-    llvm::StringRef tName = mp.consumeToNextString();
-    if ( !tName.empty() ) {
-      do {
-          (ms.*action)(tName);
-          tName = mp.consumeToNextString();
-        } while ( !tName.empty() );
-    }
-    else if ( !canBeEmpty )
-      return false;
-    else
-      (ms.*action)(tName);
-
-    return true;
-  }
-  static bool actOnRemainingArguments( MetaParser &mp, MetaSema &ms, MetaSema::ActionResult (MetaSema::*action)(llvm::StringRef), MetaSema::ActionResult &actionResult ) {
-    llvm::StringRef tName = mp.consumeToNextString();
-    if ( tName.empty() )
-      return false;
-
-    do {
-      actionResult = (ms.*action)(tName);
-      tName = mp.consumeToNextString();
-    } while ( !tName.empty() && actionResult == MetaSema::AR_Success );
-
-    return true;
-  }
-
-  // L := 'L' FilePath Comment
-  // FilePath := AnyString
-  // AnyString := .*^('\t' Comment)
-  bool MetaParser::doLCommand(MetaSema::ActionResult& actionResult) {
-    llvm::StringRef file = consumeToNextString();
-    if ( file.empty() )
-      return false;  // TODO: Some fine grained diagnostics
-
-    do {
-      actionResult = m_Actions->actOnLCommand(file);
-      if (skipToNextToken().is(tok::comment)) {
-        m_Actions->actOnComment(consumeToTokenNext(tok::eof).getIdent());
-        break;
-      }
-      file = tokenAsString(getCurTok());
-    } while ( !file.empty() && actionResult == MetaSema::AR_Success );
-
-    return true;
-  }
-
-  bool MetaParser::doUCommand(MetaSema::ActionResult& actionResult) {
-    return actOnRemainingArguments(*this, *m_Actions, &MetaSema::actOnUCommand, actionResult);
-  }
-
-  // F := 'F' FilePath Comment
-  // FilePath := AnyString
-  // AnyString := .*^('\t' Comment)
-  bool MetaParser::doFCommand(MetaSema::ActionResult& actionResult) {
-#if defined(__APPLE__)
-    return actOnRemainingArguments(*this, *m_Actions, &MetaSema::actOnFCommand, actionResult);
-#endif
-    return false;
-  }
-
-  // T := 'T' FilePath Comment
-  // FilePath := AnyString
-  // AnyString := .*^('\t' Comment)
-  bool MetaParser::doTCommand(MetaSema::ActionResult& actionResult) {
-    const llvm::StringRef inputFile = tokenAsString(consumeToTokenNext());
-    if (!inputFile.empty()) {
-      const llvm::StringRef outputFile = tokenAsString(consumeToTokenNext());
-      if (!outputFile.empty()) {
-        actionResult = m_Actions->actOnTCommand(inputFile, outputFile);
-        return true;
-      }
-    }
-    // TODO: Some fine grained diagnostics
-    return false;
-  }
-
-  // >RedirectCommand := '>' FilePath
-  // FilePath := AnyString
-  // AnyString := .*^(' ' | '\t')
-  bool MetaParser::doRedirectCommand(MetaSema::ActionResult& actionResult) {
-
-    unsigned constant_FD = 0;
-    // Default redirect is stdout.
-    MetaProcessor::RedirectionScope stream = MetaProcessor::kSTDOUT;
-
-    if (getCurTok().is(tok::constant)) {
-      // > or 1> the redirection is for stdout stream
-      // 2> redirection for stderr stream
-      constant_FD = getCurTok().getConstant();
-      if (constant_FD == 2) {
-        stream = MetaProcessor::kSTDERR;
-      // Wrong constant_FD, do not redirect.
-      } else if (constant_FD != 1) {
-        llvm::errs() << "cling::MetaParser::isRedirectCommand():"
-                     << "invalid file descriptor number " << constant_FD <<"\n";
-        return true;
-      }
-      consumeToken();
-    }
-    // &> redirection for both stdout & stderr
-    if (getCurTok().is(tok::ampersand)) {
-      if (constant_FD != 2) {
-        stream = MetaProcessor::kSTDBOTH;
-      }
-      consumeToken();
-    }
-    if (getCurTok().is(tok::greater)) {
-      bool append = false;
-      consumeToken();
-      // check for syntax like: 2>&1
-      if (getCurTok().is(tok::ampersand)) {
-        if (constant_FD != 2) {
-          stream = MetaProcessor::kSTDBOTH;
-        }
-        consumeToken();
-      } else {
-        // check whether we have >>
-        if (getCurTok().is(tok::greater)) {
-          append = true;
-          consumeToken();
-        }
-      }
-      llvm::StringRef file;
-      if (getCurTok().is(tok::constant) && getCurTok().getConstant() == 1) {
-        file = llvm::StringRef("_IO_2_1_stdout_");
-      } else {
-        if (getCurTok().is(tok::eof)) {
-          file  = llvm::StringRef();
-        } else {
-          consumeAnyStringToken(tok::eof);
-          if (getCurTok().is(tok::raw_ident)) {
-            file = getCurTok().getIdent();
-            consumeToken();
-          }
-          else {
-            file  = llvm::StringRef();
-          }
-        }
-      }
-      // Empty file means std.
-      actionResult =
-          m_Actions->actOnRedirectCommand(file/*file*/,
-                                          stream/*which stream to redirect*/,
-                                          append/*append mode*/);
-      return true;
-    }
-    return false;
-  }
-
-  // XCommand := 'x' FilePath[ArgList] | 'X' FilePath[ArgList]
-  // FilePath := AnyString
-  // ArgList := (ExtraArgList) ' ' [ArgList]
-  // ExtraArgList := AnyString [, ExtraArgList]
-  bool MetaParser::doXCommand(MetaSema::ActionResult& actionResult,
-                              Value* resultValue) {
-    if (resultValue)
-      *resultValue = Value();
-
-    // There might be ArgList
-    consumeAnyStringToken(tok::l_paren);
-    llvm::StringRef file(getCurTok().getIdent());
-    consumeToken();
-    // '(' to end of string:
-
-    std::string args = getCurTok().getBufStart();
-    if (args.empty())
-      args = "()";
-    actionResult = m_Actions->actOnxCommand(file, args, resultValue);
-    return true;
-  }
-
-  // ExtraArgList := AnyString [, ExtraArgList]
-  bool MetaParser::doExtraArgList() {
-    // This might be expanded if we need better arg parsing.
-    return consumeToTokenNext(tok::r_paren).is(tok::raw_ident);
-  }
-
-  bool MetaParser::doQCommand() {
-    m_Actions->actOnqCommand();
-    return true;
-  }
-
-  bool MetaParser::doICommand() {
-    return actOnRemainingArguments(*this, *m_Actions, &MetaSema::actOnICommand);
-  }
-
-  bool MetaParser::doOCommand() {
-    llvm::StringRef ident = getCurTok().getIdent();
-    if (ident.size() > 1) {
-      int level = 0;
-      if (!ident.substr(1).getAsInteger(10, level) && level >= 0) {
-        if (consumeToTokenNext(tok::eof).is(tok::raw_ident))
-          return false;
-        //TODO: Process .OXXX here as .O with level XXX.
-        return true;
-      }
-    } else {
-      if (consumeToTokenNext(tok::eof).is(tok::raw_ident)) {
-        const Token& lastStringToken = getCurTok();
-        if (lastStringToken.getLength()) {
-          int level = 0;
-          if (!lastStringToken.getIdent().getAsInteger(10, level) && level >= 0) {
-            //TODO: process .O XXX
-            return true;
-          }
-        } else {
-          //TODO: process .O
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  bool MetaParser::doAtCommand() {
-    consumeToken();
-    skipWhitespace();
-    m_Actions->actOnAtCommand();
-    return true;
-  }
-
-  bool MetaParser::doRawInputCommand() {
-    m_Actions->actOnrawInputCommand(MetaSema::SwitchMode(modeToken()));
-    return true;
-  }
-
-  bool MetaParser::doDebugCommand() {
-    llvm::Optional<int> mode;
-    if (skipToNextToken().is(tok::constant))
-      mode = getCurTok().getConstant();
-    m_Actions->actOndebugCommand(mode);
-    return true;
-  }
-
-  bool MetaParser::doPrintDebugCommand() {
-    m_Actions->actOnprintDebugCommand(MetaSema::SwitchMode(modeToken()));
-    return true;
-  }
-
-  bool MetaParser::doStoreStateCommand() {
-    const llvm::StringRef ident = consumeToNextString();
-    if ( ident.empty() )
-        return false; // FIXME: Issue proper diagnostics
-
-    m_Actions->actOnstoreStateCommand(ident);
-    return true;
-  }
-
-  bool MetaParser::doCompareStateCommand() {
-    return actOnRemainingArguments(*this, *m_Actions, &MetaSema::actOncompareStateCommand, false);
-    consumeToken();
-  }
-
-  bool MetaParser::doStatsCommand() {
-    return actOnRemainingArguments(*this, *m_Actions, &MetaSema::actOnstatsCommand, false);
-    consumeToken();
-  }
-
-  bool MetaParser::doUndoCommand() {
-    if (consumeToTokenNext(tok::eof).is(tok::constant))
-      m_Actions->actOnUndoCommand(getCurTok().getConstant());
-    else
-      m_Actions->actOnUndoCommand();
-    return true;
-  }
-
-  bool MetaParser::doDynamicExtensionsCommand() {
-    m_Actions->actOndynamicExtensionsCommand(MetaSema::SwitchMode(modeToken()));
-    return true;
-  }
-
-  bool MetaParser::doHelpCommand() {
-    m_Actions->actOnhelpCommand();
-    return true;
-  }
-
-  bool MetaParser::doFileExCommand() {
-    m_Actions->actOnfileExCommand();
-    return true;
-  }
-
-  bool MetaParser::doFilesCommand() {
-    m_Actions->actOnfilesCommand();
-    return true;
-  }
-  
-  bool MetaParser::doNamespaceCommand() {
-    if (consumeToTokenNext(tok::eof).is(tok::raw_ident))
-      return false;
-
-    m_Actions->actOnNamespaceCommand();
-    return true;
-  }
-
-  bool MetaParser::doClassCommand() {
-    llvm::StringRef className;
-    if ( getCurTok().getIdent().startswith("c") )
-      return actOnRemainingArguments(*this, *m_Actions, &MetaSema::actOnclassCommand);
-
-    m_Actions->actOnClassCommand();
-    return true;
-  }
-
-
-  bool MetaParser::doGCommand() {
-    return actOnRemainingArguments(*this, *m_Actions, &MetaSema::actOngCommand);
-  }
-
-  bool MetaParser::doTypedefCommand() {
-    return actOnRemainingArguments(*this, *m_Actions, &MetaSema::actOnTypedefCommand);
-  }
-
-  bool MetaParser::doShellCommand(MetaSema::ActionResult& actionResult,
-                                  Value* resultValue) {
-    if (resultValue)
-      *resultValue = Value();
-
-  const Token &tk = skipToNextToken();
-    const llvm::StringRef commandLine = tk.is(tok::slash) ? tk.getBufStart() : tokenAsString(tk);
-    if ( commandLine.empty() )
-      return false;
-    
-    actionResult = m_Actions->actOnShellCommand(commandLine, resultValue);
-    return true;
   }
 
 } // end namespace cling
