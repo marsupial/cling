@@ -72,7 +72,9 @@ namespace cling {
     ///\param[out] transaction - Transaction containing the loaded file.
     ///
     ActionResult actOnFCommand(llvm::StringRef file,
-                               Transaction** transaction = 0);
+                               Transaction** transaction);
+    ActionResult actOnFCommand(llvm::StringRef file) { return actOnFCommand(file,NULL); }
+    // ###FIXME here to get pointer to member function working in actOnRemainingArguments
 
     ///\brief T command prepares the tag files for giving semantic hints.
     ///

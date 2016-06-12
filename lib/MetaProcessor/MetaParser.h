@@ -69,6 +69,8 @@ namespace cling {
     llvm::SmallVector<Token, 2> m_TokenCache;
     llvm::SmallVector<Token, 4> m_MetaSymbolCache;
   private:
+    const Token& lookAhead(unsigned Num);
+	int modeToken();
     ///\brief Returns the current token without consuming it.
     ///
     inline const Token& getCurTok() { return lookAhead(0); }
@@ -76,10 +78,19 @@ namespace cling {
     ///\brief Consume the current 'peek' token.
     ///
     void consumeToken();
-    void consumeAnyStringToken(tok::TokenKind stopAt = tok::space);
-    const Token& lookAhead(unsigned Num);
     void skipWhitespace();
+    void consumeAnyStringToken(tok::TokenKind stopAt = tok::space);
+    const Token& consumeToTokenNext(tok::TokenKind stopAt = tok::space) {
+      consumeAnyStringToken(stopAt);
+      return getCurTok();
+    }
+    const Token& skipToNextToken() {
+      consumeToken();
+      skipWhitespace();
+      return getCurTok();
+    }
 
+    
     bool isCommandSymbol();
     bool doCommand(MetaSema::ActionResult& actionResult,
                    Value* resultValue);
@@ -130,6 +141,7 @@ namespace cling {
     bool isQuitRequested() const;
 
     MetaSema& getActions() const { return *m_Actions.get(); }
+    llvm::StringRef consumeToNextString();
   };
 } // end namespace cling
 
