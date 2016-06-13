@@ -292,6 +292,55 @@ namespace cling {
     return m_Consumer->getTransaction();
   }
 
+  const Transaction*
+  IncrementalParser::mergeTransactionsAfter(const Transaction *T, bool Prev) {
+    llvm::SmallVector<Transaction*, 8> merge;
+    for (std::deque<Transaction*>::reverse_iterator itr = m_Transactions.rbegin(),
+            end  = m_Transactions.rend(); itr != end; ++itr) {
+      Transaction *cur = *itr;
+      merge.push_back(cur);
+      if (cur==T) {
+        if (!Prev)
+          merge.pop_back();
+        break;
+      }
+    }
+    if (merge.size()>1) {
+      llvm::SmallVector<Transaction*, 8>::reverse_iterator itr = merge.rbegin();
+      Transaction *parent = *itr;
+      ++itr;
+      for (llvm::SmallVector<Transaction*, 8>::reverse_iterator end = merge.rend();
+           itr != end; ++itr) {
+        Transaction *cur = *itr;
+        // Try to keep everything current
+        if (m_Consumer->getTransaction()==cur)
+          m_Consumer->setTransaction(parent);
+        if (cur==parent->getNext()) // Make sure parent->next isn't a child
+          parent->setNext(const_cast<Transaction*>(cur->getNext()));
+        while (cur->getParent())   // Keep parents in place
+          cur = cur->getParent();
+
+        // Lets just make them match until there's a decent test case
+        assert((cur->getIssuedDiags() != Transaction::kErrors ||
+               parent->getIssuedDiags() == Transaction::kErrors)
+              && "Cannot merge transactions with different error states");
+        parent->addNestedTransaction(cur);
+
+        // TODO: Propogate child's error state into parent.
+        //
+        // Once addNestedTransaction finishes we can't get the child's errors
+        // const Transaction::IssuedDiags childErr = cur->getIssuedDiags();
+        // parent->addNestedTransaction(cur);
+        // if (issued < parent->getIssuedDiags())
+        //   parent->setIssuedDiags(childErr);
+
+        m_Transactions.pop_back();
+      }
+      return parent;
+    }
+    return getCurrentTransaction();
+  }
+  
   SourceLocation IncrementalParser::getLastMemoryBufferEndLoc() const {
     const SourceManager& SM = getCI()->getSourceManager();
     SourceLocation Result = SM.getLocForStartOfFile(m_VirtualFileID);
