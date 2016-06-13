@@ -137,6 +137,16 @@ namespace cling {
     m_State->compare("aName");
   }
 
+  Interpreter::TransactionMerge::TransactionMerge(Interpreter *interp,
+                                                  bool prev) :
+    m_IncrParser(*interp->m_IncrParser),
+    m_Current(m_IncrParser.getLastTransaction()), m_Prev(prev) {
+  }
+
+  Interpreter::TransactionMerge::~TransactionMerge() {
+    m_IncrParser.mergeTransactionsAfter(m_Current, m_Prev);
+  }
+  
   // This function isn't referenced outside its translation unit, but it
   // can't use the "static" keyword because its address is used for
   // GetMainExecutable (since some platforms don't support taking the
@@ -179,7 +189,8 @@ namespace cling {
                            const char* llvmdir /*= 0*/, bool noRuntime,
                            bool isChildInterp) :
     m_UniqueCounter(0), m_PrintDebug(false), m_DynamicLookupDeclared(false),
-    m_DynamicLookupEnabled(false), m_RawInputEnabled(false) {
+    m_DynamicLookupEnabled(false), m_RawInputEnabled(false),
+    m_PrintValueTransaction(nullptr) {
 
     std::vector<unsigned> LeftoverArgsIdx;
     m_Opts = InvocationOptions::CreateFromArgs(argc, argv, LeftoverArgsIdx);
@@ -1130,20 +1141,40 @@ namespace cling {
       return kSuccess;
     }
 
+    const Transaction *prntT = m_PrintValueTransaction;
+
     Value resultV;
     if (!V)
       V = &resultV;
     if (!lastT->getWrapperFD()) // no wrapper to run
       return Interpreter::kSuccess;
-    else if (RunFunction(lastT->getWrapperFD(), V) < kExeFirstError){
-      if (lastT->getCompilationOpts().ValuePrinting
-          != CompilationOptions::VPDisabled
-          && V->isValid()
-          // the !V->needsManagedAllocation() case is handled by
-          // dumpIfNoStorage.
-          && V->needsManagedAllocation())
-        V->dump();
-      return Interpreter::kSuccess;
+    else {
+      ExecutionResult rslt = RunFunction(lastT->getWrapperFD(), V);
+
+      // If m_PrintValueTransaction has changed value, then lastT is now
+      // the transaction that holds the transaction(s) of loading up the
+      // value printer and must be recorded as such.
+      if ( prntT != m_PrintValueTransaction ) {
+        assert(m_PrintValueTransaction != nullptr
+               && "Value printer failed to load after success?");
+        // As the stack is unwinded from recursive calls to EvaluateInternal
+        // we merge the subsequent transactions into the current one.
+        // Then m_PrintValueTransaction is marked as this transaction as it
+        // is the first known Transaction that caused the printer to be loaded.
+        m_IncrParser->mergeTransactionsAfter(lastT, true);
+        m_PrintValueTransaction = lastT;
+      }
+
+      if ( rslt < kExeFirstError) {
+        if (lastT->getCompilationOpts().ValuePrinting
+            != CompilationOptions::VPDisabled
+            && V->isValid()
+            // the !V->needsManagedAllocation() case is handled by
+            // dumpIfNoStorage.
+            && V->needsManagedAllocation())
+          V->dump();
+        return Interpreter::kSuccess;
+      }
     }
     return Interpreter::kSuccess;
   }
@@ -1253,17 +1284,23 @@ namespace cling {
   }
 
   void Interpreter::unload(unsigned numberOfTransactions) {
-    while(true) {
+    if (!numberOfTransactions)
+      return;
+
+    do {
       cling::Transaction* T = m_IncrParser->getLastTransaction();
+
+      if (T == m_PrintValueTransaction)
+        m_PrintValueTransaction = nullptr;
+
       if (!T) {
         llvm::errs() << "cling: invalid last transaction; unload failed!\n";
         return;
       }
-      unload(*T);
-      if (!--numberOfTransactions)
-        break;
-    }
 
+      unload(*T);
+
+    } while (--numberOfTransactions);
   }
 
   Interpreter::CompilationResult
