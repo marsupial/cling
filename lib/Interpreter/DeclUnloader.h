@@ -163,6 +163,13 @@ namespace clang {
     ///
     bool VisitNamespaceDecl(NamespaceDecl* NSD);
 
+    ///\brief Removes all extern "C" declarations.
+    /// @param[in] LSD - The declaration context to be removed.
+    ///
+    ///\returns true on success.
+    ///
+    bool VisitLinkageSpecDecl(LinkageSpecDecl* LSD);
+
     ///\brief Removes a Tag (class/union/struct/enum). Most of the other
     /// containers fall back into that case.
     /// @param[in] TD - The declaration to be removed.
