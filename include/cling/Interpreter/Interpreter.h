@@ -98,6 +98,17 @@ namespace cling {
       void pop() const;
     };
 
+    ///\brief RAII object to manage merging transactions
+    class TransactionMerge {
+      IncrementalParser& m_IncrParser;
+      const Transaction* m_Current;
+      const bool m_Prev;
+
+    public:
+      TransactionMerge(Interpreter* interp, bool prev);
+      ~TransactionMerge();
+    };
+
     ///\brief Describes the return result of the different routines that do the
     /// incremental compilation.
     ///
@@ -186,6 +197,12 @@ namespace cling {
     ///\brief Information about the last stored states through .storeState
     ///
     mutable std::vector<ClangInternalState*> m_StoredStates;
+
+    ///\brief Pointer to the transactions that invoked printValueInternal
+    /// for the first time. This is used so printValueInternal knows when it
+    /// needs to do any setup.
+    ///
+    const Transaction *m_PrintValueTransaction;
 
     ///\brief Worker function, building block for interpreter's public
     /// interfaces.
@@ -730,6 +747,15 @@ namespace cling {
                           [](const clang::PresumedLoc&) { return false;}) const;
 
     friend class runtime::internal::LifetimeHandler;
+
+    ///\brief Used by valuePrinterInternal::printValueInternal to mark when the
+    /// value printing headers were included.
+    ///
+    ///\returns reference to m_PrintValueTransaction
+    ///
+    const Transaction*& printValueTransaction() {
+      return m_PrintValueTransaction;
+    }
   };
 
   namespace internal {

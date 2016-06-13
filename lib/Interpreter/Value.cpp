@@ -247,9 +247,11 @@ namespace cling {
     std::string typeStr = cling::valuePrinterInternal::printTypeInternal(*this);
     // Get the value string representation, by printValue() method overloading
     std::string valueStr = cling::valuePrinterInternal::printValueInternal(*this);
-
-    // Print the type and the value:
-    Out << typeStr + " " + valueStr << "\n";
+    // If valueStr is empty, something went wrong
+    if (!valueStr.empty()) {
+      // Print the type and the value:
+      Out << typeStr + " " + valueStr << "\n";
+    }
   }
 
   void Value::dump() const {
