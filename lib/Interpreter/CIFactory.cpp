@@ -387,6 +387,13 @@ namespace {
     return OS.str();
   }
 
+  //
+  //  Dummy function so we can use dladdr to find the executable path.
+  //
+  void locate_cling_executable()
+  {
+  }
+
   ///\brief Check the compile-time clang version vs the run-time clang version,
   /// a mismatch could cause havoc. Reports if clang versions differ.
   static void CheckClangCompatibility() {
@@ -400,7 +407,7 @@ namespace {
   }
 
   ///\brief Adds standard library -I used by whatever compiler is found in PATH.
-  static void AddHostCXXIncludes(std::vector<const char*>& args, const char* clang ) {
+  static void AddHostCXXIncludes(std::vector<const char*>& args) {
     static bool IncludesSet = false;
     static std::vector<std::string> HostCXXI;
     if (!IncludesSet) {
@@ -444,8 +451,21 @@ namespace {
         }
       }
 
+      // Try to use a version of clang that is located next to cling
+      SmallString<2048> buffer;
+      std::string clang = llvm::sys::fs::getMainExecutable("cling",
+                                       (void*)(intptr_t) locate_cling_executable
+                                                          );
+      clang = llvm::sys::path::parent_path(clang);
+      buffer.assign(clang);
+      llvm::sys::path::append(buffer, "clang");
+      clang.assign(&buffer[0], buffer.size());
+    
       std::string CppInclQuery("echo | LC_ALL=C ");
-      CppInclQuery.append(clang ? clang : LLVM_CXX);
+      if (llvm::sys::fs::is_regular_file(clang))
+        CppInclQuery.append(clang);
+      else
+        CppInclQuery.append(LLVM_CXX);
       CppInclQuery.append(" -xc++ -E -v /dev/null 2>&1 "
         "| awk '/^#include </,/^End of search"
         "/{if (!/^#include </ && !/^End of search/){ print }}' "
@@ -454,13 +474,12 @@ namespace {
       if (FILE *pf = ::popen(CppInclQuery.c_str(), "r")) {
 
         HostCXXI.push_back("-nostdinc++");
-        char buf[2048];
-        while (fgets(buf, sizeof(buf), pf) && buf[0]) {
-          size_t lenbuf = strlen(buf);
-          buf[lenbuf - 1] = 0;   // remove trailing \n
+        while (fgets(&buffer[0], buffer.capacity_in_bytes(), pf) && buffer[0]) {
+          size_t lenbuf = strlen(&buffer[0]);
+          buffer.data()[lenbuf - 1] = 0;   // remove trailing \n
           // Skip leading whitespace:
-          const char* start = buf;
-          while (start < buf + lenbuf && *start == ' ')
+          const char* start = &buffer[0];
+          while (start < (&buffer[0] + lenbuf) && *start == ' ')
             ++start;
           if (*start) {
             HostCXXI.push_back("-I");
@@ -488,14 +507,6 @@ namespace {
     for (std::vector<std::string>::const_iterator
            I = HostCXXI.begin(), E = HostCXXI.end(); I != E; ++I)
       args.push_back(I->c_str());
-  }
-
-
-  //
-  //  Dummy function so we can use dladdr to find the executable path.
-  //
-  void locate_cling_executable()
-  {
   }
 
   /// \brief Retrieves the clang CC1 specific flags out of the compilation's
@@ -648,16 +659,7 @@ namespace {
       argvCompile.insert(argvCompile.begin() + 2, lang);
     }
 
-    std::string clang = llvm::sys::fs::getMainExecutable("cling",
-                                       (void*)(intptr_t) locate_cling_executable
-                                                        );
-    clang = llvm::sys::path::parent_path(clang);
-    SmallString<128> P(clang);
-    llvm::sys::path::append(P, "clang");
-    clang.assign(&P[0], P.size());
-
-    AddHostCXXIncludes(argvCompile, llvm::sys::fs::is_regular_file(clang) ?
-                                    clang.data() : NULL);
+    AddHostCXXIncludes(argvCompile);
 
     argvCompile.insert(argvCompile.end(),"-c");
     argvCompile.insert(argvCompile.end(),"-");
