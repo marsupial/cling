@@ -285,6 +285,18 @@ namespace clang {
     ///
     void CollectFilesToUncache(SourceLocation Loc);
 
+    ///\brief Test if the given SourceLocation came before the SourceLocation
+    /// of our Transaction.  If m_CurTransaction is NULL it is assumed to be
+    /// known that the declaration occured in the current Transaction.
+    ///
+    /// This is used to test whether the declaration holding specializations
+    /// was actullay part of the transaction being unloaded.
+    ///
+    bool wasInstatiatedBefore(Decl *D, const SourceLocation &Loc) const;
+
+    template <class DeclT>
+    bool VisitSpecializations(DeclT *D);
+
     constexpr static bool isDefinition(void*) { return false; }
     static bool isDefinition(TagDecl* R);
 
