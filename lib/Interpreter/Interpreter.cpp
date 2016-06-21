@@ -234,7 +234,8 @@ namespace cling {
       return;
     }
 
-    if (!noRuntime) {
+    // -noruntime
+    if (!noRuntime && !m_Opts.NoRuntime) {
       if (getCI()->getLangOpts().CPlusPlus)
         IncludeCXXRuntime();
       else
