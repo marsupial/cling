@@ -410,7 +410,8 @@ namespace {
   }
 
   ///\brief Adds standard library -I used by whatever compiler is found in PATH.
-  static void AddHostCXXIncludes(std::vector<const char*>& args) {
+  static void AddHostIncludes(std::vector<const char*>& args,
+                              bool noBuiltinInc, bool noCXXIncludes) {
     static bool IncludesSet = false;
     static std::vector<std::string> HostCXXI;
     if (!IncludesSet) {
@@ -435,74 +436,74 @@ namespace {
       // When built with access to the proper Windows APIs, try to actually find
       // the correct include paths first.
       if (getVisualStudioDir(VSDir)) {
-        HostCXXI.push_back("-I");
-        HostCXXI.push_back(VSDir + "\\VC\\include");
-        if (getWindowsSDKDir(WindowsSDKDir)) {
+        if (!noCXXIncludes) {
           HostCXXI.push_back("-I");
-          HostCXXI.push_back(WindowsSDKDir + "\\include");
+          HostCXXI.push_back(VSDir + "\\VC\\include");
         }
-        else {
-          HostCXXI.push_back("-I");
-          HostCXXI.push_back(VSDir + "\\VC\\PlatformSDK\\Include");
+        if (!noBuiltinInc) {
+          if (getWindowsSDKDir(WindowsSDKDir)) {
+            HostCXXI.push_back("-I");
+            HostCXXI.push_back(WindowsSDKDir + "\\include");
+          }
+          else {
+            HostCXXI.push_back("-I");
+            HostCXXI.push_back(VSDir + "\\VC\\PlatformSDK\\Include");
+          }
         }
       }
 #else // _MSC_VER
       // Skip LLVM_CXX execution if -nostdinc++ was provided.
-      for (const auto arg : args) {
-        if (!strcmp(arg, "-nostdinc++")) {
-          return;
-        }
-      }
+      if (!noCXXIncludes) {
+        // Try to use a version of clang that is located next to cling
+        SmallString<2048> buffer;
+        std::string clang = llvm::sys::fs::getMainExecutable("cling",
+                                         (void*)(intptr_t) locate_cling_executable
+                                                            );
+        clang = llvm::sys::path::parent_path(clang);
+        buffer.assign(clang);
+        llvm::sys::path::append(buffer, "clang");
+        clang.assign(&buffer[0], buffer.size());
+      
+        std::string CppInclQuery("echo | LC_ALL=C ");
+        if (llvm::sys::fs::is_regular_file(clang))
+          CppInclQuery.append(clang);
+        else
+          CppInclQuery.append(LLVM_CXX);
+        CppInclQuery.append(" -xc++ -E -v /dev/null 2>&1 "
+          "| awk '/^#include </,/^End of search"
+          "/{if (!/^#include </ && !/^End of search/){ print }}' "
+          "| GREP_OPTIONS= grep -E \"(c|g)\\+\\+\"");
 
-      // Try to use a version of clang that is located next to cling
-      SmallString<2048> buffer;
-      std::string clang = llvm::sys::fs::getMainExecutable("cling",
-                                       (void*)(intptr_t) locate_cling_executable
-                                                          );
-      clang = llvm::sys::path::parent_path(clang);
-      buffer.assign(clang);
-      llvm::sys::path::append(buffer, "clang");
-      clang.assign(&buffer[0], buffer.size());
-    
-      std::string CppInclQuery("echo | LC_ALL=C ");
-      if (llvm::sys::fs::is_regular_file(clang))
-        CppInclQuery.append(clang);
-      else
-        CppInclQuery.append(LLVM_CXX);
-      CppInclQuery.append(" -xc++ -E -v /dev/null 2>&1 "
-        "| awk '/^#include </,/^End of search"
-        "/{if (!/^#include </ && !/^End of search/){ print }}' "
-        "| GREP_OPTIONS= grep -E \"(c|g)\\+\\+\"");
+        if (FILE *pf = ::popen(CppInclQuery.c_str(), "r")) {
 
-      if (FILE *pf = ::popen(CppInclQuery.c_str(), "r")) {
-
-        HostCXXI.push_back("-nostdinc++");
-        while (fgets(&buffer[0], buffer.capacity_in_bytes(), pf) && buffer[0]) {
-          size_t lenbuf = strlen(&buffer[0]);
-          buffer.data()[lenbuf - 1] = 0;   // remove trailing \n
-          // Skip leading whitespace:
-          const char* start = &buffer[0];
-          while (start < (&buffer[0] + lenbuf) && *start == ' ')
-            ++start;
-          if (*start) {
-            HostCXXI.push_back("-I");
-            HostCXXI.push_back(start);
+          HostCXXI.push_back("-nostdinc++");
+          while (fgets(&buffer[0], buffer.capacity_in_bytes(), pf) && buffer[0]) {
+            size_t lenbuf = strlen(&buffer[0]);
+            buffer.data()[lenbuf - 1] = 0;   // remove trailing \n
+            // Skip leading whitespace:
+            const char* start = &buffer[0];
+            while (start < (&buffer[0] + lenbuf) && *start == ' ')
+              ++start;
+            if (*start) {
+              HostCXXI.push_back("-I");
+              HostCXXI.push_back(start);
+            }
           }
+          ::pclose(pf);
         }
-        ::pclose(pf);
-      }
-      else
-        ::perror("popen failure");
+        else
+          ::perror("popen failure");
 
-      // HostCXXI contains at least -nostdinc++, -I
-      if (HostCXXI.size() < 3) {
-        llvm::errs() << "ERROR in cling::CIFactory::createCI(): cannot extract "
-          "standard library include paths!\n"
-          "Invoking:\n"
-          "    " << CppInclQuery << "\n"
-          "results in\n";
-        int ExitCode = system(CppInclQuery.c_str());
-        llvm::errs() << "with exit code " << ExitCode << "\n";
+        // HostCXXI contains at least -nostdinc++, -I
+        if (HostCXXI.size() < 3) {
+          llvm::errs() << "ERROR in cling::CIFactory::createCI(): cannot extract "
+            "standard library include paths!\n"
+            "Invoking:\n"
+            "    " << CppInclQuery << "\n"
+            "results in\n";
+          int ExitCode = system(CppInclQuery.c_str());
+          llvm::errs() << "with exit code " << ExitCode << "\n";
+        }
       }
 #endif // _MSC_VER
     }
@@ -665,9 +666,11 @@ namespace {
     // We do C++ by default; append right after argv[0] name
     // Only insert it if there is no other "-x":
     bool hasMinusX = false;
+    bool noBuiltinInc = false;
+    bool noCXXIncludes = false;
     const char* lang = "c++";
     for (const char* const* iarg = argv, * const* earg = argv + argc;
-         iarg < earg; ++iarg) {
+         iarg < earg && (!hasMinusX || !noBuiltinInc || !noCXXIncludes); ++iarg) {
       if (!strncmp(*iarg, "-Xclang", 7) && (*iarg)[8] == 0) {
         // goto next arg if there is one
         if (++iarg < earg) {
@@ -683,16 +686,19 @@ namespace {
         }
         continue;
       }
-      hasMinusX = !strncmp(*iarg, "-x", 2);
-      if (hasMinusX)
-        break;
+      else if (!hasMinusX && !strncmp(*iarg, "-x", 2))
+        hasMinusX = true;
+      else if (!noBuiltinInc && !strncmp(*iarg, "-nobuiltininc", 13))
+        noBuiltinInc = true;
+      else if (!noCXXIncludes && !strncmp(*iarg, "-nostdinc++", 11))
+        noCXXIncludes = true;
     }
     if (!hasMinusX) {
       argvCompile.insert(argvCompile.begin() + 1,"-x");
       argvCompile.insert(argvCompile.begin() + 2, lang);
     }
 
-    AddHostCXXIncludes(argvCompile);
+    AddHostIncludes(argvCompile, noBuiltinInc, noCXXIncludes);
 
     argvCompile.insert(argvCompile.end(),"-c");
     argvCompile.insert(argvCompile.end(),"-");

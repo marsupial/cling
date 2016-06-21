@@ -236,7 +236,9 @@ namespace cling {
       return;
     }
 
-    AddRuntimeIncludePaths(argv[0]);
+    // -nobuiltininc
+    if (getCI()->getHeaderSearchOpts().UseBuiltinIncludes)
+      AddRuntimeIncludePaths(argv[0]);
 
     if (!noRuntime) {
       if (getCI()->getLangOpts().CPlusPlus)
