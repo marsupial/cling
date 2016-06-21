@@ -18,12 +18,13 @@ namespace cling {
   public:
     InvocationOptions():
       ErrorOut(false), NoLogo(false), ShowVersion(false), Verbose(false),
-      Help(false), MetaString(".") {}
+      Help(false), NoRuntime(false), MetaString(".") {}
     bool ErrorOut;
     bool NoLogo;
     bool ShowVersion;
     bool Verbose;
     bool Help;
+    bool NoRuntime;
 
     /// \brief A line starting with this string is assumed to contain a
     ///        directive for the MetaProcessor. Defaults to "."

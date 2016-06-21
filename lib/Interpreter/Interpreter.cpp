@@ -240,7 +240,8 @@ namespace cling {
     if (getCI()->getHeaderSearchOpts().UseBuiltinIncludes)
       AddRuntimeIncludePaths(argv[0]);
 
-    if (!noRuntime) {
+    // -noruntime
+    if (!noRuntime && !m_Opts.NoRuntime) {
       if (getCI()->getLangOpts().CPlusPlus)
         IncludeCXXRuntime();
       else

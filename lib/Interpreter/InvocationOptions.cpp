@@ -63,6 +63,7 @@ namespace {
     Opts.ShowVersion = Args.hasArg(OPT_version);
     Opts.Verbose = Args.hasArg(OPT_v);
     Opts.Help = Args.hasArg(OPT_help);
+    Opts.NoRuntime = Args.hasArg(OPT_noruntime);
     if (Args.hasArg(OPT__metastr, OPT__metastr_EQ)) {
       Arg* MetaStringArg = Args.getLastArg(OPT__metastr, OPT__metastr_EQ);
       Opts.MetaString = MetaStringArg->getValue();
