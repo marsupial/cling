@@ -6,20 +6,44 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: cat %s | %cling 2>&1 | FileCheck -allow-empty %s
+// RUN: cat %s | %cling -I %S 2>&1 | FileCheck %s
 
 
 namespace A { void foo(); }
 namespace B { using A::foo; }
 namespace B { using A::foo; }
-.storeState "AB2"
+.storeState "TEST1"
 
 namespace B { using A::foo; }
 namespace B { using A::foo; }
 .undo
 .undo
 
-.compareState "AB2"
+.compareState "TEST1"
 //CHECK-NOT: Differences
 
+typedef long long_t;
+
+.storeState "TEST2"
+
+#include "UsingShadows.h"
+#include "UsingShadows.h"
+#include "UsingShadows.h"
+.undo
+.undo
+.undo
+
+//Make sure long_t is still valid
+.compareState "TEST2"
+//CHECK-NOT: Differences
+
+long_t val = 9;
+val
+//CHECK: 9
+
+// Unloading <string> used to fail as well (which as annoying).
+#include <string>
+.undo
+
+// expected-no-diagnostics
 .q
