@@ -11,8 +11,8 @@
 #define CLING_DECL_UNLOADER
 
 #include "cling/Interpreter/Transaction.h"
-
 #include "clang/AST/DeclVisitor.h"
+#include <set>
 
 namespace clang {
 
@@ -47,6 +47,15 @@ namespace clang {
     /// came from so that in the end they could be removed from clang's cache.
     ///
     FileIDs m_FilesToUncache;
+
+    ///\brief Store ClassTemplateSpecializationDecls that had some (or all)
+    /// decls removed . These are marked as incomplete in the destructor
+    /// so that iteration can continue properly. If marked as such too early
+    /// the RecursiveASTVistor picks that up and will never call
+    /// VisitClassTemplateSpecializationDecl on specializations that are being
+    /// entirely removed.
+    ///
+    std::set<ClassTemplateSpecializationDecl*> m_Specializations;
 
     ///\brief Mark whether we are recursing via VisitSpecializations.
     ///

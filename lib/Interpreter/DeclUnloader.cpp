@@ -385,6 +385,12 @@ bool DeclUnloader::VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC)
       // We need to reset the cache
       SM.invalidateCache(*I);
     }
+    // Mark all invalid specializations as such now. This must be done after
+    // iteration has completed.
+    for (ClassTemplateSpecializationDecl* CTSD : m_Specializations) {
+      CTSD->setCompleteDefinition(false);
+      CTSD->setSpecializationKind(TSK_Undeclared);
+    }
   }
 
   void DeclUnloader::CollectFilesToUncache(SourceLocation Loc) {
@@ -778,6 +784,16 @@ bool DeclUnloader::VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC)
       // FIXME: When the misbehavior of clang is fixed we must avoid relying on
       // source locations
       FunctionTemplateDeclExt::removeSpecialization(FTD, FD);
+    }
+
+    if (ClassTemplateSpecializationDecl *CTSD =
+              dyn_cast<ClassTemplateSpecializationDecl>(FD->getDeclContext())) {
+
+      // Mark our specialization as incomplete, this method will be regenerated
+      // the next time the class is used.
+      // FIXME: Mark the method i.e. FD->setMemberSpecializationInfo(nullptr);
+      // rather than using a bizarro heuristic in Sema::InstantiateClass
+      m_Specializations.insert(CTSD);
     }
 
     // struct FirstDecl* function();
@@ -1324,6 +1340,30 @@ bool DeclUnloader::VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC)
         !wasInstatiatedBefore(CTSD->getPointOfInstantiation())) {
       VisStateRestore visState(m_VisSpecializations);
       Success = VisitCXXRecordDecl(CTSD);
+
+      // Save it to be mark as incomplete in our destructor
+      m_Specializations.insert(CTSD);
+
+      // Clear everything so Sema::InstantiateClass can rebuild it all
+      if (StoredDeclsMap* Map = CTSD->getLookupPtr()) {
+        llvm::SmallVector<NamedDecl*, 64> Decls;
+        for (StoredDeclsMap::value_type& entry : *Map) {
+          NamedDecl* ND = entry.second.getAsDecl();
+          if (!ND) {
+            if (StoredDeclsList::DeclsTy* Vec = entry.second.getAsVector()) {
+              for (NamedDecl* ND : *Vec)
+                 Decls.push_back(ND);
+            }
+          }
+          else
+            Decls.push_back(ND);
+        }
+        for(auto I = Decls.rbegin(), E = Decls.rend(); I != E; ++I) {
+          Success &= Visit(*I);
+          assert(Success);
+        }
+        StoredDeclsMap().swap(*Map);
+      }
     }
     
     return Success;
