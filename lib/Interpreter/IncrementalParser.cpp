@@ -166,16 +166,25 @@ namespace cling {
     m_Interpreter(interp),
     m_CI(CIFactory::createCI("", interp->getOptions(), llvmdir)),
     m_Consumer(nullptr), m_ModuleNo(0) {
-    assert(m_CI.get() && "CompilerInstance is (null)!");
+
+    if (!m_CI) {
+      llvm::errs() << "Compiler instance could not be created.\n";
+      return;
+    }
 
     m_Consumer = dyn_cast<DeclCollector>(&m_CI->getSema().getASTConsumer());
-    assert(m_Consumer && "Expected ChainedConsumer!");
+    if (!m_Consumer) {
+      llvm::errs() << "No AST consumer available.\n";
+      return;
+    }
 
-    if (m_CI->getFrontendOpts().ProgramAction != frontend::ParseSyntaxOnly) {
-      m_CodeGen.reset(CreateLLVMCodeGen(
-          m_CI->getDiagnostics(), "cling-module-0", m_CI->getHeaderSearchOpts(),
-          m_CI->getPreprocessorOpts(), m_CI->getCodeGenOpts(),
-          *m_Interpreter->getLLVMContext()));
+    if (m_CI->getFrontendOpts().ProgramAction != frontend::ParseSyntaxOnly){
+      m_CodeGen.reset(CreateLLVMCodeGen(m_CI->getDiagnostics(), "cling-module-0",
+                                        m_CI->getHeaderSearchOpts(),
+                                        m_CI->getPreprocessorOpts(),
+                                        m_CI->getCodeGenOpts(),
+                                        *(m_Interpreter->getLLVMContext())));
+
       m_Consumer->setContext(this, m_CodeGen.get());
     } else {
       m_Consumer->setContext(this, 0);
@@ -184,15 +193,24 @@ namespace cling {
     initializeVirtualFile();
   }
 
-  void
+  bool
   IncrementalParser::Initialize(llvm::SmallVectorImpl<ParseResultTransaction>&
                                 result, bool isChildInterpreter) {
     m_TransactionPool.reset(new TransactionPool);
+    if (!m_TransactionPool) {
+      llvm::errs() << "TransactionPool could not be created.\n";
+      return false;
+    }
+
     if (hasCodeGenerator()) {
       getCodeGenerator()->Initialize(getCI()->getASTContext());
       m_BackendPasses.reset(new BackendPasses(getCI()->getCodeGenOpts(),
                                               getCI()->getTargetOpts(),
                                               getCI()->getLangOpts()));
+      if (!m_BackendPasses) {
+        llvm::errs() << "BackendPasses could not be created.\n";
+        return false;
+      }
     }
 
     CompilationOptions CO;
@@ -200,6 +218,7 @@ namespace cling {
     CO.ValuePrinting = CompilationOptions::VPDisabled;
     CO.CodeGeneration = hasCodeGenerator();
 
+    bool Success = true;
     Transaction* CurT = beginTransaction(CO);
     Preprocessor& PP = m_CI->getPreprocessor();
 
@@ -223,24 +242,28 @@ namespace cling {
     PP.EnterMainSourceFile();
 
     Sema* TheSema = &m_CI->getSema();
-    m_Parser.reset(new Parser(PP, *TheSema,
-                              false /*skipFuncBodies*/));
-    // Initialize the parser after PP has entered the main source file.
-    m_Parser->Initialize();
+    m_Parser.reset(new Parser(PP, *TheSema, false /*skipFuncBodies*/));
+    if (m_Parser) {
+      // Initialize the parser after PP has entered the main source file.
+      m_Parser->Initialize();
 
-    ExternalASTSource *External = TheSema->getASTContext().getExternalSource();
-    if (External)
-      External->StartTranslationUnit(m_Consumer);
+      ExternalASTSource *External = TheSema->getASTContext().getExternalSource();
+      if (External)
+        External->StartTranslationUnit(m_Consumer);
 
-    // If I belong to the parent Interpreter, only then do
-    // the #include <new>
-    if (!isChildInterpreter && m_CI->getLangOpts().CPlusPlus) {
-      // <new> is needed by the ValuePrinter so it's a good thing to include it.
-      // We need to include it to determine the version number of the standard
-      // library implementation.
-      ParseInternal("#include <new>");
-      // That's really C++ ABI compatibility. C has other problems ;-)
-      CheckABICompatibility(m_CI.get());
+      // If I belong to the parent Interpreter, only then do
+      // the #include <new>
+      if (!isChildInterpreter && m_CI->getLangOpts().CPlusPlus) {
+        // <new> is needed by the ValuePrinter so it's a good thing to include it.
+        // We need to include it to determine the version number of the standard
+        // library implementation.
+        ParseInternal("#include <new>");
+        // That's really C++ ABI compatibility. C has other problems ;-)
+        CheckABICompatibility(m_CI.get());
+      }
+    } else {
+      llvm::errs() << "Parser could not be created.\n";
+      Success= false;
     }
 
     // DO NOT commit the transactions here: static initialization in these
@@ -248,6 +271,15 @@ namespace cling {
     // been defined yet!
     ParseResultTransaction PRT = endTransaction(CurT);
     result.push_back(PRT);
+
+    return Success;
+  }
+
+  bool IncrementalParser::isValid(bool initialized) const {
+    return m_CI && m_CI->hasFileManager() && m_Consumer &&
+           !m_VirtualFileID.isInvalid() && (!initialized ||
+               (m_TransactionPool && m_Parser &&
+                 (!hasCodeGenerator() || m_BackendPasses)));
   }
 
   const Transaction* IncrementalParser::getCurrentTransaction() const {
@@ -640,7 +672,8 @@ namespace cling {
   void IncrementalParser::initializeVirtualFile() {
     SourceManager& SM = getCI()->getSourceManager();
     m_VirtualFileID = SM.getMainFileID();
-    assert(!m_VirtualFileID.isInvalid() && "No VirtualFileID created?");
+    if (m_VirtualFileID.isInvalid())
+      llvm::errs() << "VirtualFileID could not be created.\n";
   }
 
   IncrementalParser::ParseResultTransaction

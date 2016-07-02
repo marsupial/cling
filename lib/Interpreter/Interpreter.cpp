@@ -155,6 +155,14 @@ namespace cling {
       == clang::frontend::ParseSyntaxOnly;
   }
 
+  bool Interpreter::isValid() const {
+    // Should we also check m_IncrParser->getFirstTransaction() ?
+    // not much can be done without it (its the initializing transaction)
+    return m_IncrParser && m_IncrParser->isValid() &&
+           m_DyLibManager && m_LookupHelper &&
+           (isInSyntaxOnlyMode() || m_Executor);
+  }
+  
   Interpreter::Interpreter(int argc, const char* const *argv,
                            const char* llvmdir /*= 0*/, bool noRuntime,
                            const Interpreter* parentInterp) :
@@ -164,8 +172,15 @@ namespace cling {
     m_DynamicLookupEnabled(false), m_RawInputEnabled(false) {
 
     m_LLVMContext.reset(new llvm::LLVMContext);
+    if (!m_LLVMContext)
+      return;
     m_DyLibManager.reset(new DynamicLibraryManager(getOptions()));
+    if (!m_DyLibManager)
+      return;
+
     m_IncrParser.reset(new IncrementalParser(this, llvmdir));
+    if (!m_IncrParser || !m_IncrParser->isValid(false))
+      return;
 
     Sema& SemaRef = getSema();
     Preprocessor& PP = SemaRef.getPreprocessor();
@@ -176,10 +191,15 @@ namespace cling {
     m_LookupHelper.reset(new LookupHelper(new Parser(PP, SemaRef,
                                                      /*SkipFunctionBodies*/false,
                                                      /*isTemp*/true), this));
+    if (!m_LookupHelper)
+      return;
 
-    if (!isInSyntaxOnlyMode())
+    if (!isInSyntaxOnlyMode()) {
       m_Executor.reset(new IncrementalExecutor(SemaRef.Diags,
                                                getCI()->getCodeGenOpts()));
+      if (!m_Executor)
+        return;
+    }
 
     // Tell the diagnostic client that we are entering file parsing mode.
     DiagnosticConsumer& DClient = getCI()->getDiagnosticClient();
@@ -187,7 +207,13 @@ namespace cling {
 
     llvm::SmallVector<IncrementalParser::ParseResultTransaction, 2>
       IncrParserTransactions;
-    m_IncrParser->Initialize(IncrParserTransactions, parentInterp);
+    if (!m_IncrParser->Initialize(IncrParserTransactions, parentInterp)) {
+      // Initialization is not going well, but we still have to commit what
+      // weve been given
+      for (auto&& I: IncrParserTransactions)
+        m_IncrParser->commitTransaction(I);
+      return;
+    }
 
     handleFrontendOptions();
 
@@ -223,23 +249,24 @@ namespace cling {
     Interpreter(argc, argv, llvmdir, noRuntime, &parentInterpreter) {
     // Do the "setup" of the connection between this interpreter and
     // its parent interpreter.
+    if (CompilerInstance* CI = getCIOrNull()) {
+      // The "bridge" between the interpreters.
+      ExternalInterpreterSource *myExternalSource =
+        new ExternalInterpreterSource(&parentInterpreter, this);
 
-    // The "bridge" between the interpreters.
-    ExternalInterpreterSource *myExternalSource =
-      new ExternalInterpreterSource(&parentInterpreter, this);
+      llvm::IntrusiveRefCntPtr <ExternalASTSource>
+        astContextExternalSource(myExternalSource);
 
-    llvm::IntrusiveRefCntPtr <ExternalASTSource>
-      astContextExternalSource(myExternalSource);
+      CI->getASTContext().setExternalSource(astContextExternalSource);
 
-    getCI()->getASTContext().setExternalSource(astContextExternalSource);
+      // Inform the Translation Unit Decl of I2 that it has to search somewhere
+      // else to find the declarations.
+      CI->getASTContext().getTranslationUnitDecl()->setHasExternalVisibleStorage(true);
 
-    // Inform the Translation Unit Decl of I2 that it has to search somewhere
-    // else to find the declarations.
-    getCI()->getASTContext().getTranslationUnitDecl()->setHasExternalVisibleStorage(true);
-
-    // Give my IncrementalExecutor a pointer to the Incremental executor of the
-    // parent Interpreter.
-    m_Executor->setExternalIncrementalExecutor(parentInterpreter.m_Executor.get());
+      // Give my IncrementalExecutor a pointer to the Incremental executor of the
+      // parent Interpreter.
+      m_Executor->setExternalIncrementalExecutor(parentInterpreter.m_Executor.get());
+    }
   }
 
   Interpreter::~Interpreter() {
@@ -247,7 +274,10 @@ namespace cling {
       m_Executor->shuttingDown();
     for (size_t i = 0, e = m_StoredStates.size(); i != e; ++i)
       delete m_StoredStates[i];
-    getCI()->getDiagnostics().getClient()->EndSourceFile();
+
+    if (CompilerInstance* CI = getCIOrNull())
+      CI->getDiagnostics().getClient()->EndSourceFile();
+
     // LookupHelper's ~Parser needs the PP from IncrParser's CI, so do this
     // first:
     m_LookupHelper.reset();
@@ -385,6 +415,10 @@ namespace cling {
 
   CompilerInstance* Interpreter::getCI() const {
     return m_IncrParser->getCI();
+  }
+
+  CompilerInstance* Interpreter::getCIOrNull() const {
+    return m_IncrParser ? m_IncrParser->getCI() : nullptr;
   }
 
   Sema& Interpreter::getSema() const {
@@ -577,6 +611,8 @@ namespace cling {
     std::string llvmDir = parentResourceDir.str();
 
     Interpreter childInterpreter(*this, 1, &argV, llvmDir.c_str());
+    if (!childInterpreter.isValid())
+      return kFailure;
 
     auto childCI = childInterpreter.getCI();
     clang::Sema &childSemaRef = childCI->getSema();

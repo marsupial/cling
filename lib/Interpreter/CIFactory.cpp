@@ -905,23 +905,25 @@ namespace {
 
   /// \brief Retrieves the clang CC1 specific flags out of the compilation's
   /// jobs. Returns NULL on error.
-  static const llvm::opt::ArgStringList
-  *GetCC1Arguments(clang::DiagnosticsEngine *Diagnostics,
-                   clang::driver::Compilation *Compilation) {
+  static const llvm::opt::ArgStringList*
+  GetCC1Arguments(clang::DiagnosticsEngine *Diagnostics,
+                  clang::driver::Compilation *Compilation) {
     // We expect to get back exactly one Command job, if we didn't something
     // failed. Extract that job from the Compilation.
     const clang::driver::JobList &Jobs = Compilation->getJobs();
     if (!Jobs.size() || !isa<clang::driver::Command>(*Jobs.begin())) {
-      // diagnose this...
-      return NULL;
+      // diagnose this better...
+      llvm::errs() << "No Command jobs were built.\n";
+      return nullptr;
     }
 
     // The one job we find should be to invoke clang again.
     const clang::driver::Command *Cmd
       = cast<clang::driver::Command>(&(*Jobs.begin()));
     if (llvm::StringRef(Cmd->getCreator().getName()) != "clang") {
-      // diagnose this...
-      return NULL;
+      // diagnose this better...
+      llvm::errs() << "Clang wasn't the first job.\n";
+      return nullptr;
     }
 
     return &Cmd->getArguments();
@@ -1091,8 +1093,11 @@ namespace {
     DiagnosticOptions& DiagOpts = InvocationPtr->getDiagnosticOpts();
     llvm::IntrusiveRefCntPtr<DiagnosticsEngine> Diags =
         SetupDiagnostics(DiagOpts);
-    if (!Diags)
+    if (!Diags) {
+      // If we can't even setup the diagnostic engine, lets not use llvm::errs
+      printf("Could not setup diagnostic engine.\n");
       return nullptr;
+    }
 
     clang::driver::Driver Drvr(argv[0], llvm::sys::getDefaultTargetTriple(),
                                *Diags);
@@ -1101,12 +1106,14 @@ namespace {
     llvm::ArrayRef<const char*>RF(&(argvCompile[0]), argvCompile.size());
     std::unique_ptr<clang::driver::Compilation>
       Compilation(Drvr.BuildCompilation(RF));
-    if (!Compilation)
+    if (!Compilation) {
+      llvm::errs() << "Couldn't create clang::driver::Compilation.\n";
       return nullptr;
+    }
 
     const driver::ArgStringList* CC1Args = GetCC1Arguments(Diags.get(),
                                                            Compilation.get());
-    if (CC1Args == NULL)
+    if (!CC1Args)
       return nullptr;
 
     clang::CompilerInvocation::CreateFromArgs(*InvocationPtr, CC1Args->data() + 1,
@@ -1124,8 +1131,10 @@ namespace {
       InvocationPtr.release();
       CI->setDiagnostics(Diags.get()); // Diags is ref-counted
     }
-    else
+    else {
+      llvm::errs() << "Could not allocate CompilerInstance.\n";
       return nullptr;
+    }
 
     CI->createFileManager();
     clang::CompilerInvocation& Invocation = CI->getInvocation();
@@ -1191,13 +1200,17 @@ namespace {
       PPOpts.addMacroDef("__CLING__CXX11");
     }
 
-    if (CI->getDiagnostics().hasErrorOccurred())
-      return 0;
+    if (CI->getDiagnostics().hasErrorOccurred()) {
+      llvm::errs() << "Compiler error to early in initialization.\n";
+      return nullptr;
+    }
 
     CI->setTarget(TargetInfo::CreateTargetInfo(CI->getDiagnostics(),
                                                Invocation.TargetOpts));
-    if (!CI->hasTarget())
-      return 0;
+    if (!CI->hasTarget()) {
+      llvm::errs() << "Could not determine compiler target.\n";
+      return nullptr;
+    }
 
     CI->getTarget().adjust(CI->getLangOpts());
 
