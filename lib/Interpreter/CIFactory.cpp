@@ -586,6 +586,28 @@ namespace {
     To.insert(To.end(), From.begin(), From.end());
   }
 
+  static llvm::IntrusiveRefCntPtr<DiagnosticsEngine>
+  setupDiagnostics(DiagnosticOptions& DiagOpts) {
+    // The compiler invocation is the owner of the diagnostic options.
+    // Everything else points to them.
+    llvm::IntrusiveRefCntPtr<clang::DiagnosticIDs> DiagIDs(new DiagnosticIDs());
+    if (!DiagIDs)
+      return nullptr;
+
+    std::unique_ptr<TextDiagnosticPrinter>
+      DiagnosticPrinter(new TextDiagnosticPrinter(llvm::errs(), &DiagOpts));
+    if (!DiagnosticPrinter)
+      return nullptr;
+
+    llvm::IntrusiveRefCntPtr<DiagnosticsEngine>
+      Diags(new DiagnosticsEngine(DiagIDs, &DiagOpts,
+                                  DiagnosticPrinter.get(), /*Owns it*/ true));
+    if (Diags)
+      DiagnosticPrinter.release();
+
+    return Diags;
+  }
+
   static CompilerInstance* createCIImpl(
                                      std::unique_ptr<llvm::MemoryBuffer> buffer,
                                         int argc,
@@ -670,17 +692,19 @@ namespace {
     argvCompile.insert(argvCompile.end(),"-c");
     argvCompile.insert(argvCompile.end(),"-");
 
-    clang::CompilerInvocation*
-      Invocation = new clang::CompilerInvocation;
+    std::unique_ptr<clang::CompilerInvocation>
+      InvocationPtr(new clang::CompilerInvocation);
+    if (!InvocationPtr)
+      return nullptr;
+
+    using llvm::IntrusiveRefCntPtr;
     // The compiler invocation is the owner of the diagnostic options.
     // Everything else points to them.
-    DiagnosticOptions& DiagOpts = Invocation->getDiagnosticOpts();
-    TextDiagnosticPrinter* DiagnosticPrinter
-      = new TextDiagnosticPrinter(llvm::errs(), &DiagOpts);
-    llvm::IntrusiveRefCntPtr<clang::DiagnosticIDs> DiagIDs(new DiagnosticIDs());
-    llvm::IntrusiveRefCntPtr<DiagnosticsEngine>
-      Diags(new DiagnosticsEngine(DiagIDs, &DiagOpts,
-                                  DiagnosticPrinter, /*Owns it*/ true));
+    DiagnosticOptions& DiagOpts = InvocationPtr->getDiagnosticOpts();
+    IntrusiveRefCntPtr<DiagnosticsEngine> Diags = setupDiagnostics(DiagOpts);
+    if (!Diags)
+      return nullptr;
+
     clang::driver::Driver Driver(argv[0], llvm::sys::getDefaultTargetTriple(),
                                  *Diags);
     //Driver.setWarnMissingInput(false);
@@ -688,14 +712,15 @@ namespace {
     llvm::ArrayRef<const char*>RF(&(argvCompile[0]), argvCompile.size());
     std::unique_ptr<clang::driver::Compilation>
       Compilation(Driver.BuildCompilation(RF));
-    const clang::driver::ArgStringList* CC1Args
-      = GetCC1Arguments(Diags.get(), Compilation.get());
-    if (CC1Args == NULL) {
-      delete Invocation;
-      return 0;
-    }
+    if (!Compilation)
+      return nullptr;
 
-    clang::CompilerInvocation::CreateFromArgs(*Invocation, CC1Args->data() + 1,
+    const driver::ArgStringList* CC1Args = GetCC1Arguments(Diags.get(),
+                                                           Compilation.get());
+    if (CC1Args == NULL)
+      return nullptr;
+
+    clang::CompilerInvocation::CreateFromArgs(*InvocationPtr, CC1Args->data() + 1,
                                               CC1Args->data() + CC1Args->size(),
                                               *Diags);
     // We appreciate the error message about an unknown flag (or do we? if not
@@ -705,10 +730,18 @@ namespace {
 
     // Create and setup a compiler instance.
     std::unique_ptr<CompilerInstance> CI(new CompilerInstance());
-    CI->createFileManager();
+    if (CI) {
+      CI->setInvocation(InvocationPtr.get());
+      InvocationPtr.release();
+      CI->setDiagnostics(Diags.get()); // Diags is ref-counted
+    }
+    else
+      return nullptr;
 
+    CI->createFileManager();
+    clang::CompilerInvocation& Invocation = CI->getInvocation();
     llvm::StringRef PCHFileName
-      = Invocation->getPreprocessorOpts().ImplicitPCHInclude;
+      = Invocation.getPreprocessorOpts().ImplicitPCHInclude;
     if (!PCHFileName.empty()) {
       // Load target options etc from PCH.
       struct PCHListener: public ASTReaderListener {
@@ -739,7 +772,7 @@ namespace {
           return true;
         }
       };
-      PCHListener listener(*Invocation);
+      PCHListener listener(Invocation);
       ASTReader::readASTFileControlBlock(PCHFileName,
                                          CI->getFileManager(),
                                          CI->getPCHContainerReader(),
@@ -747,7 +780,7 @@ namespace {
                                          listener);
     }
 
-    Invocation->getFrontendOpts().DisableFree = true;
+    Invocation.getFrontendOpts().DisableFree = true;
     // Copied from CompilerInstance::createDiagnostics:
     // Chain in -verify checker, if requested.
     if (DiagOpts.VerifyDiagnostics)
@@ -755,12 +788,12 @@ namespace {
     // Configure our handling of diagnostics.
     ProcessWarningOptions(*Diags, DiagOpts);
 
-    if (Invocation->getHeaderSearchOpts().UseBuiltinIncludes &&
+    if (Invocation.getHeaderSearchOpts().UseBuiltinIncludes &&
         !resource_path.empty()) {
       // Update ResourceDir
       // header search opts' entry for resource_path/include isn't
       // updated by providing a new resource path; update it manually.
-      clang::HeaderSearchOptions& Opts = Invocation->getHeaderSearchOpts();
+      clang::HeaderSearchOptions& Opts = Invocation.getHeaderSearchOpts();
       llvm::SmallString<512> oldResInc(Opts.ResourceDir);
       llvm::sys::path::append(oldResInc, "include");
       llvm::SmallString<512> newResInc(resource_path);
@@ -778,9 +811,6 @@ namespace {
 
       Opts.ResourceDir = resource_path.str();
     }
-
-    CI->setInvocation(Invocation);
-    CI->setDiagnostics(Diags.get());
 
     PreprocessorOptions& PPOpts = CI->getInvocation().getPreprocessorOpts();
 
@@ -806,7 +836,7 @@ namespace {
       return 0;
 
     CI->setTarget(TargetInfo::CreateTargetInfo(CI->getDiagnostics(),
-                                               Invocation->TargetOpts));
+                                               Invocation.TargetOpts));
     if (!CI->hasTarget())
       return 0;
 
@@ -821,7 +851,7 @@ namespace {
     SourceManager* SM = new SourceManager(CI->getDiagnostics(),
                                           CI->getFileManager(),
                                           /*UserFilesAreVolatile*/ true);
-    CI->setSourceManager(SM); // FIXME: SM leaks.
+    CI->setSourceManager(SM); // CI now owns SM
 
     // As main file we want
     // * a virtual file that is claiming to be huge
