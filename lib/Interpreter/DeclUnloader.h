@@ -320,6 +320,12 @@ namespace clang {
 
     template <typename T>
     bool VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC);
+    
+    ///\brief Remove the NamedDecl from it's parent scope.
+    ///\param[in] force - Don't check if the decl is anonymous.
+    ///\returns The lookup context for the decl.
+    ///
+    DeclContext* removeFromScope(NamedDecl* ND, bool force = false);
   };
 } // namespace clang
 
