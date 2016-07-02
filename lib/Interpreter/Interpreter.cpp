@@ -166,6 +166,14 @@ namespace cling {
       == clang::frontend::ParseSyntaxOnly;
   }
 
+  bool Interpreter::isValid() const {
+    // Should we also check m_IncrParser->getFirstTransaction() ?
+    // not much can be done without it (its the initializing transaction)
+    return m_IncrParser && m_IncrParser->isValid() &&
+           m_DyLibManager && m_LookupHelper &&
+           (isInSyntaxOnlyMode() || m_Executor);
+  }
+  
   Interpreter::Interpreter(int argc, const char* const *argv,
                            const char* llvmdir /*= 0*/, bool noRuntime,
                            bool isChildInterp) :
@@ -182,10 +190,14 @@ namespace cling {
     }
 
     m_DyLibManager.reset(new DynamicLibraryManager(getOptions()));
+    if (!m_DyLibManager)
+      return;
 
     m_IncrParser.reset(new IncrementalParser(this, LeftoverArgs.size(),
                                              &LeftoverArgs[0],
-                                             llvmdir, isChildInterp));
+                                             llvmdir));
+    if (!m_IncrParser || !m_IncrParser->isValid(false))
+      return;
 
     Sema& SemaRef = getSema();
     Preprocessor& PP = SemaRef.getPreprocessor();
@@ -196,10 +208,15 @@ namespace cling {
     m_LookupHelper.reset(new LookupHelper(new Parser(PP, SemaRef,
                                                      /*SkipFunctionBodies*/false,
                                                      /*isTemp*/true), this));
+    if (!m_LookupHelper)
+      return;
 
-    if (!isInSyntaxOnlyMode())
+    if (!isInSyntaxOnlyMode()) {
       m_Executor.reset(new IncrementalExecutor(SemaRef.Diags,
                                                getCI()->getCodeGenOpts()));
+      if (!m_Executor)
+        return;
+    }
 
     // Tell the diagnostic client that we are entering file parsing mode.
     DiagnosticConsumer& DClient = getCI()->getDiagnosticClient();
@@ -207,7 +224,13 @@ namespace cling {
 
     llvm::SmallVector<IncrementalParser::ParseResultTransaction, 2>
       IncrParserTransactions;
-    m_IncrParser->Initialize(IncrParserTransactions, isChildInterp);
+    if (!m_IncrParser->Initialize(IncrParserTransactions, isChildInterp)) {
+      // Initialization is not going well, but we still have to commit what
+      // weve been given
+      for (auto&& I: IncrParserTransactions)
+        m_IncrParser->commitTransaction(I);
+      return;
+    }
 
     handleFrontendOptions();
 
@@ -269,7 +292,12 @@ namespace cling {
       m_Executor->shuttingDown();
     for (size_t i = 0, e = m_StoredStates.size(); i != e; ++i)
       delete m_StoredStates[i];
-    getCI()->getDiagnostics().getClient()->EndSourceFile();
+
+    if (m_IncrParser) {
+      if (CompilerInstance* CI = m_IncrParser->getCI())
+        CI->getDiagnostics().getClient()->EndSourceFile();
+    }
+
     // LookupHelper's ~Parser needs the PP from IncrParser's CI, so do this
     // first:
     m_LookupHelper.reset();

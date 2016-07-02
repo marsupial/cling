@@ -311,6 +311,9 @@ namespace cling {
 
     virtual ~Interpreter();
 
+    ///\brief Whether the Interpreter is setup and ready to be used.
+    bool isValid() const;
+
     const InvocationOptions& getOptions() const { return m_Opts; }
     InvocationOptions& getOptions() { return m_Opts; }
 
