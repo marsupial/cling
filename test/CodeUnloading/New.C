@@ -31,6 +31,8 @@ delete t;
 // Now we are at line 13
 #include <new>
 
+
+// Make sure we can still allocate some memory
 .rawInput
 // CHECK: Using raw input
 static unsigned long allocFact(unsigned N) {
@@ -54,6 +56,40 @@ static unsigned long factorial(unsigned long n) {
 
 printf("%lu == %lu\n", allocFact(12), factorial(12));
 // CHECK: 479001600 == 479001600
+
+
+// Make sure we can still overload new
+#include "OpNew.h"
+Test *t = new Test;
+// CHECK: Test::operator new
+
+delete t;
+// CHECK: Test::operator delete
+
+
+// Make sure allocation still works back to initial state (1 transaction)
+.undo
+.undo
+.undo
+.undo
+.undo
+.undo
+.undo
+.undo
+.stats undo
+// CHECK: <cling::Transaction* 0x{{[0-9a-f]+}} isEmpty=0 isCommitted=1>
+
+unsigned *uptr = new unsigned[5];
+for (unsigned i = 0; i < 5; ++i) {
+  uptr[i] = 0xdeadbef0 + i;
+}
+
+extern "C" int printf(const char*,...);
+for (unsigned i = 0; i < 5; ++i) {
+  printf("%X", uptr[i]);
+}
+printf("\n");
+// CHECK: DEADBEF0DEADBEF1DEADBEF2DEADBEF3DEADBEF4
 
 // expected-no-diagnostics
 .q

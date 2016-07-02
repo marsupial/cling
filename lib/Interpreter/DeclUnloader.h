@@ -321,6 +321,12 @@ namespace cling {
 
     template <typename T>
     bool VisitRedeclarable(clang::Redeclarable<T>* R, clang::DeclContext* DC);
+    
+    ///\brief Remove the NamedDecl from it's parent scope.
+    ///\param[in] force - Don't check if the decl is anonymous.
+    ///\returns The lookup context for the decl.
+    ///
+    clang::DeclContext* removeFromScope(clang::NamedDecl* ND, bool force = false);
   };
 
   /// \brief Unload a Decl from the AST, but not from CodeGen or Module.
