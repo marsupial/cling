@@ -1121,6 +1121,10 @@ namespace {
     // we should switch to a different DiagEngine for parsing the flags).
     // But in general we'll happily go on.
     Diags->Reset();
+    // This used to be set to true, but what was it accomplishing?
+    // The lifetime of the invocation is tied to the Interpreter's lifetime
+    // so we want the memory freed in ~Interpreter so as not to leak it.
+    InvocationPtr->getFrontendOpts().DisableFree = false;
 
     // Create and setup a compiler instance.
     std::unique_ptr<CompilerInstance> CI(new CompilerInstance());
@@ -1227,7 +1231,6 @@ namespace {
       }
     }
 
-    CI->getInvocation().getFrontendOpts().DisableFree = true;
     // Copied from CompilerInstance::createDiagnostics:
     // Chain in -verify checker, if requested.
     if (DiagOpts.VerifyDiagnostics)
