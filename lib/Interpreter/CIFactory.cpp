@@ -22,8 +22,11 @@
 #include "clang/Driver/Driver.h"
 #include "clang/Driver/Job.h"
 #include "clang/Driver/Tool.h"
+#include "clang/Driver/DriverDiagnostic.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/Frontend/VerifyDiagnosticConsumer.h"
+#include "clang/Serialization/SerializationDiagnostic.h"
+#include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaDiagnostic.h"
@@ -1138,44 +1141,74 @@ namespace {
 
     CI->createFileManager();
     clang::CompilerInvocation& Invocation = CI->getInvocation();
-    llvm::StringRef PCHFileName
+    std::string& PCHFileName
       = Invocation.getPreprocessorOpts().ImplicitPCHInclude;
     if (!PCHFileName.empty()) {
-      // Load target options etc from PCH.
-      struct PCHListener: public ASTReaderListener {
-        CompilerInvocation& m_Invocation;
+      assert(!Diags->hasErrorOccurred() && !Diags->hasFatalErrorOccurred() &&
+             "Error has already occured");
+      if (llvm::sys::fs::is_regular_file(PCHFileName)) {
+        // Load target options etc from PCH.
+        struct PCHListener: public ASTReaderListener {
+          CompilerInvocation& m_Invocation;
+          DiagnosticsEngine& m_Diags;
 
-        PCHListener(CompilerInvocation& I): m_Invocation(I) {}
+          PCHListener(CompilerInvocation& I, DiagnosticsEngine& D)
+            : m_Invocation(I), m_Diags(D) {}
 
-        bool ReadLanguageOptions(const LangOptions &LangOpts,
+          bool ReadLanguageOptions(const LangOptions &LangOpts,
+                                   bool /*Complain*/,
+                                 bool /*AllowCompatibleDifferences*/) override {
+            *m_Invocation.getLangOpts() = LangOpts;
+            return false;
+          }
+          bool ReadTargetOptions(const TargetOptions &TargetOpts,
                                  bool /*Complain*/,
                                  bool /*AllowCompatibleDifferences*/) override {
-          *m_Invocation.getLangOpts() = LangOpts;
-          return true;
-        }
-        bool ReadTargetOptions(const TargetOptions &TargetOpts,
-                               bool /*Complain*/,
-                               bool /*AllowCompatibleDifferences*/) override {
-          m_Invocation.getTargetOpts() = TargetOpts;
-          return true;
-        }
-        bool ReadPreprocessorOptions(const PreprocessorOptions &PPOpts,
-                                     bool /*Complain*/,
+            m_Invocation.getTargetOpts() = TargetOpts;
+            return false;
+          }
+          bool ReadPreprocessorOptions(const PreprocessorOptions &PPOpts,
+                                       bool /*Complain*/,
                                 std::string &/*SuggestedPredefines*/) override {
-          // Import selected options, e.g. don't overwrite ImplicitPCHInclude.
-          PreprocessorOptions& myPP = m_Invocation.getPreprocessorOpts();
-          insertBehind(myPP.Macros, PPOpts.Macros);
-          insertBehind(myPP.Includes, PPOpts.Includes);
-          insertBehind(myPP.MacroIncludes, PPOpts.MacroIncludes);
-          return true;
+            // Import selected options, e.g. don't overwrite ImplicitPCHInclude.
+            PreprocessorOptions& myPP = m_Invocation.getPreprocessorOpts();
+            insertBehind(myPP.Macros, PPOpts.Macros);
+            insertBehind(myPP.Includes, PPOpts.Includes);
+            insertBehind(myPP.MacroIncludes, PPOpts.MacroIncludes);
+            return false;
+          }
+          bool ReadFullVersionInformation(StringRef FullVersion) override {
+            if (ASTReaderListener::ReadFullVersionInformation(FullVersion)) {
+              m_Diags.Report(diag::err_pch_different_branch)
+                << FullVersion << getClangFullRepositoryVersion();
+              return true;
+            }
+            return false;
+          }
+        };
+        PCHListener listener(Invocation, *Diags);
+        if (ASTReader::readASTFileControlBlock(PCHFileName,
+                                           CI->getFileManager(),
+                                           CI->getPCHContainerReader(),
+                                           false /*FindModuleFileExtensions*/,
+                                           listener)) {
+          // Failed!
+          // Some errors will have been already issued, others are silent
+          // PCHFileName is curently ignored with err_fe_unable_to_load_pch
+          if (!Diags->hasErrorOccurred() && !Diags->hasFatalErrorOccurred())
+            Diags->Report(diag::err_fe_unable_to_load_pch) << PCHFileName;
         }
-      };
-      PCHListener listener(Invocation);
-      ASTReader::readASTFileControlBlock(PCHFileName,
-                                         CI->getFileManager(),
-                                         CI->getPCHContainerReader(),
-                                         false /*FindModuleFileExtensions*/,
-                                         listener);
+      } else
+        Diags->Report(clang::diag::err_drv_no_such_file) << PCHFileName;
+
+      // Follow convention where missing or bad file shows an error, but
+      // execution will continue.
+      if (Diags->hasErrorOccurred() && !Diags->hasFatalErrorOccurred()) {
+        Diags->Reset(true);
+        // SetClingCustomLangOpts and SetClingTargetLangOpts must still be
+        // called below and we don't want anyone to try to load later
+        std::string().swap(PCHFileName);
+      }
     }
 
     Invocation.getFrontendOpts().DisableFree = true;
