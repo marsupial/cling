@@ -262,11 +262,17 @@ namespace cling {
         // wasn't given on command line, then #include <new> and check ABI
         if (!isChildInterpreter && m_CI->getLangOpts().CPlusPlus &&
             !m_Interpreter->getOptions().NoRuntime) {
-          // <new> is needed by the ValuePrinter so it's a good thing to include it.
-          // We need to include it to determine the version number of the standard
-          // library implementation.
-          ParseInternal("#include <new>");
+          if (ParseInternal("#include <new>") == kFailed) {
+            // This isn't good, but still not fatal. ValuePrinter only needs
+            // operator new which is a builtin, so it's still there.
+            // Demote the errors to warnings, just becuase <new> failed doesn't
+            // mean we shouldn't be able to do anything (and the errors will have
+            // been reported).
+            Sema.getDiagnostics().Reset(true);
+            CurT->setIssuedDiags(Transaction::kWarnings);
+          }
           // That's really C++ ABI compatibility. C has other problems ;-)
+          // Still check this if <new> failed as the macros can still be defined.
           CheckABICompatibility(m_CI.get());
         }
       } else {
