@@ -489,7 +489,7 @@ namespace {
         ::pclose(pf);
       }
       else
-        llvm::errs() << "popen failed for '" << CppInclQuery << "'\n";
+        ::perror("popen failure");
 
       // HostCXXI contains at least -nostdinc++, -I
       if (HostCXXI.size() < 3) {
@@ -706,7 +706,7 @@ namespace {
     IntrusiveRefCntPtr<DiagnosticsEngine> Diags = setupDiagnostics(DiagOpts);
     if (!Diags) {
       // If we can't even setup the diagnostic engine, lets not use llvm::errs
-      printf("Could not setup diagnostic engine.\n");
+      ::perror("Could not setup diagnostic engine");
       return nullptr;
     }
 
@@ -718,7 +718,7 @@ namespace {
     std::unique_ptr<clang::driver::Compilation>
       Compilation(Driver.BuildCompilation(RF));
     if (!Compilation) {
-      llvm::errs() << "Couldn't create clang::driver::Compilation.\n";
+      ::perror("Couldn't create clang::driver::Compilation");
       return nullptr;
     }
 
@@ -743,7 +743,7 @@ namespace {
       CI->setDiagnostics(Diags.get()); // Diags is ref-counted
     }
     else {
-      llvm::errs() << "Could not allocate CompilerInstance.\n";
+      ::perror("Could not allocate CompilerInstance");
       return nullptr;
     }
 

@@ -261,7 +261,7 @@ namespace cling {
         CheckABICompatibility(m_CI.get());
       }
     } else {
-      llvm::errs() << "Parser could not be created.\n";
+      ::perror("Parser could not be created");
       Success= false;
     }
 
