@@ -554,7 +554,7 @@ namespace {
     if (Verbose)
       llvm::errs() << "Looking for C++ headers with:\n  " << CppInclQuery << "\n";
 
-    if (FILE *PF = ::popen(CppInclQuery.c_str(), "r")) {
+    if (FILE* PF = ::popen(CppInclQuery.c_str(), "r")) {
       Buf.resize(Buf.capacity_in_bytes());
       while (fgets(&Buf[0], Buf.capacity_in_bytes(), PF) && Buf[0]) {
         llvm::StringRef Path(&Buf[0]);
@@ -571,7 +571,7 @@ namespace {
       }
       ::pclose(PF);
     } else {
-      llvm::errs() << "popen failed";
+      ::perror("popen failure");
       // Don't be overly verbose, we already printed the command
       if (!Verbose)
         llvm::errs() << " for '" << CppInclQuery << "'\n";
@@ -1095,7 +1095,7 @@ namespace {
         SetupDiagnostics(DiagOpts);
     if (!Diags) {
       // If we can't even setup the diagnostic engine, lets not use llvm::errs
-      printf("Could not setup diagnostic engine.\n");
+      ::perror("Could not setup diagnostic engine");
       return nullptr;
     }
 
@@ -1107,7 +1107,7 @@ namespace {
     std::unique_ptr<clang::driver::Compilation>
       Compilation(Drvr.BuildCompilation(RF));
     if (!Compilation) {
-      llvm::errs() << "Couldn't create clang::driver::Compilation.\n";
+      ::perror("Couldn't create clang::driver::Compilation");
       return nullptr;
     }
 
@@ -1132,7 +1132,7 @@ namespace {
       CI->setDiagnostics(Diags.get()); // Diags is ref-counted
     }
     else {
-      llvm::errs() << "Could not allocate CompilerInstance.\n";
+      ::perror("Could not allocate CompilerInstance");
       return nullptr;
     }
 
