@@ -619,6 +619,7 @@ namespace cling {
 
     clang::CompilerInstance* getCI() const;
     clang::Sema& getSema() const;
+    IncrementalParser& getIncrParser() const { return *m_IncrParser; }
 
     //FIXME: This must be in InterpreterCallbacks.
     void installLazyFunctionCreator(void* (*fp)(const std::string&));
