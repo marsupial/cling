@@ -227,43 +227,49 @@ namespace cling {
       = m_CI->getInvocation().getPreprocessorOpts().ImplicitPCHInclude;
     if (!PCHFileName.empty()) {
       Transaction* CurT = beginTransaction(CO);
+      DiagnosticErrorTrap Trap(m_CI->getSema().getDiagnostics());
       m_CI->createPCHExternalASTSource(PCHFileName,
                                        true /*DisablePCHValidation*/,
                                        true /*AllowPCHWithCompilerErrors*/,
                                        0 /*DeserializationListener*/,
                                        true /*OwnsDeserializationListener*/);
+
+      // FIXME: Better diagnosis of whether the error is safe to ignore.
+      Success = !Trap.hasUnrecoverableErrorOccurred();
       result.push_back(endTransaction(CurT));
     }
 
-    addClingPragmas(*m_Interpreter);
+    if (Success) {
+      addClingPragmas(*m_Interpreter);
 
-    // Must happen after attaching the PCH, else PCH elements will end up
-    // being lexed.
-    PP.EnterMainSourceFile();
+      // Must happen after attaching the PCH, else PCH elements will end up
+      // being lexed.
+      PP.EnterMainSourceFile();
 
-    Sema* TheSema = &m_CI->getSema();
-    m_Parser.reset(new Parser(PP, *TheSema, false /*skipFuncBodies*/));
-    if (m_Parser) {
-      // Initialize the parser after PP has entered the main source file.
-      m_Parser->Initialize();
+      Sema& Sema = m_CI->getSema();
+      m_Parser.reset(new Parser(PP, Sema, false /*skipFuncBodies*/));
+      if (m_Parser) {
+        // Initialize the parser after PP has entered the main source file.
+        m_Parser->Initialize();
 
-      ExternalASTSource *External = TheSema->getASTContext().getExternalSource();
-      if (External)
-        External->StartTranslationUnit(m_Consumer);
+        ExternalASTSource *External = Sema.getASTContext().getExternalSource();
+        if (External)
+          External->StartTranslationUnit(m_Consumer);
 
-      // If I belong to the parent Interpreter, only then do
-      // the #include <new>
-      if (!isChildInterpreter && m_CI->getLangOpts().CPlusPlus) {
-        // <new> is needed by the ValuePrinter so it's a good thing to include it.
-        // We need to include it to determine the version number of the standard
-        // library implementation.
-        ParseInternal("#include <new>");
-        // That's really C++ ABI compatibility. C has other problems ;-)
-        CheckABICompatibility(m_CI.get());
+        // If I belong to the parent Interpreter, only then do
+        // the #include <new>
+        if (!isChildInterpreter && m_CI->getLangOpts().CPlusPlus) {
+          // <new> is needed by the ValuePrinter so it's a good thing to include it.
+          // We need to include it to determine the version number of the standard
+          // library implementation.
+          ParseInternal("#include <new>");
+          // That's really C++ ABI compatibility. C has other problems ;-)
+          CheckABICompatibility(m_CI.get());
+        }
+      } else {
+        ::perror("Parser could not be created");
+        Success= false;
       }
-    } else {
-      ::perror("Parser could not be created");
-      Success= false;
     }
 
     // DO NOT commit the transactions here: static initialization in these
