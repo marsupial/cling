@@ -804,6 +804,7 @@ namespace cling {
     };
     setError(clang::diag::warn_falloff_nonvoid_function);
 
+    DiagnosticErrorTrap Trap(Diags);
     Sema::SavePendingInstantiationsRAII SavedPendingInstantiations(S);
 
     Parser::DeclGroupPtrTy ADecl;
@@ -811,11 +812,15 @@ namespace cling {
       // If we got a null return and something *was* parsed, ignore it.  This
       // is due to a top-level semicolon, an action override, or a parse error
       // skipping something.
-      if (Diags.hasErrorOccurred() || Diags.hasFatalErrorOccurred())
+      if (Trap.hasErrorOccurred())
         m_Consumer->getTransaction()->setIssuedDiags(Transaction::kErrors);
       if (ADecl)
         m_Consumer->HandleTopLevelDecl(ADecl.get());
     };
+    // We could have never entered the while block, in which case there's a
+    // good chance an error occured.
+    if (Trap.hasErrorOccurred())
+      m_Consumer->getTransaction()->setIssuedDiags(Transaction::kErrors);
 
     if (CO.CodeCompletionOffset != -1) {
       assert((int)SM.getFileOffset(PP.getCodeCompletionLoc())
