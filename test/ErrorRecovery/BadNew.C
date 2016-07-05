@@ -15,6 +15,6 @@
 
 struct a {} TEST
 // CHECKA: RuntimePrintValue.h could not be loaded.
-// CHECKB: ValueExtractionSynthesizer error: cling namespace not defined.
+// CHECKB: {{.*}} 'string' file not found
 
 .q

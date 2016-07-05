@@ -23,8 +23,6 @@
 
 #ifdef __cplusplus
 
-#include <new>
-
 namespace cling {
 
   class Interpreter;
