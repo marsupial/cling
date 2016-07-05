@@ -409,13 +409,25 @@ namespace {
     return;
   }
 
+  class AdditionalArguments {
+    typedef std::vector< std::pair<const char*,std::string> > container_t;
+    container_t m_Saved;
+
+  public:
+    
+    void addArgument(const char* arg, std::string value) {
+      m_Saved.push_back(std::make_pair(arg,std::move(value)));
+    }
+    container_t::const_iterator begin() const { return m_Saved.begin(); }
+    container_t::const_iterator end() const { return m_Saved.end(); }
+    bool empty() const { return m_Saved.empty(); }
+  };
+  
   ///\brief Adds standard library -I used by whatever compiler is found in PATH.
   static void AddHostIncludes(std::vector<const char*>& args,
                               bool noBuiltinInc, bool noCXXIncludes) {
-    static bool IncludesSet = false;
-    static std::vector<std::string> HostCXXI;
-    if (!IncludesSet) {
-      IncludesSet = true;
+    static AdditionalArguments sArguments;
+    if (sArguments.empty()) {
 #ifdef _MSC_VER
       // Honor %INCLUDE%. It should know essential search paths with vcvarsall.bat.
       if (const char *cl_include_dir = getenv("INCLUDE")) {
@@ -426,8 +438,7 @@ namespace {
           StringRef d = *I;
           if (d.size() == 0)
             continue;
-          HostCXXI.push_back("-I");
-          HostCXXI.push_back(d);
+          sArguments.addArgument("-I", d);
         }
       }
       std::string VSDir;
@@ -437,17 +448,14 @@ namespace {
       // the correct include paths first.
       if (getVisualStudioDir(VSDir)) {
         if (!noCXXIncludes) {
-          HostCXXI.push_back("-I");
-          HostCXXI.push_back(VSDir + "\\VC\\include");
+          sArguments.addArgument("-I", VSDir + "\\VC\\include");
         }
         if (!noBuiltinInc) {
           if (getWindowsSDKDir(WindowsSDKDir)) {
-            HostCXXI.push_back("-I");
-            HostCXXI.push_back(WindowsSDKDir + "\\include");
+            sArguments.addArgument("-I", WindowsSDKDir + "\\include");
           }
           else {
-            HostCXXI.push_back("-I");
-            HostCXXI.push_back(VSDir + "\\VC\\PlatformSDK\\Include");
+            sArguments.addArgument("-I", VSDir + "\\VC\\PlatformSDK\\Include");
           }
         }
       }
@@ -476,7 +484,6 @@ namespace {
 
         if (FILE *pf = ::popen(CppInclQuery.c_str(), "r")) {
 
-          HostCXXI.push_back("-nostdinc++");
           while (fgets(&buffer[0], buffer.capacity_in_bytes(), pf) && buffer[0]) {
             size_t lenbuf = strlen(&buffer[0]);
             buffer.data()[lenbuf - 1] = 0;   // remove trailing \n
@@ -485,8 +492,7 @@ namespace {
             while (start < (&buffer[0] + lenbuf) && *start == ' ')
               ++start;
             if (*start) {
-              HostCXXI.push_back("-I");
-              HostCXXI.push_back(start);
+              sArguments.addArgument("-I", start);
             }
           }
           ::pclose(pf);
@@ -494,23 +500,24 @@ namespace {
         else
           ::perror("popen failure");
 
-        // HostCXXI contains at least -nostdinc++, -I
-        if (HostCXXI.size() < 3) {
-          llvm::errs() << "ERROR in cling::CIFactory::createCI(): cannot extract "
-            "standard library include paths!\n"
-            "Invoking:\n"
-            "    " << CppInclQuery << "\n"
-            "results in\n";
+        if (sArguments.empty()) {
+          llvm::errs() <<
+            "ERROR in cling::CIFactory::createCI(): cannot extract"
+            "  standard library include paths!\nInvoking:\n"
+            "    " << CppInclQuery << "\nresults in\n";
           int ExitCode = system(CppInclQuery.c_str());
           llvm::errs() << "with exit code " << ExitCode << "\n";
         }
+
+        args.push_back("-nostdinc++");
       }
 #endif // _MSC_VER
     }
 
-    for (std::vector<std::string>::const_iterator
-           I = HostCXXI.begin(), E = HostCXXI.end(); I != E; ++I)
-      args.push_back(I->c_str());
+    for (auto& arg : sArguments) {
+      args.push_back(arg.first);
+      args.push_back(arg.second.c_str());
+    }
   }
 
   /// \brief Retrieves the clang CC1 specific flags out of the compilation's
