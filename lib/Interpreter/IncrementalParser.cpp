@@ -73,93 +73,78 @@ using namespace clang;
 namespace {
   ///\brief Check the compile-time C++ ABI version vs the run-time ABI version,
   /// a mismatch could cause havoc. Reports if ABI versions differ.
-  static void CheckABICompatibility(clang::CompilerInstance* CI) {
-#ifdef __GLIBCXX__
-# define CLING_CXXABIV __GLIBCXX__
-# define CLING_CXXABIS "__GLIBCXX__"
-#elif _LIBCPP_VERSION
-# define CLING_CXXABIV _LIBCPP_VERSION
-# define CLING_CXXABIS "_LIBCPP_VERSION"
-#elif defined (_MSC_VER)
-    // For MSVC we do not use CLING_CXXABI*
-#else
-# define CLING_CXXABIV -1 // intentionally invalid macro name
-# define CLING_CXXABIS "-1" // intentionally invalid macro name
-    llvm::errs()
-      << "Warning in cling::IncrementalParser::CheckABICompatibility():\n  "
-      "C++ ABI check not implemented for this standard library\n";
-    return;
-#endif
+  static bool CheckABICompatibility(clang::CompilerInstance* CI) {
 #ifdef _MSC_VER
+    // For MSVC we do not use CLING_CXXABI*
     HKEY regVS;
-#if (_MSC_VER >= 1900)
+  #if (_MSC_VER >= 1900)
     int VSVersion = (_MSC_VER / 100) - 5;
-#else
+  #else
     int VSVersion = (_MSC_VER / 100) - 6;
-#endif
+  #endif
     std::stringstream subKey;
     subKey << "VisualStudio.DTE." << VSVersion << ".0";
-    if (RegOpenKeyEx(HKEY_CLASSES_ROOT, subKey.str().c_str(), 0, KEY_READ, &regVS) == ERROR_SUCCESS) {
+    if (RegOpenKeyEx(HKEY_CLASSES_ROOT, subKey.str().c_str(), 0, KEY_READ,
+                     &regVS) == ERROR_SUCCESS) {
       RegCloseKey(regVS);
+      return true;
     }
-    else {
-      llvm::errs()
-        << "Warning in cling::IncrementalParser::CheckABICompatibility():\n  "
-        "Possible C++ standard library mismatch, compiled with Visual Studio v"
-        << VSVersion << ".0,\n"
-        "but this version of Visual Studio was not found in your system's registry.\n";
-    }
-#else
 
-  struct EarlyReturnWarn {
-    bool shouldWarn = true;
-    ~EarlyReturnWarn() {
-      if (shouldWarn) {
-        llvm::errs()
-          << "Warning in cling::IncrementalParser::CheckABICompatibility():\n  "
-             "Possible C++ standard library mismatch, compiled with "
-             CLING_CXXABIS " v" << CLING_CXXABIV
-          << " but extraction of runtime standard library version failed.\n";
+#endif // !_MSC_VER
+
+#if defined(__GLIBCXX__) || defined(_LIBCPP_VERSION)
+  #ifdef __GLIBCXX__
+    auto CLING_CXXABIV = __GLIBCXX__;
+    const char* CLING_CXXABIS = "__GLIBCXX__";
+  #elif _LIBCPP_VERSION
+    auto CLING_CXXABIV = _LIBCPP_VERSION;
+    const char* CLING_CXXABIS = "_LIBCPP_VERSION";
+  #endif
+
+    clang::Preprocessor& PP = CI->getPreprocessor();
+    if (clang::IdentifierInfo* II = PP.getIdentifierInfo(CLING_CXXABIS)) {
+      if (const clang::DefMacroDirective* MD = llvm::dyn_cast_or_null
+               <clang::DefMacroDirective>(PP.getLocalMacroDirective(II))) {
+        if (const clang::MacroInfo* MI = MD->getMacroInfo()) {
+          if (MI->getNumTokens() == 1) {
+            const clang::Token& Tok = *MI->tokens_begin();
+            if (Tok.isLiteral() && Tok.getLength() && Tok.getLiteralData()) {
+              std::string cxxabivStr;
+              llvm::raw_string_ostream cxxabivStrStrm(cxxabivStr);
+              cxxabivStrStrm << CLING_CXXABIV;
+
+              llvm::StringRef tokStr(Tok.getLiteralData(), Tok.getLength());
+              if (tokStr.equals(cxxabivStr))
+                return true;
+            }
+          }
+        }
       }
     }
-  } warnAtReturn;
-  clang::Preprocessor& PP = CI->getPreprocessor();
-  clang::IdentifierInfo* II = PP.getIdentifierInfo(CLING_CXXABIS);
-  if (!II)
-    return;
-  const clang::DefMacroDirective* MD
-    = llvm::dyn_cast_or_null<clang::DefMacroDirective>(
-                                                   PP.getLocalMacroDirective(II)
-                                                      );
-  if (!MD)
-    return;
-  const clang::MacroInfo* MI = MD->getMacroInfo();
-  if (!MI || MI->getNumTokens() != 1)
-    return;
-  const clang::Token& Tok = *MI->tokens_begin();
-  if (!Tok.isLiteral())
-    return;
-  if (!Tok.getLength() || !Tok.getLiteralData())
-    return;
 
-  std::string cxxabivStr;
-  {
-     llvm::raw_string_ostream cxxabivStrStrm(cxxabivStr);
-     cxxabivStrStrm << CLING_CXXABIV;
-  }
-  llvm::StringRef tokStr(Tok.getLiteralData(), Tok.getLength());
+    llvm::errs() <<
+      "Warning in cling::IncrementalParser::CheckABICompatibility():\n"
+      "  Possible C++ standard library mismatch, compiled with "
+      << CLING_CXXABIS << " v" << CLING_CXXABIV
+      << " but extraction of runtime standard library version failed.\n";
 
-  warnAtReturn.shouldWarn = false;
-  if (!tokStr.equals(cxxabivStr)) {
-    llvm::errs()
-      << "Warning in cling::IncrementalParser::CheckABICompatibility():\n  "
-        "C++ ABI mismatch, compiled with "
-        CLING_CXXABIS " v" << CLING_CXXABIV
-      << " running with v" << tokStr << "\n";
-  }
+#elif defined(_MSC_VER)
+
+    llvm::errs() <<
+      "Warning in cling::IncrementalParser::CheckABICompatibility():\n"
+      "  Possible C++ standard library mismatch, compiled with Visual "
+      "Studio v" << VSVersion << ".0,\nbut this version of Visual Studio "
+      "was not found in your system's registry.\n";
+
+#else // Unknown platform
+
+    llvm::errs() <<
+      "Warning in cling::IncrementalParser::CheckABICompatibility():\n"
+      "  C++ ABI check not implemented for this standard library\n";
+
 #endif
-#undef CLING_CXXABIV
-#undef CLING_CXXABIS
+
+    return false;
   }
 } // unnamed namespace
 
