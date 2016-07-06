@@ -32,11 +32,10 @@ int main( int argc, char **argv ) {
 
   // Set up the interpreter
   cling::Interpreter interp(argc, argv);
+  const cling::InvocationOptions& opts = interp.getOptions();
 
   if (!interp.isValid()) {
-    if (interp.getOptions().Help || interp.getOptions().HadOutput)
-      return EXIT_SUCCESS;
-    if (interp.getOptions().HadOutput)
+    if (opts.Help || opts.ShowVersion || opts.HadOutput)
       return EXIT_SUCCESS;
 
     // FIXME: Diagnose what went wrong, until then we can't even be sure
@@ -45,29 +44,22 @@ int main( int argc, char **argv ) {
     return EXIT_FAILURE;
   }
 
-
-
   clang::CompilerInstance* CI = interp.getCI();
   interp.AddIncludePath(".");
 
-  for (size_t I = 0, N = interp.getOptions().LibsToLoad.size(); I < N; ++I) {
-    interp.loadFile(interp.getOptions().LibsToLoad[I]);
+  for (size_t I = 0, N = opts.LibsToLoad.size(); I < N; ++I) {
+    interp.loadFile(opts.LibsToLoad[I]);
   }
-
-
-  // Interactive means no input (or one input that's "-")
-  std::vector<std::string>& Inputs = interp.getOptions().Inputs;
-  bool Interactive = Inputs.empty() || (Inputs.size() == 1
-                                        && Inputs[0] == "-");
 
   cling::UserInterface ui(interp);
   // If we are not interactive we're supposed to parse files
-  if (!Interactive) {
-    for (size_t I = 0, N = Inputs.size(); I < N; ++I) {
+  if (!opts.IsInteractive()) {
+    for (const std::string &input : opts.Inputs) {
       std::string cmd;
       cling::Interpreter::CompilationResult compRes;
-      if (!interp.lookupFileOrLibrary(Inputs[I]).empty()) {
-        std::ifstream infile(interp.lookupFileOrLibrary(Inputs[I]));
+      const std::string file = interp.lookupFileOrLibrary(input);
+      if (!file.empty()) {
+        std::ifstream infile(file);
         std::string line;
         std::getline(infile, line);
         if (line[0] == '#' && line[1] == '!') {
@@ -81,12 +73,12 @@ int main( int argc, char **argv ) {
         else
           cmd += ".x ";
       }
-      cmd += Inputs[I];
+      cmd += input;
       ui.getMetaProcessor()->process(cmd.c_str(), compRes, 0);
     }
   }
   else {
-    ui.runInteractively(interp.getOptions().NoLogo);
+    ui.runInteractively(opts.NoLogo);
   }
 
   bool ret = CI->getDiagnostics().getClient()->getNumErrors();
