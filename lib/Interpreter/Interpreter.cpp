@@ -162,7 +162,21 @@ namespace cling {
            m_DyLibManager && m_LookupHelper &&
            (isInSyntaxOnlyMode() || m_Executor);
   }
-  
+
+  const char* Interpreter::getVersion() {
+    return ClingStringify(CLING_VERSION);
+  }
+
+  static bool handleSimpleOptions(const InvocationOptions& Opts) {
+    if (Opts.ShowVersion) {
+      llvm::errs() << Interpreter::getVersion() << '\n';
+    }
+    if (Opts.Help) {
+      Opts.PrintHelp();
+    }
+    return Opts.ShowVersion || Opts.Help;
+  }
+
   Interpreter::Interpreter(int argc, const char* const *argv,
                            const char* llvmdir /*= 0*/, bool noRuntime,
                            const Interpreter* parentInterp) :
@@ -170,6 +184,9 @@ namespace cling {
     m_UniqueCounter(parentInterp ? parentInterp->m_UniqueCounter + 1 : 0),
     m_PrintDebug(false), m_DynamicLookupDeclared(false),
     m_DynamicLookupEnabled(false), m_RawInputEnabled(false) {
+
+    if (handleSimpleOptions(m_Opts))
+      return;
 
     m_LLVMContext.reset(new llvm::LLVMContext);
     if (!m_LLVMContext)
@@ -214,8 +231,6 @@ namespace cling {
         m_IncrParser->commitTransaction(I);
       return;
     }
-
-    handleFrontendOptions();
 
     if (!noRuntime) {
       if (getCI()->getLangOpts().CPlusPlus)
@@ -287,19 +302,6 @@ namespace cling {
     // explicitly, before the implicit destruction (through the unique_ptr) of
     // the callbacks.
     m_IncrParser.reset(0);
-  }
-
-  const char* Interpreter::getVersion() const {
-    return ClingStringify(CLING_VERSION);
-  }
-
-  void Interpreter::handleFrontendOptions() {
-    if (m_Opts.ShowVersion) {
-      llvm::errs() << getVersion() << '\n';
-    }
-    if (m_Opts.Help) {
-      m_Opts.PrintHelp();
-    }
   }
 
   void Interpreter::IncludeCXXRuntime() {
