@@ -35,6 +35,7 @@
 #include "clang/AST/GlobalDecl.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/Basic/Version.h"
 #include "clang/CodeGen/ModuleBuilder.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/Utils.h"
@@ -183,8 +184,7 @@ namespace cling {
     std::vector<unsigned> LeftoverArgsIdx;
     m_Opts = InvocationOptions::CreateFromArgs(argc, argv, LeftoverArgsIdx);
 
-    handleFrontendOptions();
-    if (m_Opts.Help || m_Opts.ShowVersion)
+    if (handleSimpleOptions())
       return;
 
     std::vector<const char*> LeftoverArgs;
@@ -315,13 +315,15 @@ namespace cling {
     return ClingStringify(CLING_VERSION);
   }
 
-  void Interpreter::handleFrontendOptions() {
+  bool Interpreter::handleSimpleOptions() {
     if (m_Opts.ShowVersion) {
-      llvm::errs() << getVersion() << '\n';
+      llvm::outs() << getVersion()
+        << " " << clang::getClangFullCPPVersion() << "\n";
     }
     if (m_Opts.Help) {
       m_Opts.PrintHelp();
     }
+    return m_Opts.Help || m_Opts.ShowVersion;
   }
 
   void Interpreter::AddRuntimeIncludePaths(const char* argv0) {

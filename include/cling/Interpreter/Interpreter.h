@@ -187,9 +187,11 @@ namespace cling {
     ///
     mutable std::vector<ClangInternalState*> m_StoredStates;
 
-    ///\brief Processes the invocation options.
+    ///\brief Handle any arguments whose behavior is to print to stdout and exit
     ///
-    void handleFrontendOptions();
+    ///\returns Whether any arguemnts were handled.
+    ///
+    bool handleSimpleOptions();
 
     ///\brief Worker function, building block for interpreter's public
     /// interfaces.
