@@ -34,13 +34,15 @@ int main( int argc, char **argv ) {
   cling::Interpreter interp(argc, argv);
 
   if (!interp.isValid()) {
+    if (interp.getOptions().Help || interp.getOptions().ShowVersion)
+      return EXIT_SUCCESS;
+
     // FIXME: Diagnose what went wrong, until then we can't even be sure
     // llvm::errs is valid...
     ::perror("Could not create Interpreter instance");
     return EXIT_FAILURE;
   }
-  if (interp.getOptions().Help)
-    return EXIT_SUCCESS;
+
 
 
   clang::CompilerInstance* CI = interp.getCI();

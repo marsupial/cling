@@ -180,15 +180,19 @@ namespace cling {
     m_UniqueCounter(0), m_PrintDebug(false), m_DynamicLookupDeclared(false),
     m_DynamicLookupEnabled(false), m_RawInputEnabled(false) {
 
-    m_LLVMContext.reset(new llvm::LLVMContext);
     std::vector<unsigned> LeftoverArgsIdx;
     m_Opts = InvocationOptions::CreateFromArgs(argc, argv, LeftoverArgsIdx);
-    std::vector<const char*> LeftoverArgs;
 
+    handleFrontendOptions();
+    if (m_Opts.Help || m_Opts.ShowVersion)
+      return;
+
+    std::vector<const char*> LeftoverArgs;
     for (size_t I = 0, N = LeftoverArgsIdx.size(); I < N; ++I) {
       LeftoverArgs.push_back(argv[LeftoverArgsIdx[I]]);
     }
 
+    m_LLVMContext.reset(new llvm::LLVMContext);
     m_DyLibManager.reset(new DynamicLibraryManager(getOptions()));
     if (!m_DyLibManager)
       return;
@@ -231,8 +235,6 @@ namespace cling {
         m_IncrParser->commitTransaction(I);
       return;
     }
-
-    handleFrontendOptions();
 
     AddRuntimeIncludePaths(argv[0]);
 
