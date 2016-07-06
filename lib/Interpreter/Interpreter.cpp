@@ -40,6 +40,7 @@
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/Utils.h"
 #include "clang/Lex/Preprocessor.h"
+#include "clang/Lex/LexDiagnostic.h"
 #include "clang/Parse/Parser.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaDiagnostic.h"
@@ -1259,7 +1260,16 @@ namespace cling {
   Interpreter::loadHeader( FileEntry fileObj, Transaction** T /*= 0*/) {
     FileEntry file = lookupFileOrLibrary(std::move(fileObj));
     if (!file.exists()) {
-      llvm::errs() << "Cannot load file: '" << file.name() << "'\n";
+      // If not running interactively or warnings are error, use clang to report
+      // the missing file (which is marked fatal) and should stop further exec
+      if (!getOptions().IsInteractive() ||
+          getCI()->getDiagnostics().getWarningsAsErrors()) {
+        getSema().Diag(SourceLocation(), clang::diag::err_pp_file_not_found)
+          << file.name();
+      }
+      else // Otherwise a lite version
+        llvm::errs() << "error: '" << file.name() << "' file not found\n";
+
       return kFailure;
     }
 

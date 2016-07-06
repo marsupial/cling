@@ -6,13 +6,19 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: clang -shared %S/call_lib.c -o%T/libcall_lib%shlibext
-// RUN: cat %s | %cling -L %T -Xclang -verify 2>&1 | FileCheck %s
+// When run in interactive mode (stdin), failure to load should not be ok
 
-#pragma cling load("DoesNotExistPleaseRecover") // expected-error@1{{'DoesNotExistPleaseRecover' file not found}}
+// RUN: clang -shared %S/call_lib.c -o%T/libcall_lib%shlibext
+// RUN: cat %s | %cling -L %T 2>&1 | FileCheck %s
+
+#pragma cling load("DoesNotExistPleaseRecover")
+// CHECK: error: 'DoesNotExistPleaseRecover' file not found
 
 #pragma cling load("libcall_lib")
 extern "C" int cling_testlibrary_function();
 
 cling_testlibrary_function()
 // CHECK: (int) 66
+
+//expected-no-diagnostics
+.q
