@@ -42,6 +42,10 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Process.h"
 
+#ifdef CLING_CLANG_RUNTIME_PATCH
+  #include "clang/Basic/cling.h"
+#endif
+
 #include <ctime>
 #include <cstdio>
 
@@ -828,6 +832,12 @@ namespace {
   ///\brief Check the compile-time clang version vs the run-time clang version,
   /// a mismatch could cause havoc. Reports if clang versions differ.
   static void CheckClangCompatibility() {
+
+    #ifdef CLING_CLANG_RUNTIME_PATCH
+      // Setup the clang libraries to use changes neccessary for clang
+      cling::setClientFlags(cling::kClingIsHost);
+    #endif
+
     if (clang::getClangToolFullVersion("cling")
         != CopyOfClanggetClangToolFullVersion("cling"))
       llvm::errs()
