@@ -811,7 +811,8 @@ namespace {
     }
   }
 
-  static void SetClingCustomLangOpts(LangOptions& Opts) {
+  static void SetClingCustomLangOpts(LangOptions& Opts,
+                                     const CompilerOptions* UserOpts) {
     Opts.EmitAllDecls = 0; // Otherwise if PCH attached will codegen all decls.
 #ifdef _MSC_VER
     Opts.Exceptions = 0;
@@ -852,8 +853,9 @@ namespace {
     // the test for C++14 or more (201402L) as previously specified.
     // I would claim that the check should be relaxed to:
 
-    // Only set this if C++ is the language
-    if (Opts.CPlusPlus) {
+    // Only set this if C++ is the language.
+    // User can override, but there will be an ABI warning waiting for them.
+    if (Opts.CPlusPlus && (!UserOpts || !UserOpts->StdVersion)) {
 #if __cplusplus > 201103L
       if (Opts.CPlusPlus) Opts.CPlusPlus14 = 1;
 #endif
@@ -1126,11 +1128,12 @@ namespace {
     return Diags;
   }
 
-  static bool SetupCompiler(CompilerInstance* CI, bool full) {
+  static bool SetupCompiler(CompilerInstance* CI,
+                            const CompilerOptions* UserOpts) {
     // Set the language options, which cling needs.
     // This may have already been done via a precompiled header
-    if (full)
-      SetClingCustomLangOpts(CI->getLangOpts());
+    if (UserOpts)
+      SetClingCustomLangOpts(CI->getLangOpts(), UserOpts);
 
     PreprocessorOptions& PPOpts = CI->getInvocation().getPreprocessorOpts();
     SetPreprocessorFromBinary(PPOpts);
@@ -1156,7 +1159,7 @@ namespace {
     CI->getTarget().adjust(CI->getLangOpts());
 
     // This may have already been done via a precompiled header
-    if (full)
+    if (UserOpts)
       SetClingTargetLangOpts(CI->getLangOpts(), CI->getTarget());
 
     SetPreprocessorFromTarget(PPOpts, CI->getTarget().getTriple());
@@ -1310,7 +1313,7 @@ namespace {
                         "output is supported.\n";
         return nullptr;
       }
-      if (!SetupCompiler(CI.get(), true))
+      if (!SetupCompiler(CI.get(), &COpts))
         return nullptr;
 
       ProcessWarningOptions(*Diags, DiagOpts);
@@ -1401,7 +1404,7 @@ namespace {
     ProcessWarningOptions(*Diags, DiagOpts);
 
     // Set up compiler language and target
-    if (!SetupCompiler(CI.get(), PCHFileName.empty()))
+    if (!SetupCompiler(CI.get(), PCHFileName.empty() ? &COpts : nullptr))
       return nullptr;
 
     // Set up source managers
