@@ -672,12 +672,15 @@ namespace {
     // the test for C++14 or more (201402L) as previously specified.
     // I would claim that the check should be relaxed to:
 
+    // Only set this if C++ is the language
+    if (Opts.CPlusPlus) {
 #if __cplusplus > 201103L
-    if (Opts.CPlusPlus) Opts.CPlusPlus14 = 1;
+      if (Opts.CPlusPlus) Opts.CPlusPlus14 = 1;
 #endif
 #if __cplusplus >= 201103L
-    if (Opts.CPlusPlus) Opts.CPlusPlus11 = 1;
+      if (Opts.CPlusPlus) Opts.CPlusPlus11 = 1;
 #endif
+    }
 
 #ifdef _REENTRANT
     Opts.POSIXThreads = 1;
