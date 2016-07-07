@@ -433,36 +433,52 @@ namespace {
   }
 
   struct CompilerOpts {
-    bool hasMinusX, noBuiltinInc, noCXXIncludes,
-         haveRsrcPath, haveSysRoot, haveOutput;
+    enum {
+      kHasMinusX      = 1,
+      kHasNoBultinInc = 2,
+      kHasNoCXXInc    = 4,
+      kHasResourceDir = 8,
+      kHasSysRoot     = 16,
+      kHasOuptut      = 32,
+      
+      kAllFlags = kHasMinusX|kHasNoBultinInc|kHasNoCXXInc|
+                  kHasResourceDir|kHasSysRoot|kHasOuptut,
+    };
+    unsigned m_Flags;
 
     static bool strEqual(const char* a, const char* b, size_t n) {
       return !strncmp(a, b, n) && !a[n];
     }
 
     void parse(const char* arg) {
-      if (!hasMinusX && !strncmp(arg, "-x", 2))
-        hasMinusX = true;
-      else if (!noBuiltinInc && strEqual(arg, "-nobuiltininc", 13))
-        noBuiltinInc = true;
-      else if (!noCXXIncludes && strEqual(arg, "-nostdinc++", 11))
-        noCXXIncludes = true;
-      else if (!haveRsrcPath && strEqual(arg, "-resource-dir", 13))
-        haveRsrcPath = true;
-      else if (!haveOutput && strEqual(arg, "-o", 2))
-        haveOutput = true;
+      if (!hasMinusX() && !strncmp(arg, "-x", 2))
+        m_Flags |= kHasMinusX;
+      else if (!noBuiltinInc() && strEqual(arg, "-nobuiltininc", 13))
+        m_Flags |= kHasNoBultinInc;
+      else if (!noCXXIncludes() && strEqual(arg, "-nostdinc++", 11))
+        m_Flags |= kHasNoCXXInc;
+      else if (!hasRsrcPath() && strEqual(arg, "-resource-dir", 13))
+        m_Flags |= kHasResourceDir;
+      else if (!hasOutput() && strEqual(arg, "-o", 2))
+        m_Flags |= kHasOuptut;
 #ifdef __APPLE__
-      else if (!haveSysRoot && strEqual(arg, "-isysroot", 9))
-        haveSysRoot = true;
+      else if (!hasSysRoot() && strEqual(arg, "-isysroot", 9))
+        m_Flags |= kHasSysRoot;
 #endif
     }
 
-    CompilerOpts(const char* const* iarg, const char* const* earg) :
-      hasMinusX(false), noBuiltinInc(false), noCXXIncludes(false),
-      haveRsrcPath(false), haveSysRoot(false), haveOutput(false) {
+  public:
+    bool hasMinusX() const { return m_Flags & kHasMinusX; }
+    bool hasRsrcPath() const { return m_Flags & kHasResourceDir; }
+    bool hasSysRoot() const { return m_Flags & kHasSysRoot; }
+    bool hasOutput() const { return m_Flags & kHasOuptut; }
+    bool noBuiltinInc() const { return m_Flags & kHasNoBultinInc; }
+    bool noCXXIncludes() const { return m_Flags & kHasNoCXXInc; }
 
-      while (iarg < earg && (!hasMinusX || !noBuiltinInc || !noCXXIncludes ||
-                            !haveRsrcPath || !haveSysRoot || !haveOutput)) {
+    CompilerOpts(const char* const* iarg, const char* const* earg)
+      : m_Flags(0) {
+
+      while (iarg < earg && (m_Flags != kAllFlags)) {
         if (strEqual(*iarg, "-Xclang", 7)) {
           // goto next arg if there is one
           if (++iarg < earg)
@@ -514,10 +530,10 @@ namespace {
       // When built with access to the proper Windows APIs, try to actually find
       // the correct include paths first.
       if (getVisualStudioDir(VSDir)) {
-        if (!opts.noCXXIncludes) {
+        if (!opts.noCXXIncludes()) {
           sArguments.addArgument("-I", VSDir + "\\VC\\include");
         }
-        if (!opts.noBuiltinInc) {
+        if (!opts.noBuiltinInc()) {
           if (getWindowsSDKDir(WindowsSDKDir)) {
             sArguments.addArgument("-I", WindowsSDKDir + "\\include");
           }
@@ -528,7 +544,7 @@ namespace {
       }
 #else // _MSC_VER
       // Skip LLVM_CXX execution if -nostdinc++ was provided.
-      if (!opts.noCXXIncludes) {
+      if (!opts.noCXXIncludes()) {
         // Try to use a version of clang that is located next to cling
         SmallString<2048> buffer;
         std::string clang = llvm::sys::fs::getMainExecutable("cling",
@@ -580,7 +596,7 @@ namespace {
       }
 
 #ifdef __APPLE__
-      if (!opts.noBuiltinInc && !opts.haveSysRoot) {
+      if (!opts.noBuiltinInc() && !opts.hasSysRoot()) {
         std::string sysRoot;
         if (getISysRoot(sysRoot))
           sArguments.addArgument("-isysroot", std::move(sysRoot));
@@ -589,7 +605,7 @@ namespace {
 
 #endif // _MSC_VER
 
-      if (!opts.haveRsrcPath && !opts.noBuiltinInc) {
+      if (!opts.hasRsrcPath() && !opts.noBuiltinInc()) {
         std::string resourcePath;
         if (!llvmdir) {
           // FIXME: The first arg really does need to be argv[0] on FreeBSD.
@@ -917,7 +933,7 @@ namespace {
 
     std::vector<const char*> argvCompile(argv, argv+1);
     argvCompile.reserve(argc+5);
-    if (!copts.hasMinusX) {
+    if (!copts.hasMinusX()) {
       // We do C++ by default; append right after argv[0] if no "-x" given
       argvCompile.push_back("-x");
       argvCompile.push_back( "c++");
@@ -928,7 +944,7 @@ namespace {
     // Add host specific includes, -resource-dir if necessary, and -isysroot
     AddHostArguments(argvCompile, llvmdir, copts);
 
-    if (!copts.haveOutput && !OnlyLex) {
+    if (!copts.hasOutput() && !OnlyLex) {
       argvCompile.push_back("-c");
       argvCompile.push_back("-");
     }
@@ -986,7 +1002,7 @@ namespace {
       return std::make_pair(nullptr,false);
     }
 
-    if (copts.haveOutput && !OnlyLex) {
+    if (copts.hasOutput() && !OnlyLex) {
       ActionScan scan(clang::driver::Action::PrecompileJobClass);
       if (!scan.find(Compilation.get())) {
         llvm::errs() << "Only output to precompiled header is supported.\n";
