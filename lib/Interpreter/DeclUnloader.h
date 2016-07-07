@@ -15,22 +15,22 @@
 #include <set>
 
 namespace clang {
-
   class CodeGenerator;
   class GlobalDecl;
+}
 
-  using cling::Transaction;
+namespace cling {
 
   ///\brief The class does the actual work of removing a declaration and
   /// resetting the internal structures of the compiler
   ///
-  class DeclUnloader : public DeclVisitor<DeclUnloader, bool> {
+  class DeclUnloader : public clang::DeclVisitor<cling::DeclUnloader, bool> {
   private:
-    typedef llvm::DenseSet<FileID> FileIDs;
+    typedef llvm::DenseSet<clang::FileID> FileIDs;
 
     ///\brief The Sema object being unloaded (contains the AST as well).
     ///
-    Sema* m_Sema;
+    clang::Sema* m_Sema;
 
     ///\brief The clang code generator, being recovered.
     ///
@@ -55,14 +55,14 @@ namespace clang {
     /// VisitClassTemplateSpecializationDecl on specializations that are being
     /// entirely removed.
     ///
-    std::set<ClassTemplateSpecializationDecl*> m_Specializations;
+    std::set<clang::ClassTemplateSpecializationDecl*> m_Specializations;
 
     ///\brief Mark whether we are recursing via VisitSpecializations.
     ///
     bool m_VisSpecializations;
 
   public:
-    DeclUnloader(Sema* S, clang::CodeGenerator* CG, const Transaction* T)
+    DeclUnloader(clang::Sema* S, clang::CodeGenerator* CG, const Transaction* T)
       : m_Sema(S), m_CodeGen(CG), m_CurTransaction(T),
         m_VisSpecializations(false) { }
     ~DeclUnloader();
@@ -72,7 +72,7 @@ namespace clang {
     ///\param[in] D - The declaration to forward.
     ///\returns true on success.
     ///
-    bool UnloadDecl(Decl* D);
+    bool UnloadDecl(clang::Decl* D);
 
     ///\brief If it falls back in the base class just remove the declaration
     /// only from the declaration context.
@@ -80,7 +80,7 @@ namespace clang {
     ///
     ///\returns true on success.
     ///
-    bool VisitDecl(Decl* D);
+    bool VisitDecl(clang::Decl* D);
 
     ///\brief Removes the declaration from the lookup chains and from the
     /// declaration context.
@@ -88,14 +88,14 @@ namespace clang {
     ///
     ///\returns true on success.
     ///
-    bool VisitNamedDecl(NamedDecl* ND);
+    bool VisitNamedDecl(clang::NamedDecl* ND);
 
     ///\brief Removes the declaration from Sema's unused decl registry
     /// @param[in] DD - The declaration to be removed.
     ///
     ///\returns true on success.
     ///
-    bool VisitDeclaratorDecl(DeclaratorDecl* DD);
+    bool VisitDeclaratorDecl(clang::DeclaratorDecl* DD);
 
     ///\brief Removes a using shadow declaration, created in the cases:
     ///\code
@@ -111,7 +111,7 @@ namespace clang {
     ///
     ///\returns true on success.
     ///
-    bool VisitUsingShadowDecl(UsingShadowDecl* USD);
+    bool VisitUsingShadowDecl(clang::UsingShadowDecl* USD);
 
     ///\brief Removes a using declaration
     /// This method iterates all of the shadows it is holding and calls
@@ -123,7 +123,7 @@ namespace clang {
     ///
     ///\returns true on success.
     ///
-    bool VisitUsingDecl(UsingDecl* UD);
+    bool VisitUsingDecl(clang::UsingDecl* UD);
 
     ///\brief Removes a typedef name decls. A base class for TypedefDecls and
     /// TypeAliasDecls.
@@ -131,7 +131,7 @@ namespace clang {
     ///
     ///\returns true on success.
     ///
-    bool VisitTypedefNameDecl(TypedefNameDecl* TND);
+    bool VisitTypedefNameDecl(clang::TypedefNameDecl* TND);
 
     ///\brief Removes the declaration from the lookup chains and from the
     /// declaration context and it rebuilds the redeclaration chain.
@@ -139,7 +139,7 @@ namespace clang {
     ///
     ///\returns true on success.
     ///
-    bool VisitVarDecl(VarDecl* VD);
+    bool VisitVarDecl(clang::VarDecl* VD);
 
     ///\brief Removes the declaration from the lookup chains and from the
     /// declaration context and it rebuilds the redeclaration chain.
@@ -147,7 +147,7 @@ namespace clang {
     ///
     ///\returns true on success.
     ///
-    bool VisitFunctionDecl(FunctionDecl* FD);
+    bool VisitFunctionDecl(clang::FunctionDecl* FD);
 
     ///\brief Specialize the removal of constructors due to the fact the we need
     /// the constructor type (aka CXXCtorType). The information is located in
@@ -161,7 +161,7 @@ namespace clang {
     ///
     ///\returns true on success.
     ///
-    bool VisitCXXConstructorDecl(CXXConstructorDecl* CXXCtor);
+    bool VisitCXXConstructorDecl(clang::CXXConstructorDecl* CXXCtor);
 
     ///\brief Specialize the removal of destructors due to the fact the we need
     /// the to erase the dtor decl and the deleting operator.
@@ -173,28 +173,28 @@ namespace clang {
     ///
     ///\returns true on success.
     ///
-    bool VisitCXXDestructorDecl(CXXDestructorDecl* CXXDtor);
+    bool VisitCXXDestructorDecl(clang::CXXDestructorDecl* CXXDtor);
 
     ///\brief Removes the DeclCotnext and its decls.
     /// @param[in] DC - The declaration to be removed.
     ///
     ///\returns true on success.
     ///
-    bool VisitDeclContext(DeclContext* DC);
+    bool VisitDeclContext(clang::DeclContext* DC);
 
     ///\brief Removes the namespace.
     /// @param[in] NSD - The declaration to be removed.
     ///
     ///\returns true on success.
     ///
-    bool VisitNamespaceDecl(NamespaceDecl* NSD);
+    bool VisitNamespaceDecl(clang::NamespaceDecl* NSD);
 
     ///\brief Removes all extern "C" declarations.
     /// @param[in] LSD - The declaration context to be removed.
     ///
     ///\returns true on success.
     ///
-    bool VisitLinkageSpecDecl(LinkageSpecDecl* LSD);
+    bool VisitLinkageSpecDecl(clang::LinkageSpecDecl* LSD);
 
     ///\brief Removes all friend named declarations. This is needed
     /// as under some circumstances clang stores the NamedDecl for a
@@ -203,7 +203,7 @@ namespace clang {
     ///
     ///\returns true on success.
     ///
-    bool VisitFriendDecl(FriendDecl* FD);
+    bool VisitFriendDecl(clang::FriendDecl* FD);
 
     ///\brief Removes a Tag (class/union/struct/enum). Most of the other
     /// containers fall back into that case.
@@ -211,7 +211,7 @@ namespace clang {
     ///
     ///\returns true on success.
     ///
-    bool VisitTagDecl(TagDecl* TD);
+    bool VisitTagDecl(clang::TagDecl* TD);
 
     ///\brief Removes a RecordDecl. We shouldn't remove the implicit class
     /// declaration.
@@ -219,12 +219,12 @@ namespace clang {
     ///
     ///\returns true on success.
     ///
-    bool VisitRecordDecl(RecordDecl* RD);
+    bool VisitRecordDecl(clang::RecordDecl* RD);
 
     ///\brief Removes a CXXRecordDecl. This removes a few cached Decls
     /// in the sema but otherwise calls through to VisitRecordDecl
     ///
-    bool VisitCXXRecordDecl(CXXRecordDecl* RD);
+    bool VisitCXXRecordDecl(clang::CXXRecordDecl* RD);
 
     ///\brief Remove the macro from the Preprocessor.
     /// @param[in] MD - The MacroDirectiveInfo containing the IdentifierInfo and
@@ -243,7 +243,7 @@ namespace clang {
     ///
     ///\returns true on success.
     ///
-    bool VisitRedeclarableTemplateDecl(RedeclarableTemplateDecl* R);
+    bool VisitRedeclarableTemplateDecl(clang::RedeclarableTemplateDecl* R);
 
 
     ///\brief Removes the declaration clang's internal structures. This case
@@ -253,7 +253,7 @@ namespace clang {
     ///
     ///\returns true on success.
     ///
-    bool VisitFunctionTemplateDecl(FunctionTemplateDecl* FTD);
+    bool VisitFunctionTemplateDecl(clang::FunctionTemplateDecl* FTD);
 
     ///\brief Removes a class template declaration from clang's internal
     /// structures.
@@ -261,7 +261,7 @@ namespace clang {
     ///
     ///\returns true on success.
     ///
-    bool VisitClassTemplateDecl(ClassTemplateDecl* CTD);
+    bool VisitClassTemplateDecl(clang::ClassTemplateDecl* CTD);
 
     ///\brief Removes a class template specialization declaration from clang's
     /// internal structures.
@@ -269,12 +269,12 @@ namespace clang {
     ///
     ///\returns true on success.
     ///
-    bool VisitClassTemplateSpecializationDecl(ClassTemplateSpecializationDecl*
-                                              CTSD);
+    bool VisitClassTemplateSpecializationDecl(
+                                  clang::ClassTemplateSpecializationDecl* CTSD);
 
     ///@}
 
-    void MaybeRemoveDeclFromModule(GlobalDecl& GD) const;
+    void MaybeRemoveDeclFromModule(clang::GlobalDecl& GD) const;
 
     /// @name Helpers
     /// @{
@@ -297,7 +297,7 @@ namespace clang {
     /// declaration or a macro directive definition in the AST.
     ///\param[in] Loc - The source location of the unloaded declaration.
     ///
-    void CollectFilesToUncache(SourceLocation Loc);
+    void CollectFilesToUncache(clang::SourceLocation Loc);
 
     ///\brief Test if the given SourceLocation came before the SourceLocation
     /// of our Transaction.  If m_CurTransaction is NULL it is assumed to be
@@ -306,19 +306,19 @@ namespace clang {
     /// This is used to test whether the declaration holding specializations
     /// was actullay part of the transaction being unloaded.
     ///
-    bool wasInstatiatedBefore(SourceLocation Loc) const;
+    bool wasInstatiatedBefore(clang::SourceLocation Loc) const;
 
     template <class DeclT>
     bool VisitSpecializations(DeclT *D);
 
     constexpr static bool isDefinition(void*) { return false; }
-    static bool isDefinition(TagDecl* R);
+    static bool isDefinition(clang::TagDecl* R);
 
     static void resetDefinitionData(void*) {
       llvm_unreachable("resetDefinitionData on non-cxx record declaration");
     }
 
-    static void resetDefinitionData(TagDecl *decl);
+    static void resetDefinitionData(clang::TagDecl *decl);
 
     template<typename DeclT>
     static void removeRedeclFromChain(DeclT* R);
@@ -328,18 +328,14 @@ namespace clang {
     }
 
     template <typename T>
-    bool VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC);
+    bool VisitRedeclarable(clang::Redeclarable<T>* R, clang::DeclContext* DC);
     
     ///\brief Remove the NamedDecl from it's parent scope.
-    ///\param[in] force - Don't check if the decl is anonymous.
+    ///\param[in] frc - Force (don't check if the decl is anonymous).
     ///\returns The lookup context for the decl.
     ///
-    DeclContext* removeFromScope(NamedDecl* ND, bool force = false);
+    clang::DeclContext* removeFromScope(clang::NamedDecl* ND, bool frc = false);
   };
-} // namespace clang
-
-namespace cling {
-  using clang::DeclUnloader;
 
   /// \brief Unload a Decl from the AST, but not from CodeGen or Module.
   inline bool UnloadDecl(clang::Sema* S, clang::Decl* D) {
@@ -352,6 +348,7 @@ namespace cling {
     DeclUnloader Unloader(S, CG, nullptr);
     return Unloader.UnloadDecl(D);
   }
+
 } // namespace cling
 
 #endif // CLING_DECL_UNLOADER

@@ -23,9 +23,9 @@
 
 #include "llvm/IR/Constants.h"
 
-// FIXME: rename back to cling when gcc fix the
-// namespace cling { using cling::DeclUnloader DeclUnloader} bug
-namespace clang {
+namespace cling {
+
+using namespace clang;
 
 bool DeclUnloader::UnloadDecl(Decl* D) {
   DiagnosticErrorTrap Trap(m_Sema->getDiagnostics());
@@ -1368,4 +1368,4 @@ bool DeclUnloader::VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC)
     
     return Success;
   }
-} // end namespace clang
+} // end namespace cling
