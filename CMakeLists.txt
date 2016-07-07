@@ -214,6 +214,12 @@ endif ()
 
 include(CMakeParseArguments)
 
+# We put this up here to better match the message reported via clang's cmake
+if(CLING_CLANG_RUNTIME_PATCH)
+  message(STATUS "Cling client with clang patching at runtime")
+  add_definitions(-DCLING_CLANG_RUNTIME_PATCH)
+endif()
+
 option(CLING_OBJC_SUPPORT "Cling Objective-C support enabled in clang." OFF)
 if(CLING_OBJC_SUPPORT)
  if (UNIX)
