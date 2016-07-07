@@ -440,9 +440,10 @@ namespace {
       kHasResourceDir = 8,
       kHasSysRoot     = 16,
       kHasOuptut      = 32,
+      kHasCXXVersion  = 64,
       
       kAllFlags = kHasMinusX|kHasNoBultinInc|kHasNoCXXInc|
-                  kHasResourceDir|kHasSysRoot|kHasOuptut,
+                  kHasResourceDir|kHasSysRoot|kHasOuptut|kHasCXXVersion,
     };
     unsigned m_Flags;
 
@@ -453,6 +454,8 @@ namespace {
     void parse(const char* arg) {
       if (!hasMinusX() && !strncmp(arg, "-x", 2))
         m_Flags |= kHasMinusX;
+      else if (!hasCXXVersion() && !strncmp(arg, "-std=c++", 8))
+        m_Flags |= kHasCXXVersion;
       else if (!noBuiltinInc() && strEqual(arg, "-nobuiltininc", 13))
         m_Flags |= kHasNoBultinInc;
       else if (!noCXXIncludes() && strEqual(arg, "-nostdinc++", 11))
@@ -472,6 +475,7 @@ namespace {
     bool hasRsrcPath() const { return m_Flags & kHasResourceDir; }
     bool hasSysRoot() const { return m_Flags & kHasSysRoot; }
     bool hasOutput() const { return m_Flags & kHasOuptut; }
+    bool hasCXXVersion() const { return m_Flags & kHasCXXVersion; }
     bool noBuiltinInc() const { return m_Flags & kHasNoBultinInc; }
     bool noCXXIncludes() const { return m_Flags & kHasNoCXXInc; }
 
@@ -647,7 +651,8 @@ namespace {
     }
   }
 
-  static void SetClingCustomLangOpts(LangOptions& Opts) {
+  static void SetClingCustomLangOpts(LangOptions& Opts,
+                                     const CompilerOpts* UserOpts) {
     Opts.EmitAllDecls = 0; // Otherwise if PCH attached will codegen all decls.
 #ifdef _MSC_VER
     Opts.Exceptions = 0;
@@ -688,8 +693,9 @@ namespace {
     // the test for C++14 or more (201402L) as previously specified.
     // I would claim that the check should be relaxed to:
 
-    // Only set this if C++ is the language
-    if (Opts.CPlusPlus) {
+    // Only set this if C++ is the language.
+    // User can override, but there will be an ABI warning waiting for them.
+    if (Opts.CPlusPlus && (!UserOpts || !UserOpts->hasCXXVersion())) {
 #if __cplusplus > 201103L
       if (Opts.CPlusPlus) Opts.CPlusPlus14 = 1;
 #endif
@@ -849,11 +855,11 @@ namespace {
     return Diags;
   }
 
-  static bool setupCompiler(CompilerInstance* CI, bool full) {
+  static bool setupCompiler(CompilerInstance* CI, const CompilerOpts *UserOpt) {
     // Set the language options, which cling needs.
     // This may have already been done via a precompiled header
-    if (full)
-      SetClingCustomLangOpts(CI->getLangOpts());
+    if (UserOpt)
+      SetClingCustomLangOpts(CI->getLangOpts(), UserOpt);
 
     PreprocessorOptions& PPOpts = CI->getInvocation().getPreprocessorOpts();
     SetPreprocessorFromBinary(PPOpts);
@@ -879,7 +885,7 @@ namespace {
     CI->getTarget().adjust(CI->getLangOpts());
 
     // This may have already been done via a precompiled header
-    if (full)
+    if (UserOpt)
       SetClingTargetLangOpts(CI->getLangOpts(), CI->getTarget());
 
     SetPreprocessorFromTarget(PPOpts, CI->getTarget().getTriple());
@@ -1008,7 +1014,7 @@ namespace {
         llvm::errs() << "Only output to precompiled header is supported.\n";
         return std::make_pair(nullptr,false);
       }
-      if (!setupCompiler(CI.get(), true))
+      if (!setupCompiler(CI.get(), &copts))
         return std::make_pair(nullptr,false);
 
       ProcessWarningOptions(*Diags, DiagOpts);
@@ -1097,7 +1103,7 @@ namespace {
     ProcessWarningOptions(*Diags, DiagOpts);
 
     // Set up compiler language and target
-    if (!setupCompiler(CI.get(), PCHFileName.empty()))
+    if (!setupCompiler(CI.get(), PCHFileName.empty() ? &copts : nullptr))
       return std::make_pair(nullptr,false);
 
     // Set up source managers

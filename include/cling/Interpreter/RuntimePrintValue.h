@@ -15,7 +15,9 @@
 #endif
 
 #include <string>
-#include <tuple>
+#if __cplusplus >= 201103L
+  #include <tuple>
+#endif
 
 namespace cling {
 
@@ -72,6 +74,21 @@ namespace cling {
   // cling::Value
   std::string printValue(const Value *value);
 
+  // Arrays
+  template<typename T, size_t N>
+  std::string printValue(const T (*obj)[N]) {
+    std::string str = "{ ";
+
+    for (int i = 0; i < N; ++i) {
+      str += printValue(*obj + i);
+      if (i < N - 1) str += ", ";
+    }
+
+    return str + " }";
+  }
+
+#if __cplusplus >= 201103L
+
   // Collections internal declaration
   namespace collectionPrinterInternal {
     // Maps declaration
@@ -99,19 +116,6 @@ namespace cling {
   -> decltype(collectionPrinterInternal::printValue_impl(obj, 0), std::string())
   {
     return collectionPrinterInternal::printValue_impl(obj, (short)0);  // short -> int -> long = priority order
-  }
-
-  // Arrays
-  template<typename T, size_t N>
-  std::string printValue(const T (*obj)[N]) {
-    std::string str = "{ ";
-
-    for (int i = 0; i < N; ++i) {
-      str += printValue(*obj + i);
-      if (i < N - 1) str += ", ";
-    }
-
-    return str + " }";
   }
 
   // Collections internal
@@ -264,6 +268,91 @@ namespace cling {
     using T = std::pair<ARGS...>;
     return collectionPrinterInternal::tuplePairPrintValue<T>(val);
   }
+
+#else // __cplusplus < 201103L (no C++11 features)
+
+  // std::string
+  std::string printValue(std::string *val) {
+    return printValue(const_cast<const std::string*>(val));
+  }
+
+  template <class T1, class T2>
+  std::string printValue(const std::pair<T1, T2> *val) {
+    return "{ " + printValue(&val->first) + ", " +
+                  printValue(&val->second) + " }";
+  }
+
+  #define CLING_HAS_MEM_FUNC(func, name)                                      \
+    template<typename T, typename Sign>                                       \
+      struct name {                                                           \
+      typedef char yes[1];                                                    \
+      typedef char no [2];                                                    \
+      template <typename U, U> struct type_check;                             \
+      template <typename _1> static yes &chk(type_check<Sign, &_1::func > *); \
+      template <typename   > static no  &chk(...);                            \
+      static bool const value = sizeof(chk<T>(0)) == sizeof(yes);             \
+    }
+
+  namespace {
+    template<bool C, typename T = void>
+    struct enable_if { typedef T type; };
+
+    // object has iterator type and begin
+    CLING_HAS_MEM_FUNC(begin, has_begin);
+    CLING_HAS_MEM_FUNC(end,   has_end);
+
+    // const variant: const_iterator & cbegin
+    CLING_HAS_MEM_FUNC(cbegin, has_cbegin);
+    CLING_HAS_MEM_FUNC(cend,   has_cend);
+
+    template <class T1, class T2>
+    std::string printContainterValue(const std::pair<T1, T2>& val) {
+      return cling::printValue(&val.first) + " => " +
+               cling::printValue(&val.second);
+    }
+    template <class T>
+    std::string printContainterValue(const T& val) {
+      return cling::printValue(&val);
+    }
+  }
+
+  template <typename T> typename enable_if<
+    (has_begin<T,typename T::iterator (T::*)()>::value &&
+     has_end<T,typename T::iterator (T::*)()>::value),
+    std::string >::type
+  printValue(T* obj) {
+    std::string str = "{ ";
+
+    typename T::iterator iter = obj->begin(), end = obj->end();
+    while (iter != end) {
+      str += printContainterValue(*iter);
+      if (++iter != end) {
+        str += ", ";
+      }
+    }
+    return str + " }";
+  }
+
+  template <typename T> typename enable_if<
+    (has_cbegin<T,typename T::const_iterator (T::*)() const>::value &&
+     has_cend<T,typename T::const_iterator (T::*)() const>::value),
+    std::string >::type
+  printValue(const T* obj) {
+    std::string str = "{ ";
+
+    typename T::const_iterator iter = obj->cbegin(), end = obj->cend();
+    while (iter != end) {
+      str += printContainterValue(*iter);
+      if (++iter != end) {
+        str += ", ";
+      }
+    }
+    return str + " }";
+  }
+  #undef CLING_HAS_MEM_FUNC
+
+#endif // __cplusplus >= 201103L (C++11)
+
 }
 
 #endif
