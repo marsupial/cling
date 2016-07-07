@@ -63,7 +63,7 @@ namespace clang {
     ///\param[in] D - The declaration to forward.
     ///\returns true on success.
     ///
-    bool UnloadDecl(Decl* D) { return Visit(D); }
+    bool UnloadDecl(Decl* D);
 
     ///\brief If it falls back in the base class just remove the declaration
     /// only from the declaration context.
