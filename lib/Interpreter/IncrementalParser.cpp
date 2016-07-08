@@ -69,9 +69,36 @@
 using namespace clang;
 
 namespace {
+
+  static const Token* getMacroToken(const Preprocessor& PP, const char* Macro) {
+    if (const IdentifierInfo* II = PP.getIdentifierInfo(Macro)) {
+      if (const DefMacroDirective* MD = llvm::dyn_cast_or_null
+          <DefMacroDirective>(PP.getLocalMacroDirective(II))) {
+        if (const clang::MacroInfo* MI = MD->getMacroInfo()) {
+          if (MI->getNumTokens() == 1)
+            return MI->tokens_begin();
+        }
+      }
+    }
+    return nullptr;
+  }
+
   ///\brief Check the compile-time C++ ABI version vs the run-time ABI version,
   /// a mismatch could cause havoc. Reports if ABI versions differ.
   static bool CheckABICompatibility(clang::CompilerInstance* CI) {
+
+    const clang::Preprocessor& PP = CI->getPreprocessor();
+
+#ifdef CLING_CLANG_RUNTIME_PATCH
+    // If CLING_CLANG_RUNTIME_PATCH is defined here, we'll loose out on some
+    // compile-time optimizations that can be performed.
+    if (getMacroToken(PP, "CLING_CLANG_RUNTIME_PATCH")) {
+      llvm::errs() <<
+        "Warning in cling::IncrementalParser::CheckABICompatibility():\n"
+        "  CLING_CLANG_RUNTIME_PATCH should not be defined\n";
+    }
+#endif
+
 #ifdef _MSC_VER
     // For MSVC we do not use CLING_CXXABI*
     HKEY regVS;
@@ -99,24 +126,15 @@ namespace {
     const char* CLING_CXXABIS = "_LIBCPP_VERSION";
   #endif
 
-    clang::Preprocessor& PP = CI->getPreprocessor();
-    if (clang::IdentifierInfo* II = PP.getIdentifierInfo(CLING_CXXABIS)) {
-      if (const clang::DefMacroDirective* MD = llvm::dyn_cast_or_null
-               <clang::DefMacroDirective>(PP.getLocalMacroDirective(II))) {
-        if (const clang::MacroInfo* MI = MD->getMacroInfo()) {
-          if (MI->getNumTokens() == 1) {
-            const clang::Token& Tok = *MI->tokens_begin();
-            if (Tok.isLiteral() && Tok.getLength() && Tok.getLiteralData()) {
-              std::string cxxabivStr;
-              llvm::raw_string_ostream cxxabivStrStrm(cxxabivStr);
-              cxxabivStrStrm << CLING_CXXABIV;
-
-              llvm::StringRef tokStr(Tok.getLiteralData(), Tok.getLength());
-              if (tokStr.equals(cxxabivStr))
-                return true;
-            }
-          }
-        }
+    if (const clang::Token* Tok = getMacroToken(PP, CLING_CXXABIS)) {
+      if (Tok->isLiteral() && Tok->getLength() && Tok->getLiteralData()) {
+        std::string cxxabivStr;
+        llvm::raw_string_ostream cxxabivStrStrm(cxxabivStr);
+        cxxabivStrStrm << CLING_CXXABIV;
+        
+        llvm::StringRef tokStr(Tok->getLiteralData(), Tok->getLength());
+        if (tokStr.equals(cxxabivStrStrm.str()))
+          return true;
       }
     }
 
