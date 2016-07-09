@@ -6,18 +6,39 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: clang -shared %S/lib.c -o%p/libTest%shlibext
-// RUN: echo "const char *kShlibExt = \"" %shlibext "\";" > %p/shlibext.h
-// RUN: cat %s | %cling -I%p -I%clanggeninc -IDirA -IDirB -I DirC -L %p -L DirB -Xclang -verify 2>&1 | FileCheck %s
-
-// Tests the ability of cling to host itself. We can have cling instances in
-// cling's runtime. This is important for people, who use cling embedded in
-// their frameworks.
+// RUN: rm -rf %T/Tree
+// RUN: mkdir -p %T/Tree/DirA
+// RUN: mkdir -p %T/Tree/DirB/DirB
+// RUN: mkdir -p %T/Tree/DirC
+// RUN: echo "const char* LoadedFrom = \"DirB\";  extern \"C\" int funcFace();" > %T/Tree/DirB/libTest
+// RUN: echo "const char* LoadedFrom2 = \"DirB/DirB\";" > %T/Tree/DirB/DirB/libTest
+// RUN: touch %T/Tree/DirA/a.h
+// RUN: touch %T/Tree/DirB/b.h
+// RUN: touch %T/Tree/DirC/c.h
+// RUN: clang -shared %S/lib.c -o%T/Tree/libTest%shlibext
+// RUN: cat %s | %cling -I%clanggeninc -I%T/Tree -I%T/Tree/DirA -I%T/Tree/DirB -I%T/Tree/DirC -L%T/Tree -L%T/Tree/DirB -Xclang -verify 2>&1 | FileCheck %s
+// RUN: cd %T/Tree && cat %s | %cling -DTEST_RELATIVE -I%clanggeninc -I./ -IDirA -IDirB -IDirC -L./ -LDirB -Xclang -verify 2>&1 | FileCheck %s
 
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Utils/FileEntry.h"
-#include <cstdio>
 
+#include <cstdio>
+#include <chrono>
+#include <thread>
+
+// Ugh, no functions here!?
+class Rename {
+  std::string m_Name0;
+  std::string m_Name1;
+public:
+  Rename(const std::string &a) : m_Name0(a), m_Name1(a+".h") {}
+  void operator () () {
+    std::rename(m_Name0.c_str(), m_Name1.c_str());
+    m_Name0.swap(m_Name1);
+    // Try to make sure fs has sunch changes before continuing
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  }
+};
 
 gCling->lookupFileOrLibrary("DirA/a.h").exists()
 // CHECK: (bool) true
@@ -41,17 +62,22 @@ feH.isLibrary()
 // CHECK: (bool) false
 
 // Move file libTest to libTest.h
-const std::string renamed = feH.filePath()+".h";
-std::rename(feH.filePath().c_str(), renamed.c_str());
+Rename renamer(feH.filePath());
+renamer();
 
-gCling->loadFile(feH) // expected-error-re@1 {{'{{.*}}/DirB/libTest' file not found}}
+#ifdef TEST_RELATIVE
+  gCling->loadFile(feH) // expected-error-re@1 {{'{{.*}}/DirB/libTest' file not found}}
+#else
+  gCling->loadFile(feH) // expected-error-re@1 {{'{{.*}}/DirB/libTest': No such file or directory}}
+#endif
+
 // CHECK: (cling::Interpreter::CompilationResult) (cling::Interpreter::CompilationResult::kFailure) : (unsigned int) 1
 
 gCling->loadFile("libTest")
 // CHECK: (cling::Interpreter::CompilationResult) (cling::Interpreter::CompilationResult::kSuccess) : (unsigned int) 0
 
 // Move file libTest.h back to libTest
-std::rename(renamed.c_str(), feH.filePath().c_str());
+renamer();
 gCling->loadFile(feH)
 // CHECK: (cling::Interpreter::CompilationResult) (cling::Interpreter::CompilationResult::kSuccess) : (unsigned int) 0
 
@@ -61,10 +87,11 @@ LoadedFrom
 funcFace()
 // CHECK: (int) 462
 
-std::rename(feH.filePath().c_str(), renamed.c_str());
+renamer();
 gCling->loadFile("DirB/libTest")
 LoadedFrom2
 // CHECK: (const char *) "DirB/DirB"
-std::rename(renamed.c_str(), feH.filePath().c_str());
+
+renamer();
 
 .q
