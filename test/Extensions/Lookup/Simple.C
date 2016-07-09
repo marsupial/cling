@@ -6,7 +6,7 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: cat %s | %cling -I%p | FileCheck %s
+// RUN: cat %s | %cling -I%p -I %clanggeninc | FileCheck %s
 
 // This test tests the hook that cling expects in clang and enables it
 // at compile time. However that is not actual dynamic lookup because
