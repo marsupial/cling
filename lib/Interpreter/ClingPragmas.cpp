@@ -63,6 +63,35 @@ namespace {
       }
     };
 
+    bool GetNextLiteral(Preprocessor& PP, Token& Tok, std::string& Literal,
+                        const char* firstTime = nullptr) const {
+      Literal.clear();
+      PP.Lex(Tok);
+      if (Tok.isLiteral()) {
+        SmallVector<Token, 1> StrToks(1, Tok);
+        StringLiteralParser LitParse(StrToks, PP);
+        if (!LitParse.hadError)
+          Literal = LitParse.GetString();
+      }
+      else if (Tok.is(tok::comma))
+        return GetNextLiteral(PP, Tok, Literal);
+      else if (firstTime) {
+        if (Tok.is(tok::l_paren)) {
+          if (!PP.LexStringLiteral(Tok, Literal, firstTime,
+                                   false /*allowMacroExpansion*/)) {
+            // already diagnosed.
+            return false;
+          }
+        }
+      }
+
+      if (Literal.empty())
+        return false;
+
+      replaceEnvVars(Literal);
+      return true;
+    }
+
     void ReportCommandErr(Preprocessor& PP, const Token& Tok) {
       PP.Diag(Tok.getLocation(), diag::err_expected)
         << "load, add_library_path, or add_include_path";
@@ -78,7 +107,40 @@ namespace {
 
       return -1;
     }
-    
+
+    void LoadCommand(Preprocessor& PP, Token& Tok, std::string Literal) {
+
+      // Need to parse them all until the end to handle the possible
+      // #include stements that will be generated
+      std::vector<std::string> Files;
+      Files.push_back(std::move(Literal));
+      while (GetNextLiteral(PP, Tok, Literal))
+        Files.push_back(std::move(Literal));
+      
+      clang::Parser& P = m_Interp.getParser();
+      Parser::ParserCurTokRestoreRAII savedCurToken(P);
+      // After we have saved the token reset the current one to something
+      // which is safe (semi colon usually means empty decl)
+      Token& CurTok = const_cast<Token&>(P.getCurToken());
+      CurTok.setKind(tok::semi);
+      
+      Preprocessor::CleanupAndRestoreCacheRAII cleanupRAII(PP);
+      // We can't PushDeclContext, because we go up and the routine that
+      // pops the DeclContext assumes that we drill down always.
+      // We have to be on the global context. At that point we are in a
+      // wrapper function so the parent context must be the global.
+      TranslationUnitDecl* TU =
+      m_Interp.getCI()->getASTContext().getTranslationUnitDecl();
+      Sema::ContextAndScopeRAII pushedDCAndS(m_Interp.getSema(),
+                                            TU, m_Interp.getSema().TUScope);
+      Interpreter::PushTransactionRAII pushedT(&m_Interp);
+
+      for (std::string& File : Files) {
+        if (m_Interp.loadFile(File, true) != Interpreter::kSuccess)
+          return;
+      }
+    }
+
   public:
     ClingPragmaHandler(Interpreter& interp):
       PragmaHandler("cling"), m_Interp(interp) {}
@@ -90,6 +152,10 @@ namespace {
       Token Tok;
       PP.Lex(Tok);
       SkipToEOD OnExit(PP, Tok);
+
+      // #pragma cling(load, "A")
+      if (Tok.is(tok::l_paren))
+        PP.Lex(Tok);
 
       if (Tok.isNot(tok::identifier)) {
         ReportCommandErr(PP, Tok);
@@ -103,47 +169,22 @@ namespace {
         return;
       }
 
-      PP.Lex(Tok);
-      if (Tok.isNot(tok::l_paren)) {
-        PP.Diag(Tok.getLocation(), diag::err_expected_lparen_after)
-                << CommandStr;
-        return;
-      }
-
       std::string Literal;
-      if (!PP.LexStringLiteral(Tok, Literal, CommandStr.str().c_str(),
-                               false /*allowMacroExpansion*/)) {
-        // already diagnosed.
+      if (!GetNextLiteral(PP, Tok, Literal, CommandStr.data())) {
+        PP.Diag(Tok.getLocation(), diag::err_expected_after)
+          << CommandStr << "argument";
         return;
       }
+  
+      if (Command == 0)
+        return LoadCommand(PP, Tok, std::move(Literal));
 
-      replaceEnvVars(Literal);
-
-      if (Command == 0) {
-        clang::Parser& P = m_Interp.getParser();
-        Parser::ParserCurTokRestoreRAII savedCurToken(P);
-        // After we have saved the token reset the current one to something
-        // which is safe (semi colon usually means empty decl)
-        Token& CurTok = const_cast<Token&>(P.getCurToken());
-        CurTok.setKind(tok::semi);
-        
-        Preprocessor::CleanupAndRestoreCacheRAII cleanupRAII(PP);
-        // We can't PushDeclContext, because we go up and the routine that
-        // pops the DeclContext assumes that we drill down always.
-        // We have to be on the global context. At that point we are in a
-        // wrapper function so the parent context must be the global.
-        TranslationUnitDecl* TU =
-        m_Interp.getCI()->getASTContext().getTranslationUnitDecl();
-        Sema::ContextAndScopeRAII pushedDCAndS(m_Interp.getSema(),
-                                              TU, m_Interp.getSema().TUScope);
-        Interpreter::PushTransactionRAII pushedT(&m_Interp);
-        
-        m_Interp.loadFile(Literal, true /*allowSharedLib*/);
-      }
-      else if (Command == 1)
-        m_Interp.getOptions().LibSearchPath.push_back(std::move(Literal));
-      else if (Command == 2)
-        m_Interp.AddIncludePath(Literal);
+      do{
+        if (Command == 1)
+          m_Interp.getOptions().LibSearchPath.push_back(std::move(Literal));
+        else if (Command == 2)
+          m_Interp.AddIncludePath(Literal);
+      } while (GetNextLiteral(PP, Tok, Literal));
     }
   };
 }
