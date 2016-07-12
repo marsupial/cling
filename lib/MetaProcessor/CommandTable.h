@@ -38,13 +38,18 @@ namespace cling {
         // llvm::StringMap needs this
         CommandObj() : Syntax(nullptr), Help(nullptr), Flags(0) {}
       };
-      llvm::StringMap<CommandObj> m_Commands;
+      llvm::StringMap<CommandObj*> m_Commands;
 
       static bool doHelpCommand(CommandArguments& Params);
-      static bool sort(const llvm::StringMap<CommandObj>::iterator&,
-                       const llvm::StringMap<CommandObj>::iterator&);
+      static bool sort(const llvm::StringMap<CommandObj*>::iterator&,
+                       const llvm::StringMap<CommandObj*>::iterator&);
+
+      // For adding a command with a different name
+      CommandObj* add(const char* Name, CommandObj*);
 
     public:
+      ~CommandTable();
+
       enum CommandFlags {
         kCmdCallback0    = 0,
         kCmdCallback1    = 2,
@@ -53,8 +58,8 @@ namespace cling {
         kCmdExperimental = 16,
       };
 
-      template <class T>
-      void add(const char* Name, T Callback,
+      template <class T> CommandObj*
+      add(const char* Name, T Callback,
                const char* Syntax = nullptr, const char* Help = nullptr,
                unsigned = kCmdCallback0);
   
