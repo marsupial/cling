@@ -22,6 +22,8 @@
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Serialization/ASTReader.h"
+#include "clang/Sema/SemaDiagnostic.h"
+#include "clang/Lex/LexDiagnostic.h"
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -477,17 +479,31 @@ namespace cling {
     return AR_Failure;
   }
 
-  void MetaSema::registerUnloadPoint(const Transaction* unloadPoint,
-                                     FileEntry file ) {
-    const std::string canFile = std::move(m_Interpreter.lookupFileOrLibrary(std::move(file)).name());
-    clang::SourceManager& SM = m_Interpreter.getSema().getSourceManager();
-    clang::FileManager& FM = SM.getFileManager();
-    const clang::FileEntry* Entry
-      = FM.getFile(canFile, /*OpenFile*/false, /*CacheFailure*/false);
-    if (Entry && !m_Watermarks[Entry]) { // register as a watermark
-      m_Watermarks[Entry] = unloadPoint;
-      m_ReverseWatermarks[unloadPoint] = Entry;
-      //fprintf(stderr,"DEBUG: Load for %s recorded unloadPoint %p\n",file.str().c_str(),unloadPoint);
+  bool MetaSema::registerUnloadPoint(const Transaction* unloadPoint,
+                                     FileEntry inEntry ) {
+    FileEntry fileEntry = m_Interpreter.lookupFileOrLibrary(std::move(inEntry));
+    const clang::FileEntry* Entry = fileEntry;
+    if (!Entry) {
+      // There's a small chance clang couldn't resolve the relative path, and
+      // fileEntry now contains a resolved absolute one.
+      if (fileEntry.resolved())
+        Entry =
+          m_Interpreter.getSema().getSourceManager().getFileManager().getFile(
+              fileEntry.name(), /*OpenFile*/ false, /*CacheFailure*/ false);
     }
+    if (Entry) {
+      if (!m_Watermarks[Entry]) {
+        // register as a watermark
+        m_Watermarks[Entry] = unloadPoint;
+        m_ReverseWatermarks[unloadPoint] = Entry;
+        return true;
+      }
+      m_Interpreter.getCI()->getDiagnostics().Report(clang::SourceLocation(),
+                         clang::diag::err_duplicate_member) << fileEntry.name();
+    } else {
+      m_Interpreter.getCI()->getDiagnostics().Report(clang::SourceLocation(),
+                        clang::diag::err_pp_file_not_found) << fileEntry.name();
+    }
+    return false;
   }
 } // end namespace cling

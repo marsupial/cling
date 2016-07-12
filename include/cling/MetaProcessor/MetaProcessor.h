@@ -152,12 +152,14 @@ namespace cling {
     void setStdStream(llvm::StringRef file, RedirectionScope stream,
                       bool append);
 
-    ///\brief Register the file as an upload point for the Transaction T
+    ///\brief Register the file as an unload point for the Transaction T
     ///  when unloading that file, all transactions after T will be reverted.
     ///
     ///\param [in] T - the last transaction stay should filename be unloaded.
     ///\param [in] filename - The name of the file to be used as unload point.
-    void registerUnloadPoint(const Transaction* T, llvm::StringRef filename);
+    ///\returns whether registration was successful or not
+    ///
+    bool registerUnloadPoint(const Transaction* T, llvm::StringRef filename);
   };
 } // end namespace cling
 
