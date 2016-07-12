@@ -8,7 +8,6 @@
 //------------------------------------------------------------------------------
 
 #include "MetaParser.h"
-
 #include "MetaLexer.h"
 #include "MetaSema.h"
 
@@ -448,23 +447,8 @@ namespace {
   }
 }
 
-
-  MetaParser::MetaParser(Interpreter& interp, MetaProcessor& proc) :
-    m_Lexer(""), m_Actions(new MetaSema(interp, proc)) {
-    const InvocationOptions& Opts = interp.getOptions();
-    MetaLexer metaSymbolLexer(Opts.MetaString);
-    Token Tok;
-    while(true) {
-      metaSymbolLexer.Lex(Tok);
-      if (Tok.is(tok::eof))
-        break;
-      m_MetaSymbolCache.push_back(Tok);
-    }
-  }
-
-  void MetaParser::enterNewInputLine(llvm::StringRef Line) {
-    m_Lexer.reset(Line);
-    m_TokenCache.clear();
+  MetaParser::MetaParser(llvm::StringRef input, MetaSema& Actions) :
+    m_Lexer(input), m_Actions(Actions) {
   }
 
   void MetaParser::consumeToken() {
@@ -520,29 +504,11 @@ namespace {
     while(getCurTok().is(tok::space))
       consumeToken();
   }
-
+  
   bool MetaParser::doMetaCommand(MetaSema::ActionResult& actionResult,
                                  Value* resultValue) {
-    return isCommandSymbol() && doCommand(actionResult, resultValue);
-  }
 
-  bool MetaParser::isQuitRequested() const {
-    return m_Actions->isQuitRequested();
-  }
-
-  bool MetaParser::isCommandSymbol() {
-    for (size_t i = 0; i < m_MetaSymbolCache.size(); ++i) {
-      if (getCurTok().getKind() != m_MetaSymbolCache[i].getKind())
-        return false;
-      consumeToken();
-    }
-    return true;
-  }
-  
-  bool MetaParser::doCommand(MetaSema::ActionResult& actionResult,
-                             Value* resultValue) {
-
-    CommandParamters params(*this, *m_Actions, actionResult, resultValue);
+    CommandParamters params(*this, m_Actions, actionResult, resultValue);
 
     const Token &tok = getCurTok();
     switch (tok.getKind()) {

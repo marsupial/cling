@@ -10,8 +10,8 @@
 #ifndef CLING_META_PARSER_H
 #define CLING_META_PARSER_H
 
-#include "MetaLexer.h" // for cling::Token
-#include "MetaSema.h" // for ActionResult
+#include "MetaLexer.h"
+#include "MetaSema.h"
 #include "llvm/ADT/SmallVector.h"
 
 #include <memory>
@@ -21,16 +21,14 @@ namespace llvm {
 }
 
 namespace cling {
-  class MetaLexer;
   class MetaSema;
   class Value;
 
   class MetaParser {
   private:
     MetaLexer m_Lexer;
-    std::unique_ptr<MetaSema> m_Actions;
+    MetaSema& m_Actions;
     llvm::SmallVector<Token, 2> m_TokenCache;
-    llvm::SmallVector<Token, 4> m_MetaSymbolCache;
 
     const Token& lookAhead(unsigned Num);
     ///\brief Returns the current token without consuming it.
@@ -42,14 +40,11 @@ namespace cling {
     void consumeToken();
     void skipWhitespace();
     void consumeAnyStringToken(tok::TokenKind stopAt = tok::space);
-    bool isCommandSymbol();
-
-    bool doCommand(MetaSema::ActionResult& actionResult,
-                   Value* resultValue);
 
   public:
-    MetaParser(Interpreter &interp, MetaProcessor &proc);
-    void enterNewInputLine(llvm::StringRef Line);
+    class CommandParamters;
+
+    MetaParser(llvm::StringRef Line, MetaSema& Sema);
 
     ///\brief Drives the recursive decendent parsing.
     ///
@@ -58,13 +53,6 @@ namespace cling {
     bool doMetaCommand(MetaSema::ActionResult& actionResult,
                        Value* resultValue);
 
-    ///\brief Returns whether quit was requested via .q command
-    ///
-    bool isQuitRequested() const;
-
-    MetaSema& getActions() const { return *m_Actions.get(); }
-
-    class CommandParamters;
   };
 } // end namespace cling
 

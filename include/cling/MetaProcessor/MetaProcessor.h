@@ -24,7 +24,7 @@ namespace cling {
 
   class Interpreter;
   class InputValidator;
-  class MetaParser;
+  class MetaSema;
   class Value;
 
   ///\brief Class that helps processing meta commands, which add extra
@@ -41,9 +41,9 @@ namespace cling {
     ///
     std::unique_ptr<InputValidator> m_InputValidator;
 
-    ///\brief The parser used to parse our tiny "meta" language
+    ///\brief The actions/state that can be performed.
     ///
-    std::unique_ptr<MetaParser> m_MetaParser;
+    std::unique_ptr<MetaSema> m_Actions;
 
     ///\brief Currently executing file as passed into executeFile
     ///
@@ -123,6 +123,14 @@ namespace cling {
     ///\brief Returns the number of imbalanced tokens seen in the current input.
     ///
     int getExpectedIndent() const;
+
+    ///\brief Exectue the given meta commad
+    /// @param[in] cmd - Command to execute (not prefixed with the meta-token)
+    ///\returns kSuccess if the command succeded, kFailure if the command failed
+    /// or kMoreInputExpected if it wasn't even a command.
+    ///
+    Interpreter::CompilationResult doMetaCommand(llvm::StringRef cmd,
+                                                 Value* result) const;
 
     ///\brief Reads prompt input from file.
     ///
