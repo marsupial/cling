@@ -38,8 +38,7 @@ namespace cling {
     bool m_IsQuitRequested;
     typedef llvm::DenseMap<const clang::FileEntry*, const Transaction*> Watermarks;
     typedef llvm::DenseMap<const Transaction*, const clang::FileEntry*> ReverseWatermarks;
-    Watermarks m_Watermarks;
-    ReverseWatermarks m_ReverseWatermarks;
+    std::unique_ptr< std::pair<Watermarks, ReverseWatermarks> > m_Watermarks;
 
   public:
     enum SwitchMode {

@@ -183,13 +183,16 @@ namespace cling {
   }
 
   MetaSema::ActionResult MetaSema::actOnUCommand(const llvm::StringRef &file, FileEntry fe ) {
+    if (!m_Watermarks.get())
+      return AR_Success;
+
     // FIXME: unload, once implemented, must return success / failure
     // Lookup the file
     if (const clang::FileEntry* Entry = fe) {
-      Watermarks::iterator Pos = m_Watermarks.find(Entry);
+      Watermarks::iterator Pos = m_Watermarks->first.find(Entry);
        //fprintf(stderr,"DEBUG: unload request for %s\n",file.str().c_str());
 
-      if (Pos != m_Watermarks.end()) {
+      if (Pos != m_Watermarks->first.end()) {
         const Transaction* unloadPoint = Pos->second;
         // Search for the transaction, i.e. verify that is has not already
         // been unloaded ; This can be removed once all transaction unload
@@ -211,12 +214,12 @@ namespace cling {
           while(m_Interpreter.getLastTransaction() != unloadPoint) {
              //fprintf(stderr,"DEBUG: unload transaction %p (searching for %p)\n",m_Interpreter.getLastTransaction(),unloadPoint);
             const clang::FileEntry* EntryUnloaded
-              = m_ReverseWatermarks[m_Interpreter.getLastTransaction()];
+              = m_Watermarks->second[m_Interpreter.getLastTransaction()];
             if (EntryUnloaded) {
               Watermarks::iterator PosUnloaded
-                = m_Watermarks.find(EntryUnloaded);
-              if (PosUnloaded != m_Watermarks.end()) {
-                m_Watermarks.erase(PosUnloaded);
+                = m_Watermarks->first.find(EntryUnloaded);
+              if (PosUnloaded != m_Watermarks->first.end()) {
+                m_Watermarks->first.erase(PosUnloaded);
               }
             }
             m_Interpreter.unload(/*numberOfTransactions*/1);
@@ -224,7 +227,7 @@ namespace cling {
         }
         DynamicLibraryManager* DLM = m_Interpreter.getDynamicLibraryManager();
         DLM->unloadLibrary(std::move(fe));
-        m_Watermarks.erase(Pos);
+        m_Watermarks->first.erase(Pos);
       }
     }
     return AR_Success;
@@ -492,10 +495,17 @@ namespace cling {
               fileEntry.name(), /*OpenFile*/ false, /*CacheFailure*/ false);
     }
     if (Entry) {
-      if (!m_Watermarks[Entry]) {
+      if (!m_Watermarks.get()) {
+        m_Watermarks.reset(new std::pair<Watermarks, ReverseWatermarks>);
+        if (!m_Watermarks.get()) {
+          ::perror("Could not allocate watermarks");
+          return false;
+        }
+      }
+      if (!m_Watermarks->first[Entry]) {
         // register as a watermark
-        m_Watermarks[Entry] = unloadPoint;
-        m_ReverseWatermarks[unloadPoint] = Entry;
+        m_Watermarks->first[Entry] = unloadPoint;
+        m_Watermarks->second[unloadPoint] = Entry;
         return true;
       }
       m_Interpreter.getDiagnostics().Report(m_Interpreter.getSourceLocation(),
