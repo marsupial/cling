@@ -33,12 +33,15 @@ namespace cling {
   /// details of the commands should go here.
   class MetaSema {
   private:
-    Interpreter& m_Interpreter;
     MetaProcessor& m_MetaProcessor;
     bool m_IsQuitRequested;
     typedef llvm::DenseMap<const clang::FileEntry*, const Transaction*> Watermarks;
     typedef llvm::DenseMap<const Transaction*, const clang::FileEntry*> ReverseWatermarks;
     std::unique_ptr< std::pair<Watermarks, ReverseWatermarks> > m_Watermarks;
+
+    Interpreter& getInterpreter() const {
+      return m_MetaProcessor.getInterpreter();
+    }
 
   public:
     enum SwitchMode {
@@ -52,10 +55,8 @@ namespace cling {
       AR_Success = 1
     };
 
-  public:
-    MetaSema(Interpreter& interp, MetaProcessor& meta);
+    MetaSema(MetaProcessor& meta);
 
-    const Interpreter& getInterpreter() const { return m_Interpreter; }
     bool isQuitRequested() const { return m_IsQuitRequested; }
 
     ///\brief L command includes the given file or loads the given library.

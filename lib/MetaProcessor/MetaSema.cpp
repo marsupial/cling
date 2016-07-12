@@ -46,12 +46,12 @@
 
 namespace cling {
 
-  MetaSema::MetaSema(Interpreter& interp, MetaProcessor& meta)
-    : m_Interpreter(interp), m_MetaProcessor(meta), m_IsQuitRequested(false) { }
+  MetaSema::MetaSema(MetaProcessor& meta)
+    :  m_MetaProcessor(meta), m_IsQuitRequested(false) { }
 
   MetaSema::ActionResult MetaSema::actOnLCommand(llvm::StringRef file,
                                              Transaction** transaction /*= 0*/){
-    FileEntry fe = m_Interpreter.lookupFileOrLibrary(file);
+    FileEntry fe = getInterpreter().lookupFileOrLibrary(file);
     ActionResult result = actOnUCommand(file, fe);
     if (result != AR_Success)
       return result;
@@ -59,14 +59,14 @@ namespace cling {
     // In case of libraries we get .L lib.so, which might automatically pull in
     // decls (from header files). Thus we want to take the restore point before
     // loading of the file and revert exclusively if needed.
-    const Transaction* unloadPoint = m_Interpreter.getLastTransaction();
+    const Transaction* unloadPoint = getInterpreter().getLastTransaction();
      // fprintf(stderr,"DEBUG: Load for %s unloadPoint is %p\n",file.str().c_str(),unloadPoint);
     // TODO: extra checks. Eg if the path is readable, if the file exists...
 
     //if (fe.empty())
     //  canFile = file;
 
-    if (m_Interpreter.loadFile(fe, true /*allowSharedLib*/, transaction)
+    if (getInterpreter().loadFile(fe, true /*allowSharedLib*/, transaction)
         == Interpreter::kSuccess) {
       registerUnloadPoint(unloadPoint, std::move(fe));
       return AR_Success;
@@ -350,7 +350,7 @@ namespace cling {
     } else if (llvm::sys::fs::is_regular_file(file))
       return actOnLCommand(file, transaction);
     else if (fResolver.resolve(file,
-                 m_Interpreter.getCI()->getHeaderSearchOpts(),
+                 getInterpreter().getCI()->getHeaderSearchOpts(),
                  action))
       return AR_Success;
 
@@ -360,7 +360,7 @@ namespace cling {
 
   MetaSema::ActionResult MetaSema::actOnTCommand(llvm::StringRef inputFile,
                                                  llvm::StringRef outputFile) {
-    m_Interpreter.GenerateAutoloadingMap(inputFile, outputFile);
+    getInterpreter().GenerateAutoloadingMap(inputFile, outputFile);
     return AR_Success;
   }
 
@@ -374,7 +374,7 @@ namespace cling {
 
   void MetaSema::actOnComment(llvm::StringRef comment) const {
     // Some of the comments are meaningful for the cling::Interpreter
-    m_Interpreter.declare(comment);
+    getInterpreter().declare(comment);
   }
 
   MetaSema::ActionResult MetaSema::actOnxCommand(llvm::StringRef file,
@@ -402,7 +402,7 @@ namespace cling {
       using namespace clang;
       // T can be nullptr if there is no code (but comments)
       NamedDecl* ND = T ? T->containsNamedDecl(pairFuncExt.first) : 0;
-      DiagnosticsEngine& Diags = m_Interpreter.getCI()->getDiagnostics();
+      DiagnosticsEngine& Diags = getInterpreter().getCI()->getDiagnostics();
       SourceLocation noLoc;
       if (!ND) {
         unsigned diagID
@@ -415,7 +415,7 @@ namespace cling {
         return AR_Success;
       }
 
-      if (m_Interpreter.echo(expression, result) != Interpreter::kSuccess)
+      if (getInterpreter().echo(expression, result) != Interpreter::kSuccess)
         actionResult = AR_Failure;
     }
     return actionResult;
@@ -430,7 +430,7 @@ namespace cling {
   }
 
   MetaSema::ActionResult MetaSema::actOnUndoCommand(unsigned N/*=1*/) {
-    m_Interpreter.unload(N);
+    getInterpreter().unload(N);
     return AR_Success;
   }
 
@@ -450,8 +450,8 @@ namespace cling {
         // been unloaded ; This can be removed once all transaction unload
         // properly information MetaSema that it has been unloaded.
         bool found = false;
-        //for (auto t : m_Interpreter.m_IncrParser->getAllTransactions()) {
-        for(const Transaction *t = m_Interpreter.getFirstTransaction();
+        //for (auto t : getInterpreter().m_IncrParser->getAllTransactions()) {
+        for(const Transaction *t = getInterpreter().getFirstTransaction();
             t != 0; t = t->getNext()) {
            //fprintf(stderr,"DEBUG: On unload check For %s unloadPoint is %p are t == %p\n",file.str().c_str(),unloadPoint, t);
           if (t == unloadPoint ) {
@@ -463,10 +463,10 @@ namespace cling {
           m_MetaProcessor.getOuts() << "!!!ERROR: Transaction for file: " << file << " has already been unloaded\n";
         } else {
            //fprintf(stderr,"DEBUG: On Unload For %s unloadPoint is %p\n",file.str().c_str(),unloadPoint);
-          while(m_Interpreter.getLastTransaction() != unloadPoint) {
-             //fprintf(stderr,"DEBUG: unload transaction %p (searching for %p)\n",m_Interpreter.getLastTransaction(),unloadPoint);
+          while(getInterpreter().getLastTransaction() != unloadPoint) {
+             //fprintf(stderr,"DEBUG: unload transaction %p (searching for %p)\n",getInterpreter().getLastTransaction(),unloadPoint);
             const clang::FileEntry* EntryUnloaded
-              = m_Watermarks->second[m_Interpreter.getLastTransaction()];
+              = m_Watermarks->second[getInterpreter().getLastTransaction()];
             if (EntryUnloaded) {
               Watermarks::iterator PosUnloaded
                 = m_Watermarks->first.find(EntryUnloaded);
@@ -474,10 +474,10 @@ namespace cling {
                 m_Watermarks->first.erase(PosUnloaded);
               }
             }
-            m_Interpreter.unload(/*numberOfTransactions*/1);
+            getInterpreter().unload(/*numberOfTransactions*/1);
           }
         }
-        DynamicLibraryManager* DLM = m_Interpreter.getDynamicLibraryManager();
+        DynamicLibraryManager* DLM = getInterpreter().getDynamicLibraryManager();
         DLM->unloadLibrary(std::move(fe));
         m_Watermarks->first.erase(Pos);
       }
@@ -486,29 +486,29 @@ namespace cling {
   }
   MetaSema::ActionResult MetaSema::actOnUCommand(llvm::StringRef file) {
     //Get the canonical path, taking into account interp and system search paths
-    return actOnUCommand(file, m_Interpreter.lookupFileOrLibrary(file));
+    return actOnUCommand(file, getInterpreter().lookupFileOrLibrary(file));
   }
 
   void MetaSema::actOnICommand(llvm::StringRef path) const {
     if (path.empty())
-      m_Interpreter.DumpIncludePath();
+      getInterpreter().DumpIncludePath();
     else
-      m_Interpreter.AddIncludePath(path.str());
+      getInterpreter().AddIncludePath(path.str());
   }
 
   void MetaSema::actOnrawInputCommand(SwitchMode mode/* = kToggle*/) const {
     if (mode == kToggle) {
-      bool flag = !m_Interpreter.isRawInputEnabled();
-      m_Interpreter.enableRawInput(flag);
+      bool flag = !getInterpreter().isRawInputEnabled();
+      getInterpreter().enableRawInput(flag);
       // FIXME:
       m_MetaProcessor.getOuts() << (flag ? "U" :"Not u") << "sing raw input\n";
     }
     else
-      m_Interpreter.enableRawInput(mode);
+      getInterpreter().enableRawInput(mode);
   }
 
   void MetaSema::actOndebugCommand(llvm::Optional<int> mode) const {
-    clang::CodeGenOptions& CGO = m_Interpreter.getCI()->getCodeGenOpts();
+    clang::CodeGenOptions& CGO = getInterpreter().getCI()->getCodeGenOpts();
     if (!mode) {
       bool flag = CGO.getDebugInfo() == clang::codegenoptions::NoDebugInfo;
       if (flag)
@@ -544,49 +544,49 @@ namespace cling {
 
   void MetaSema::actOnprintDebugCommand(SwitchMode mode/* = kToggle*/) const {
     if (mode == kToggle) {
-      bool flag = !m_Interpreter.isPrintingDebug();
-      m_Interpreter.enablePrintDebug(flag);
+      bool flag = !getInterpreter().isPrintingDebug();
+      getInterpreter().enablePrintDebug(flag);
       // FIXME:
       m_MetaProcessor.getOuts() << (flag ? "P" : "Not p") << "rinting Debug\n";
     }
     else
-      m_Interpreter.enablePrintDebug(mode);
+      getInterpreter().enablePrintDebug(mode);
   }
 
   void MetaSema::actOnstoreStateCommand(llvm::StringRef name) const {
-    m_Interpreter.storeInterpreterState(name);
+    getInterpreter().storeInterpreterState(name);
   }
 
   void MetaSema::actOncompareStateCommand(llvm::StringRef name) const {
-    m_Interpreter.compareInterpreterState(name);
+    getInterpreter().compareInterpreterState(name);
   }
 
   void MetaSema::actOnstatsCommand(llvm::StringRef name) const {
     if (name.equals("decl")) {
       ClangInternalState::printLookupTables(m_MetaProcessor.getOuts(),
-       m_Interpreter.getCI()->getSema().getASTContext());
+       getInterpreter().getCI()->getSema().getASTContext());
     }
     else if (name.equals("ast"))
-      m_Interpreter.getCI()->getSema().getASTContext().PrintStats();
+      getInterpreter().getCI()->getSema().getASTContext().PrintStats();
     else if (name.equals("undo"))
-      m_Interpreter.getIncrParser().printTransactionStructure();
+      getInterpreter().getIncrParser().printTransactionStructure();
   }
 
   void MetaSema::actOndynamicExtensionsCommand(SwitchMode mode/* = kToggle*/)
     const {
     if (mode == kToggle) {
-      bool flag = !m_Interpreter.isDynamicLookupEnabled();
-      m_Interpreter.enableDynamicLookup(flag);
+      bool flag = !getInterpreter().isDynamicLookupEnabled();
+      getInterpreter().enableDynamicLookup(flag);
       // FIXME:
       m_MetaProcessor.getOuts()
         << (flag ? "U" : "Not u") << "sing dynamic extensions\n";
     }
     else
-      m_Interpreter.enableDynamicLookup(mode);
+      getInterpreter().enableDynamicLookup(mode);
   }
 
   void MetaSema::actOnhelpCommand() const {
-    std::string& metaString = m_Interpreter.getOptions().MetaString;
+    std::string& metaString = getInterpreter().getOptions().MetaString;
     llvm::raw_ostream& outs = m_MetaProcessor.getOuts();
     outs << "\n Cling (C/C++ interpreter) meta commands usage\n"
       " All commands must be preceded by a '" << metaString << "', except\n"
@@ -652,7 +652,7 @@ namespace cling {
   }
 
   void MetaSema::actOnfileExCommand() const {
-    const clang::SourceManager& SM = m_Interpreter.getCI()->getSourceManager();
+    const clang::SourceManager& SM = getInterpreter().getCI()->getSourceManager();
     SM.getFileManager().PrintStats();
 
     m_MetaProcessor.getOuts() << "\n***\n\n";
@@ -663,7 +663,7 @@ namespace cling {
       m_MetaProcessor.getOuts() << "\n";
     }
     /* Only available in clang's trunk:
-    clang::ASTReader* Reader = m_Interpreter.getCI()->getModuleManager();
+    clang::ASTReader* Reader = getInterpreter().getCI()->getModuleManager();
     const clang::serialization::ModuleManager& ModMan
       = Reader->getModuleManager();
     for (clang::serialization::ModuleManager::ModuleConstIterator I
@@ -682,39 +682,39 @@ namespace cling {
   }
 
   void MetaSema::actOnfilesCommand() const {
-    m_Interpreter.printIncludedFiles(m_MetaProcessor.getOuts());
+    getInterpreter().printIncludedFiles(m_MetaProcessor.getOuts());
   }
 
   void MetaSema::actOnclassCommand(llvm::StringRef className) const {
     if (!className.empty())
       DisplayClass(m_MetaProcessor.getOuts(),
-                   &m_Interpreter, className.str().c_str(), true);
+                   &getInterpreter(), className.str().c_str(), true);
     else
-      DisplayClasses(m_MetaProcessor.getOuts(), &m_Interpreter, false);
+      DisplayClasses(m_MetaProcessor.getOuts(), &getInterpreter(), false);
   }
 
   void MetaSema::actOnClassCommand() const {
-    DisplayClasses(m_MetaProcessor.getOuts(), &m_Interpreter, true);
+    DisplayClasses(m_MetaProcessor.getOuts(), &getInterpreter(), true);
   }
 
   void MetaSema::actOnNamespaceCommand() const {
-    DisplayNamespaces(m_MetaProcessor.getOuts(), &m_Interpreter);
+    DisplayNamespaces(m_MetaProcessor.getOuts(), &getInterpreter());
   }
 
   void MetaSema::actOngCommand(llvm::StringRef varName) const {
     if (varName.empty())
-      DisplayGlobals(m_MetaProcessor.getOuts(), &m_Interpreter);
+      DisplayGlobals(m_MetaProcessor.getOuts(), &getInterpreter());
     else
       DisplayGlobal(m_MetaProcessor.getOuts(),
-                    &m_Interpreter, varName.str().c_str());
+                    &getInterpreter(), varName.str().c_str());
   }
 
   void MetaSema::actOnTypedefCommand(llvm::StringRef typedefName) const {
     if (typedefName.empty())
-      DisplayTypedefs(m_MetaProcessor.getOuts(), &m_Interpreter);
+      DisplayTypedefs(m_MetaProcessor.getOuts(), &getInterpreter());
     else
       DisplayTypedef(m_MetaProcessor.getOuts(),
-                     &m_Interpreter, typedefName.str().c_str());
+                     &getInterpreter(), typedefName.str().c_str());
   }
 
   MetaSema::ActionResult
@@ -725,9 +725,9 @@ namespace cling {
       int ret = std::system(trimmed.str().c_str());
 
       // Build the result
-      clang::ASTContext& Ctx = m_Interpreter.getCI()->getASTContext();
+      clang::ASTContext& Ctx = getInterpreter().getCI()->getASTContext();
       if (result) {
-        *result = Value(Ctx.IntTy, m_Interpreter);
+        *result = Value(Ctx.IntTy, getInterpreter());
         result->getAs<long long>() = ret;
       }
 
@@ -741,14 +741,14 @@ namespace cling {
 
   bool MetaSema::registerUnloadPoint(const Transaction* unloadPoint,
                                      FileEntry inEntry ) {
-    FileEntry fileEntry = m_Interpreter.lookupFileOrLibrary(std::move(inEntry));
+    FileEntry fileEntry = getInterpreter().lookupFileOrLibrary(std::move(inEntry));
     const clang::FileEntry* Entry = fileEntry;
     if (!Entry) {
       // There's a small chance clang couldn't resolve the relative path, and
       // fileEntry now contains a resolved absolute one.
       if (fileEntry.resolved())
         Entry =
-          m_Interpreter.getSema().getSourceManager().getFileManager().getFile(
+          getInterpreter().getSema().getSourceManager().getFileManager().getFile(
               fileEntry.name(), /*OpenFile*/ false, /*CacheFailure*/ false);
     }
     if (Entry) {
@@ -765,10 +765,10 @@ namespace cling {
         m_Watermarks->second[unloadPoint] = Entry;
         return true;
       }
-      m_Interpreter.getCI()->getDiagnostics().Report(clang::SourceLocation(),
+      getInterpreter().getCI()->getDiagnostics().Report(clang::SourceLocation(),
                          clang::diag::err_duplicate_member) << fileEntry.name();
     } else {
-      m_Interpreter.getCI()->getDiagnostics().Report(clang::SourceLocation(),
+      getInterpreter().getCI()->getDiagnostics().Report(clang::SourceLocation(),
                         clang::diag::err_pp_file_not_found) << fileEntry.name();
     }
     return false;

@@ -233,9 +233,8 @@ namespace cling {
   }
 
   MetaProcessor::MetaProcessor(Interpreter& interp, raw_ostream& outs)
-    : m_Interp(interp), m_Outs(&outs) {
-    m_InputValidator.reset(new InputValidator());
-    m_Actions.reset(new MetaSema(interp,*this));
+    : m_Interp(interp), m_InputValidator(new InputValidator),
+      m_Actions(new MetaSema(*this)), m_Outs(&outs) {
   }
 
   MetaProcessor::~MetaProcessor() {
