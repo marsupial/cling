@@ -411,29 +411,55 @@ static bool doShellCommand(CommandArguments& Params) {
 }
 }
 
-template <>
-void CommandTable::add<CommandTable::CommandObj::CommandCallback0>(
+CommandTable::~CommandTable() {
+  std::set<CommandObj*> done;
+  for (auto& CmdPair : m_Commands) {
+    CommandObj* Cmd = CmdPair.second;
+    if (done.insert(Cmd).second)
+      delete Cmd;
+  }
+}
+
+CommandTable::CommandObj*
+CommandTable::add(const char* Name, CommandObj* Cmd) {
+  if (Cmd) {
+    CommandObj*& Old = m_Commands[Name];
+    if (Old && Old != Cmd)
+      delete Old;
+    Old = Cmd;
+  }
+  return Cmd;
+}
+
+template <> CommandTable::CommandObj*
+CommandTable::add<CommandTable::CommandObj::CommandCallback0>(
     const char* Name, CommandObj::CommandCallback0 Callback, const char* Syntax,
     const char* Help, unsigned Flags) {
   assert(!(Flags&kCmdCallback1) && "Cannot set kCmdCallback1 flag");
-  CommandObj& Cmd = m_Commands[Name];
-  Cmd.Callback.Callback0 = Callback;
-  Cmd.Syntax = Syntax;
-  Cmd.Help = Help;
-  Cmd.Flags = Flags;
+  if (CommandObj* Cmd = new CommandObj) {
+    Cmd->Callback.Callback0 = Callback;
+    Cmd->Syntax = Syntax;
+    Cmd->Help = Help;
+    Cmd->Flags = Flags;
+    return add(Name, Cmd);
+  }
+  return nullptr;
 }
 
-template <>
-void CommandTable::add<CommandTable::CommandObj::CommandCallback1>(
+template <> CommandTable::CommandObj*
+CommandTable::add<CommandTable::CommandObj::CommandCallback1>(
     const char* Name, CommandObj::CommandCallback1 Callback, const char* Syntax,
     const char* Help, unsigned Flags) {
   assert(!(Flags&kCmdCustomSyntax) && "Cannot set kCmdCustomSyntax flag");
   Flags |= kCmdCallback1;
-  CommandObj& Cmd = m_Commands[Name];
-  Cmd.Callback.Callback1 = Callback;
-  Cmd.Syntax = Syntax;
-  Cmd.Help = Help;
-  Cmd.Flags = Flags;
+  if (CommandObj* Cmd = new CommandObj) {
+    Cmd->Callback.Callback1 = Callback;
+    Cmd->Syntax = Syntax;
+    Cmd->Help = Help;
+    Cmd->Flags = Flags;
+    return add(Name, Cmd);
+  }
+  return nullptr;
 }
 
 CommandTable* CommandTable::create() {
@@ -443,10 +469,10 @@ CommandTable* CommandTable::create() {
     sCommands.add("L", &doLCommand, "<file|library>[//]",
                   "Load the given file(s) executing the last comment if given");
 
-    sCommands.add("x", &doXCommand, "<filename>[args]",
-      "Same as .L and runs a function with signature: ret_type filename(args)");
-    sCommands.add("X", &doXCommand, "<filename>[args]",
-      "Same as .L and runs a function with signature: ret_type filename(args)");
+    sCommands.add("x",
+      sCommands.add("X", &doXCommand, "<filename>[args]",
+        "Same as .L and runs a function with signature: "
+        "ret_type filename(args)"));
 
     sCommands.add(">", &doRedirectCommand, "<filename>",
       "Redirect command to a given file\n"
@@ -473,8 +499,9 @@ CommandTable* CommandTable::create() {
     sCommands.add("@", &doAtCommand, nullptr,
       "Cancels and ignores the multiline input");
 
-    sCommands.add("class", &doClassCommand, "<name>",
-      "Prints out class <name> in a CINT-like style");
+    sCommands.add("Class",
+      sCommands.add("class", &doClassCommand, "<name>",
+        "Prints out class <name> in a CINT-like style"));
 
     sCommands.add("dynamicExtensions", &doDynamicExtensionsCommand, "[0|1]",
       "Toggles the use of the dynamic scopes and the late binding");
@@ -506,13 +533,14 @@ CommandTable* CommandTable::create() {
       "\n\t\t\t\t  'decl' dump ast declarations"
       "\n\t\t\t\t  'undo' show undo stack", kCmdDebug);
 
-    sCommands.add("help", &doHelpCommand, nullptr, "Shows this information");
-    sCommands.add("?", &doHelpCommand, nullptr, "Shows this information");
+    sCommands.add("?",
+      sCommands.add("help", &doHelpCommand, nullptr, "Shows this information"));
+
     sCommands.add("q", &doQCommand, nullptr, "Exit the program");
   
     sCommands.add("T", doTCommand);
-    sCommands.add("!", doShellCommand);
-    sCommands.add("/", doShellCommand);
+    sCommands.add("/", sCommands.add("!", doShellCommand, nullptr,
+                             "Run shell command", kCmdCustomSyntax));
 
     sCommands.add("debug", doDebugCommand, nullptr, nullptr, kCmdDebug);
     sCommands.add("namespace", doNamespaceCommand, nullptr, nullptr, kCmdDebug);
@@ -522,16 +550,16 @@ CommandTable* CommandTable::create() {
 }
 
 bool CommandTable::sort(
-                 const llvm::StringMap<CommandTable::CommandObj>::iterator& A,
-                 const llvm::StringMap<CommandTable::CommandObj>::iterator& B) {
+                 const llvm::StringMap<CommandTable::CommandObj*>::iterator& A,
+                 const llvm::StringMap<CommandTable::CommandObj*>::iterator& B) {
 
-  const CommandObj& LHS = A->second, & RHS = B->second;
-  if (RHS.Flags & kCmdExperimental) {
-    if (!(LHS.Flags & kCmdExperimental))
+  const CommandObj* LHS = A->second, * RHS = B->second;
+  if (RHS->Flags & kCmdExperimental) {
+    if (!(LHS->Flags & kCmdExperimental))
       return true;
   }
-  else if (RHS.Flags & kCmdDebug) {
-    if (!(LHS.Flags & kCmdDebug))
+  else if (RHS->Flags & kCmdDebug) {
+    if (!(LHS->Flags & kCmdDebug))
       return true;
   }
   // Sorth alphabetically, with alphanumeric chars first
@@ -545,10 +573,11 @@ bool CommandTable::sort(
 
 bool CommandTable::doHelpCommand(CommandArguments& Params) {
   CommandTable* Cmds = CommandTable::create();
-  std::vector<llvm::StringMap<CommandObj>::iterator> sorted;
 
+  std::vector<llvm::StringMap<CommandObj*>::iterator> sorted;
   sorted.reserve(Cmds->m_Commands.size());
-  for (llvm::StringMap<CommandObj>::iterator itr = Cmds->m_Commands.begin(),
+
+  for (llvm::StringMap<CommandObj*>::iterator itr = Cmds->m_Commands.begin(),
        end = Cmds->m_Commands.end(); itr != end; ++itr)
     sorted.push_back(itr);
   
@@ -567,24 +596,24 @@ bool CommandTable::doHelpCommand(CommandArguments& Params) {
 
   llvm::SmallString<80> Buf;
   for (const auto& CmdPair : sorted) {
-    const CommandObj& Cmd = CmdPair->second;
+    const CommandObj* Cmd = CmdPair->second;
     Out << "   " << Meta;
     const llvm::StringRef CmdName = CmdPair->first();
-    if (Cmd.Syntax) {
+    if (Cmd->Syntax) {
       Buf.resize(0);
       llvm::Twine Joined(CmdName, " ");
-      Out << llvm::left_justify(Joined.concat(Cmd.Syntax).toStringRef(Buf), col0);
+      Out << llvm::left_justify(Joined.concat(Cmd->Syntax).toStringRef(Buf), col0);
     } else
       Out << llvm::left_justify(CmdName, col0);
   
-    if (Cmd.Help) {
-      llvm::StringRef Help(Cmd.Help);
+    if (Cmd->Help) {
+      llvm::StringRef Help(Cmd->Help);
       const unsigned col1 = columns - col0;
       std::string indent;
       size_t eol = Help.find('\n');
       if (eol == llvm::StringRef::npos)
         eol = Help.size();
-      if (!(Cmd.Flags & kCmdCustomSyntax) &&
+      if (!(Cmd->Flags & kCmdCustomSyntax) &&
           eol != llvm::StringRef::npos && eol > col1 ) {
         do {
           for (unsigned i = col1; i > 0; --i) {
@@ -620,14 +649,14 @@ CommandTable::execute(llvm::StringRef CmdStr, const MetaProcessor* Mp, Value* Va
   CommandArguments CmdArgs(CmdStr, Mp, Val);
 
   const Argument Arg0 = CmdArgs.curArg();
-  llvm::StringMap<CommandObj>::iterator CmdItr =
-         m_Commands.find(llvm::StringRef(Arg0.getBufStart(), Arg0.getLength()));
+  llvm::StringMap<CommandObj*>::iterator CmdItr = m_Commands.find(
+                         llvm::StringRef(Arg0.getBufStart(), Arg0.getLength()));
 
   if (CmdItr == Cmds->m_Commands.end()) {
     for (auto& CmdPair : Cmds->m_Commands) {
-      const CommandObj& Cmd = CmdPair.second;
-      if (Cmd.Flags & kCmdCustomSyntax) {
-        if (Cmd.Callback.Callback0(CmdArgs))
+      const CommandObj* Cmd = CmdPair.second;
+      if (Cmd->Flags & kCmdCustomSyntax) {
+        if (Cmd->Callback.Callback0(CmdArgs))
           return CmdArgs.Result == MetaSema::AR_Success ? 1 : -1;
       }
     }
@@ -635,16 +664,16 @@ CommandTable::execute(llvm::StringRef CmdStr, const MetaProcessor* Mp, Value* Va
     return 0;
   }
 
-  const CommandObj& Cmd = CmdItr->second;
-  if (Cmd.Flags & kCmdCallback1) {
+  const CommandObj* Cmd = CmdItr->second;
+  if (Cmd->Flags & kCmdCallback1) {
     llvm::StringRef Argument = CmdArgs.nextString();
     do {
-      if (!Cmd.Callback.Callback1(CmdArgs, Argument))
+      if (!Cmd->Callback.Callback1(CmdArgs, Argument))
         return 0;
       Argument = CmdArgs.nextString();
     } while (!Argument.empty());
     
-  } else if (!Cmd.Callback.Callback0(CmdArgs))
+  } else if (!Cmd->Callback.Callback0(CmdArgs))
     return 0;
 
   return CmdArgs.Result == MetaSema::AR_Success ? 1 : -1;
