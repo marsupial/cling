@@ -118,7 +118,7 @@ namespace cling {
   MetaProcessor::MetaProcessor(Interpreter& interp, raw_ostream& outs)
     : m_Interp(interp), m_Outs(&outs) {
     m_InputValidator.reset(new InputValidator());
-    m_MetaParser.reset(new MetaParser(interp,*this));
+    m_Actions.reset(new MetaSema(interp,*this));
     m_backupFDStdout = copyFileDescriptor(STDOUT_FILENO);
     m_backupFDStderr = copyFileDescriptor(STDERR_FILENO);
   }
@@ -126,6 +126,23 @@ namespace cling {
   MetaProcessor::~MetaProcessor() {
     close(m_backupFDStdout);
     close(m_backupFDStderr);
+  }
+
+  Interpreter::CompilationResult
+  MetaProcessor::doMetaCommand(llvm::StringRef cmd, Value* result) const {
+    // Init the parser
+    MetaParser parser(cmd, *m_Actions);
+    MetaSema::ActionResult actionResult = MetaSema::AR_Failure;
+    if (parser.doMetaCommand(actionResult, result)) {
+      return actionResult == MetaSema::AR_Success ? Interpreter::kSuccess :
+                                                    Interpreter::kFailure;
+    }
+    return Interpreter::kMoreInputExpected;
+  }
+
+  static size_t isMetaCommand(const std::string& str, const std::string& meta) {
+    const size_t metaLen = meta.size();
+    return !str.compare(0, metaLen, meta) && str.size() > metaLen ? metaLen : 0;
   }
 
   int MetaProcessor::process(const char* input_text,
@@ -146,19 +163,19 @@ namespace cling {
     if (input_line == "\n") { // just a blank line, nothing to do.
       return expectedIndent;
     }
-    //  Check for and handle meta commands.
-    m_MetaParser->enterNewInputLine(input_line);
-    MetaSema::ActionResult actionResult = MetaSema::AR_Success;
-    if (!m_InputValidator->inBlockComment() &&
-         m_MetaParser->doMetaCommand(actionResult, result)) {
 
-      if (m_MetaParser->isQuitRequested())
-        return -1;
+    if (!m_InputValidator->inBlockComment()) {
+      //  Check for and handle meta commands.
+      if (const size_t sz = isMetaCommand(input_line,
+                                          m_Interp.getOptions().MetaString)) {
+        // Skip over the symbols marking this as a command input
+        compRes = doMetaCommand(llvm::StringRef(input_line).substr(sz), result);
+        if (m_Actions->isQuitRequested())
+          return -1;
 
-      if (actionResult != MetaSema::AR_Success)
-        compRes = Interpreter::kFailure;
-       // ExpectedIndent might have changed after meta command.
-       return m_InputValidator->getExpectedIndent();
+        // ExpectedIndent might have changed after meta command.
+        return m_InputValidator->getExpectedIndent();
+      }
     }
 
     // Check if the current statement is now complete. If not, return to
@@ -349,7 +366,7 @@ namespace cling {
 
   bool MetaProcessor::registerUnloadPoint(const Transaction* T,
                                           llvm::StringRef filename) {
-    return m_MetaParser->getActions().registerUnloadPoint(T, filename);
+    return m_Actions->registerUnloadPoint(T, filename);
   }
 
 } // end namespace cling
