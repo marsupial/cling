@@ -236,7 +236,10 @@ namespace cling {
     /// reverted when filename is unloaded.
     ///\param [in] filename - The name of the file to be used as unload
     ///  point.
-    void registerUnloadPoint(const Transaction* T, FileEntry filename);
+    ///
+    ///\returns Whether registration was successful or not.
+    ///
+    bool registerUnloadPoint(const Transaction* T, FileEntry filename);
 
   };
 
