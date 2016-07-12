@@ -582,15 +582,13 @@ bool CommandTable::doHelpCommand(CommandArguments& Params) {
     sorted.push_back(itr);
   
   std::sort(sorted.begin(), sorted.end(), &CommandTable::sort);
-  
-  const unsigned col0 = 25, columns = 80;
 
   std::string& Meta = Params.Processor->getInterpreter().getOptions().MetaString;
   llvm::raw_ostream& Out = Params.Processor->getOuts();
   Out << "\n Cling (C/C++ interpreter) meta commands usage\n"
     " All commands must be preceded by a '" << Meta << "', except\n"
     " for the evaluation statement { }\n" <<
-    std::string(columns, '=') << "\n" <<
+    std::string(80, '=') << "\n" <<
     " Syntax: " << Meta << "Command [arg0 arg1 ... argN]\n"
     "\n";
 
@@ -602,38 +600,13 @@ bool CommandTable::doHelpCommand(CommandArguments& Params) {
     if (Cmd->Syntax) {
       Buf.resize(0);
       llvm::Twine Joined(CmdName, " ");
-      Out << llvm::left_justify(Joined.concat(Cmd->Syntax).toStringRef(Buf), col0);
+      Out << llvm::left_justify(Joined.concat(Cmd->Syntax).toStringRef(Buf), 25);
     } else
-      Out << llvm::left_justify(CmdName, col0);
-  
-    if (Cmd->Help) {
-      llvm::StringRef Help(Cmd->Help);
-      const unsigned col1 = columns - col0;
-      std::string indent;
-      size_t eol = Help.find('\n');
-      if (eol == llvm::StringRef::npos)
-        eol = Help.size();
-      if (!(Cmd->Flags & kCmdCustomSyntax) &&
-          eol != llvm::StringRef::npos && eol > col1 ) {
-        do {
-          for (unsigned i = col1; i > 0; --i) {
-            if (::isspace(Help[i])) {
-              Out << indent << Help.substr(0, i) << "\n";
-              while (i && ::isspace(Help[i]))
-                ++i;
-              Help = Help.drop_front(i);
-              if (indent.empty())
-                std::string(col0+8, ' ').swap(indent);
-              break;
-            }
-          }
-          eol = Help.find('\n');
-          if (eol == llvm::StringRef::npos)
-            eol = Help.size();
-        } while (eol != llvm::StringRef::npos && eol > col1);
-      }
-      Out << indent << Help;
-    }
+      Out << llvm::left_justify(CmdName, 25);
+
+    if (Cmd->Help)
+      Out << Cmd->Help;
+
     Out << "\n";
   }
   Out << "\n";
