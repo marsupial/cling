@@ -571,8 +571,36 @@ bool CommandTable::sort(
   return A->first() < B->first();
 }
 
-bool CommandTable::doHelpCommand(CommandArguments& Params) {
+void CommandTable::showHelp(const llvm::StringMap<CommandObj*>::iterator& Itr,
+                            llvm::raw_ostream& Out) {
+  const CommandObj* Cmd = Itr->second;
+  const llvm::StringRef CmdName = Itr->first();
+  if (Cmd->Syntax) {
+    llvm::SmallString<80> Buf;
+    llvm::Twine Joined(CmdName, " ");
+    Out << llvm::left_justify(Joined.concat(Cmd->Syntax).toStringRef(Buf),
+                                            25);
+  } else
+    Out << llvm::left_justify(CmdName, 25);
+
+  if (Cmd->Help)
+    Out << Cmd->Help;
+
+  Out << "\n";
+}
+
+bool CommandTable::doHelpCommand(CommandArguments& Params,
+                                 llvm::StringRef Cmd) {
   CommandTable* Cmds = CommandTable::create();
+
+  if (!Cmd.empty()) {
+    llvm::StringMap<CommandObj*>::iterator itr = Cmds->m_Commands.find(Cmd);
+    if (itr != Cmds->m_Commands.end())
+      showHelp(itr, Params.Output);
+    else
+      Params.Output << "Command '" << Cmd << "' not found.\n";
+    return true;
+  }
 
   std::vector<llvm::StringMap<CommandObj*>::iterator> sorted;
   sorted.reserve(Cmds->m_Commands.size());
@@ -592,22 +620,9 @@ bool CommandTable::doHelpCommand(CommandArguments& Params) {
     " Syntax: " << Meta << "Command [arg0 arg1 ... argN]\n"
     "\n";
 
-  llvm::SmallString<80> Buf;
   for (const auto& CmdPair : sorted) {
-    const CommandObj* Cmd = CmdPair->second;
     Out << "   " << Meta;
-    const llvm::StringRef CmdName = CmdPair->first();
-    if (Cmd->Syntax) {
-      Buf.resize(0);
-      llvm::Twine Joined(CmdName, " ");
-      Out << llvm::left_justify(Joined.concat(Cmd->Syntax).toStringRef(Buf), 25);
-    } else
-      Out << llvm::left_justify(CmdName, 25);
-
-    if (Cmd->Help)
-      Out << Cmd->Help;
-
-    Out << "\n";
+    showHelp(CmdPair, Out);
   }
   Out << "\n";
   return true;
@@ -641,13 +656,17 @@ CommandTable::execute(llvm::StringRef CmdStr, const MetaProcessor* Mp, Value* Va
   if (Cmd->Flags & kCmdCallback1) {
     llvm::StringRef Argument = CmdArgs.nextString();
     do {
-      if (!Cmd->Callback.Callback1(CmdArgs, Argument))
+      if (!Cmd->Callback.Callback1(CmdArgs, Argument)) {
+        showHelp(CmdItr, Output);
         return 0;
+      }
       Argument = CmdArgs.nextString();
     } while (!Argument.empty());
     
-  } else if (!Cmd->Callback.Callback0(CmdArgs))
+  } else if (!Cmd->Callback.Callback0(CmdArgs)) {
+    showHelp(CmdItr, Output);
     return 0;
+  }
 
   return CmdArgs.Result == MetaSema::AR_Success ? 1 : -1;
 }

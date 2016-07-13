@@ -40,7 +40,9 @@ namespace cling {
       };
       llvm::StringMap<CommandObj*> m_Commands;
 
-      static bool doHelpCommand(CommandArguments& Params);
+      static void showHelp(const llvm::StringMap<CommandObj*>::iterator&,
+                           llvm::raw_ostream& Out);
+      static bool doHelpCommand(CommandArguments& Params, llvm::StringRef Cmd);
       static bool sort(const llvm::StringMap<CommandObj*>::iterator&,
                        const llvm::StringMap<CommandObj*>::iterator&);
 
