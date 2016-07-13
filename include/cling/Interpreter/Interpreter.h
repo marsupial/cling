@@ -92,6 +92,7 @@ namespace cling {
     private:
       const Interpreter* m_Interpreter;
       std::unique_ptr<ClangInternalState> m_State;
+      const bool m_Active;
     public:
       StateDebuggerRAII(const Interpreter* i);
       ~StateDebuggerRAII();

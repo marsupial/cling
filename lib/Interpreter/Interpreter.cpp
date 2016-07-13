@@ -106,21 +106,21 @@ namespace cling {
   }
 
   Interpreter::StateDebuggerRAII::StateDebuggerRAII(const Interpreter* i)
-    : m_Interpreter(i) {
-    if (!i->isPrintingDebug())
-      return;
-    const CompilerInstance& CI = *m_Interpreter->getCI();
-    CodeGenerator* CG = i->m_IncrParser->getCodeGenerator();
+    : m_Interpreter(i), m_Active(i->isPrintingDebug()) {
+    if (m_Active) {
+      const CompilerInstance& CI = *m_Interpreter->getCI();
+      CodeGenerator* CG = i->m_IncrParser->getCodeGenerator();
 
-    // The ClangInternalState constructor can provoke deserialization,
-    // we need a transaction.
-    PushTransactionRAII pushedT(i);
+      // The ClangInternalState constructor can provoke deserialization,
+      // we need a transaction.
+      PushTransactionRAII pushedT(i);
 
-    m_State.reset(new ClangInternalState(CI.getASTContext(),
-                                         CI.getPreprocessor(),
-                                         CG ? CG->GetModule() : 0,
-                                         CG,
-                                         "aName"));
+      m_State.reset(new ClangInternalState(CI.getASTContext(),
+                                           CI.getPreprocessor(),
+                                           CG ? CG->GetModule() : 0,
+                                           CG,
+                                           "aName"));
+    }
   }
 
   Interpreter::StateDebuggerRAII::~StateDebuggerRAII() {
@@ -132,9 +132,8 @@ namespace cling {
   }
 
   void Interpreter::StateDebuggerRAII::pop() const {
-    if (!m_Interpreter->isPrintingDebug())
-      return;
-    m_State->compare("aName");
+    if (m_Active)
+      m_State->compare("aName");
   }
 
   Interpreter::TransactionMerge::TransactionMerge(Interpreter *interp,
