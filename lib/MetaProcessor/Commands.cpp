@@ -7,12 +7,22 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-#include "CommandTable.h"
+#include "cling/MetaProcessor/CommandTable.h"
 #include "MetaParser.h"
 #include "MetaSema.h"
+#include "Display.h"
+
+#include "../lib/Interpreter/IncrementalParser.h"
+#include "cling/Interpreter/ClangInternalState.h"
+#include "cling/Interpreter/Interpreter.h"
 #include "cling/MetaProcessor/MetaProcessor.h"
 #include "cling/Interpreter/Value.h"
+
 #include "llvm/Support/Format.h"
+#include "clang/Sema/Sema.h"
+#include "clang/Basic/SourceManager.h"
+#include "clang/Serialization/ASTReader.h"
+#include "clang/Frontend/CompilerInstance.h"
 
 namespace cling {
 namespace meta {
@@ -43,15 +53,26 @@ class CommandArguments
   }
   
 public:
-  const MetaProcessor *Processor; // Can be null!
+  enum SwitchMode {
+    kOff = 0,
+    kOn = 1,
+    kToggle = 2
+  };
+  
+  Interpreter& Interpreter;
+  llvm::raw_ostream& Output;
+  const StringRef CommandName;
+  MetaProcessor *Processor; // Can be null!
   MetaSema::ActionResult Result;
   Value* OutValue;
 
-  CommandArguments(llvm::StringRef Cmd, const MetaProcessor* Pr, Value* V) :
-    m_Parser(Cmd), Processor(Pr), Result(MetaSema::AR_Success), OutValue(V) {
+  CommandArguments(llvm::StringRef Cmd, class Interpreter& I,
+                   llvm::raw_ostream& Out, MetaProcessor* Pr, Value* V)
+    : m_Parser(Cmd), Interpreter(I), Output(Out), CommandName(Cmd),
+      Processor(Pr), Result(MetaSema::AR_Success), OutValue(V) {
     if (OutValue) *OutValue = Value();
   }
-
+  
   const Argument& nextArg(unsigned tk) {
     m_Parser.consumeAnyStringToken(tok::TokenKind(tk));
     return m_Parser.getCurTok();
@@ -69,16 +90,15 @@ public:
     return value;
   }
 
-  MetaSema::SwitchMode modeToken() {
+  SwitchMode modeToken() {
     llvm::Optional<int> mode = optionalInt();
-    return mode.hasValue() ? MetaSema::SwitchMode(mode.getValue()) : MetaSema::kToggle;
+    return mode.hasValue() ? SwitchMode(mode.getValue()) : kToggle;
   }
 
   const Argument&  curArg ()     { return m_Parser.getCurTok(); }
   llvm::StringRef  remaining()   { return argumentAsString(nextArg(tok::eof)); }
   const Argument&  nextArg()     { return skipToNextToken(); }
   llvm::StringRef  nextString()  { return argumentAsString(nextArg(tok::space));}
-  bool             hadMore()     { return nextArg(tok::eof).is(tok::raw_ident); }
 
   MetaSema& actions() const {
     assert(Processor && "MetaProcessor not available");
@@ -137,7 +157,7 @@ static bool doLCommand(CommandArguments& Params) {
 
     const Argument &arg = Params.nextArg(tok::comment|tok::space);
     if (arg.is(tok::comment)) {
-      Params.actions().actOnComment(Params.remaining());
+      Params.Interpreter.declare(Params.remaining());
       break;
     }
 
@@ -171,7 +191,7 @@ static bool doTCommand(CommandArguments& Params) {
   if (!inputFile.empty()) {
     const llvm::StringRef outputFile = Params.nextString();
     if (!outputFile.empty()) {
-      Params.Result = Params.actions().actOnTCommand(inputFile, outputFile);
+      Params.Interpreter.GenerateAutoloadingMap(inputFile, outputFile);
       return true;
     }
   }
@@ -196,111 +216,207 @@ static bool doXCommand(CommandArguments& Params) {
   return true;
 }
 
-static bool doQCommand(CommandArguments& Params) {
-  Params.actions().actOnqCommand();
+static bool doDebugCommand(CommandArguments& Params) {
+  llvm::Optional<int> mode = Params.optionalInt();
+
+  clang::CodeGenOptions& CGO = Params.Interpreter.getCI()->getCodeGenOpts();
+  if (!mode) {
+    bool flag = CGO.getDebugInfo() == clang::codegenoptions::NoDebugInfo;
+    if (flag)
+      CGO.setDebugInfo(clang::codegenoptions::LimitedDebugInfo);
+    else
+      CGO.setDebugInfo(clang::codegenoptions::NoDebugInfo);
+    // FIXME:
+    Params.Output << (flag ? "G" : "Not g") << "enerating debug symbols\n";
+  }
+  else {
+    static const int NumDebInfos = 5;
+    clang::codegenoptions::DebugInfoKind DebInfos[NumDebInfos] = {
+      clang::codegenoptions::NoDebugInfo,
+      clang::codegenoptions::LocTrackingOnly,
+      clang::codegenoptions::DebugLineTablesOnly,
+      clang::codegenoptions::LimitedDebugInfo,
+      clang::codegenoptions::FullDebugInfo
+    };
+    if (*mode >= NumDebInfos)
+      mode = NumDebInfos - 1;
+    else if (*mode < 0)
+      mode = 0;
+    CGO.setDebugInfo(DebInfos[*mode]);
+    if (!*mode) {
+      Params.Output << "Not generating debug symbols\n";
+    } else {
+      Params.Output << "Generating debug symbols level " << *mode << '\n';
+    }
+  }
   return true;
 }
 
-static bool doICommand(CommandArguments& Params, llvm::StringRef Argument) {
-  Params.actions().actOnICommand(Argument);
+static bool doQCommand(CommandArguments& Params) {
+  Params.Processor->quit() = true;
   return true;
 }
 
 static bool doAtCommand(CommandArguments& Params) {
-  Params.actions().actOnAtCommand();
+  Params.Processor->cancelContinuation();
+  return true;
+}
+
+static bool doICommand(CommandArguments& Params, llvm::StringRef Argument) {
+  if (Argument.empty())
+    Params.Interpreter.DumpIncludePath();
+  else
+    Params.Interpreter.AddIncludePath(Argument.str());
   return true;
 }
 
 static bool doRawInputCommand(CommandArguments& Params) {
-  Params.actions().actOnrawInputCommand(Params.modeToken());
-  return true;
-}
+  const CommandArguments::SwitchMode mode = Params.modeToken();
 
-static bool doDebugCommand(CommandArguments& Params) {
-  Params.actions().actOndebugCommand(Params.optionalInt());
+  if (mode == CommandArguments::kToggle) {
+    bool flag = !Params.Interpreter.isRawInputEnabled();
+    Params.Interpreter.enableRawInput(flag);
+    Params.Output << (flag ? "U" :"Not u") << "sing raw input\n";
+  }
+  else
+    Params.Interpreter.enableRawInput(mode);
   return true;
 }
 
 static bool doPrintDebugCommand(CommandArguments& Params) {
-  Params.actions().actOnprintDebugCommand(Params.modeToken());
+  const CommandArguments::SwitchMode mode = Params.modeToken();
+
+  if (mode == CommandArguments::kToggle) {
+    bool flag = !Params.Interpreter.isPrintingDebug();
+    Params.Interpreter.enablePrintDebug(flag);
+    Params.Output << (flag ? "P" : "Not p") << "rinting Debug\n";
+  }
+  else
+    Params.Interpreter.enablePrintDebug(mode);
   return true;
 }
 
-static bool doStoreStateCommand(CommandArguments& Params) {
-  const llvm::StringRef name = Params.nextString();
-  if (name.empty())
-      return false; // FIXME: Issue proper diagnostics
+static bool doDynamicExtensionsCommand(CommandArguments& Params) {
+  const CommandArguments::SwitchMode mode = Params.modeToken();
 
-  Params.actions().actOnstoreStateCommand(name);
+  if (mode == CommandArguments::kToggle) {
+    bool flag = !Params.Interpreter.isDynamicLookupEnabled();
+    Params.Interpreter.enableDynamicLookup(flag);
+    Params.Output << (flag ? "U" : "Not u") << "sing dynamic extensions\n";
+  }
+  else
+    Params.Interpreter.enableDynamicLookup(mode);
+  return true;
+}
+
+static bool doStoreStateCommand(CommandArguments& Params, llvm::StringRef Name) {
+  if (Name.empty())
+      return false;
+
+  Params.Interpreter.storeInterpreterState(Name);
   return true;
 }
 
 static bool
 doCompareStateCommand(CommandArguments& Params, llvm::StringRef Name) {
   if (Name.empty())
-    return false;
-  Params.actions().actOncompareStateCommand(Name);
+      return false;
+
+  Params.Interpreter.compareInterpreterState(Name);
   return true;
 }
 
 static bool doStatsCommand(CommandArguments& Params, llvm::StringRef Name) {
-  if (Name.empty())
-    return false;
-  Params.actions().actOnstatsCommand(Name);
-  return true;
+  if (Name.equals("decl")) {
+    ClangInternalState::printLookupTables(Params.Output,
+      Params.Interpreter.getCI()->getSema().getASTContext());
+    return true;
+  }
+  else if (Name.equals("ast")) {
+    Params.Interpreter.getCI()->getSema().getASTContext().PrintStats();
+    return true;
+  } else if (Name.equals("undo")) {
+    Params.Interpreter.getIncrParser().printTransactionStructure();
+    return true;
+  }
+  return false;
 }
 
 static bool doUndoCommand(CommandArguments& Params) {
-  llvm::Optional<int> arg = Params.optionalInt();
-  if (arg.hasValue())
-    Params.actions().actOnUndoCommand(arg.getValue());
-  else
-    Params.actions().actOnUndoCommand();
-  return true;
-}
-
-static bool doDynamicExtensionsCommand(CommandArguments& Params) {
-  Params.actions().actOndynamicExtensionsCommand(Params.modeToken());
+  const llvm::Optional<int> arg = Params.optionalInt();
+  Params.Interpreter.unload(arg.hasValue() ? arg.getValue() : 1);
   return true;
 }
 
 static bool doFileExCommand(CommandArguments& Params) {
-  Params.actions().actOnfileExCommand();
+  clang::CompilerInstance* CI = Params.Interpreter.getCI();
+
+  const clang::SourceManager& SM = CI->getSourceManager();
+  SM.getFileManager().PrintStats();
+
+  Params.Output << "\n***\n\n";
+
+  for (clang::SourceManager::fileinfo_iterator I = SM.fileinfo_begin(),
+         E = SM.fileinfo_end(); I != E; ++I) {
+    Params.Output << (*I).first->getName();
+    Params.Output << "\n";
+  }
+
+#if 0
+  // Need to link to libclangFrontend for this
+  llvm::IntrusiveRefCntPtr<clang::ASTReader> Reader = CI->getModuleManager();
+  const clang::serialization::ModuleManager& ModMan = Reader->getModuleManager();
+  for (clang::serialization::ModuleManager::ModuleConstIterator I
+         = ModMan.begin(), E = ModMan.end(); I != E; ++I) {
+    for (auto& IFI : (*I)->InputFilesLoaded) {
+      Params.Output << IFI.getFile()->getName();
+      Params.Output << "\n";
+    }
+  }
+#endif
+
   return true;
 }
 
 static bool doFilesCommand(CommandArguments& Params) {
-  Params.actions().actOnfilesCommand();
+  Params.Interpreter.printIncludedFiles(Params.Output);
   return true;
 }
 
 static bool doNamespaceCommand(CommandArguments& Params) {
-  if (Params.hadMore())
-    return false;
-
-  Params.actions().actOnNamespaceCommand();
+  DisplayNamespaces(Params.Output, &Params.Interpreter);
   return true;
 }
 
 static bool doClassCommand(CommandArguments& Params, llvm::StringRef Name) {
-  if (Name.empty())
-    Params.actions().actOnClassCommand();
-  else
-    Params.actions().actOnclassCommand(Name);
+  if (Name.empty()) {
+    const bool verbose = Params.CommandName[0] == 'C';
+    DisplayClasses(Params.Output, &Params.Interpreter, verbose);
+  } else
+    DisplayClass(Params.Output, &Params.Interpreter, Name.str().c_str(), true);
   return true;
 }
 
 static bool doGCommand(CommandArguments& Params, llvm::StringRef Name) {
-  Params.actions().actOngCommand(Name);
+  if (Name.empty())
+    DisplayGlobals(Params.Output, &Params.Interpreter);
+  else
+    DisplayGlobal(Params.Output, &Params.Interpreter, Name.str().c_str());
   return true;
 }
 
 static bool doTypedefCommand(CommandArguments& Params, llvm::StringRef Name) {
-  Params.actions().actOnTypedefCommand(Name);
+  if (Name.empty())
+    DisplayTypedefs(Params.Output, &Params.Interpreter);
+  else
+    DisplayTypedef(Params.Output, &Params.Interpreter, Name.str().c_str());
   return true;
 }
 
 static bool doOCommand(CommandArguments& Params) {
+  // Does nothing
+  return false;
+
   llvm::StringRef cmd = argumentAsString(Params.curArg());
   int             level = -1;
   if (cmd.size() == 1) {
@@ -334,7 +450,6 @@ static llvm::StringRef rawPath(const Argument& Arg) {
 // FilePath := AnyString
 // AnyString := .*^(' ' | '\t')
 static bool doRedirectCommand(CommandArguments& Params) {
-
   unsigned constant_FD = 0;
   // Default redirect is stdout.
   MetaProcessor::RedirectionScope stream = MetaProcessor::kSTDOUT;
@@ -385,11 +500,15 @@ static bool doRedirectCommand(CommandArguments& Params) {
     } else
       file = rawPath(*arg);
 
+    if (!Params.Processor) {
+      llvm::errs() << "Command cannot be run in this context\n";
+      return false;
+    }
+
     // Empty file means std.
-    Params.Result =
-        Params.actions().actOnRedirectCommand(file/*file*/,
-                                        stream/*which stream to redirect*/,
-                                        append/*append mode*/);
+    Params.Processor->setStdStream(file/*file*/,
+                                   stream/*which stream to redirect*/,
+                                   append/*append mode*/);
     return true;
   }
   return false;
@@ -403,13 +522,28 @@ static bool doShellCommand(CommandArguments& Params) {
   else if (Arg->isOneOf(tok::excl_mark|tok::slash))
     CommandLine = Params.remaining();
 
-  if (CommandLine.empty())
-    return false;
+  if (!CommandLine.empty()) {
+    llvm::StringRef trimmed(CommandLine.trim(" \t\n\v\f\r "));
+    if (!trimmed.empty()) {
+      int ret = std::system(trimmed.str().c_str());
 
-  Params.Result = Params.actions().actOnShellCommand(CommandLine, Params.OutValue);
-  return true;
+      // Build the result
+      clang::ASTContext& Ctx = Params.Interpreter.getCI()->getASTContext();
+      if (Params.OutValue) {
+        *Params.OutValue = Value(Ctx.IntTy, Params.Interpreter);
+        Params.OutValue->getAs<long long>() = ret;
+      }
+      Params.Result = (ret == 0) ? MetaSema::AR_Success : MetaSema::AR_Failure;
+    }
+    return true;
+  }
+
+  // else nothing to run - should this be success or failure?
+  // Params.Result = AR_Failure;
+  return false;
 }
-}
+
+} // anonymous namespace
 
 CommandTable::~CommandTable() {
   std::set<CommandObj*> done;
@@ -450,7 +584,7 @@ template <> CommandTable::CommandObj*
 CommandTable::add<CommandTable::CommandObj::CommandCallback1>(
     const char* Name, CommandObj::CommandCallback1 Callback, const char* Syntax,
     const char* Help, unsigned Flags) {
-  assert(!(Flags&kCmdCustomSyntax) && "Cannot set kCmdCustomSyntax flag");
+  assert(!(Flags & kCmdCustomSyntax) && "Cannot set kCmdCustomSyntax flag");
   Flags |= kCmdCallback1;
   if (CommandObj* Cmd = new CommandObj) {
     Cmd->Callback.Callback1 = Callback;
@@ -467,22 +601,34 @@ CommandTable* CommandTable::create() {
   if (sCommands.m_Commands.empty()) {
 
     sCommands.add("L", &doLCommand, "<file|library>[//]",
-                  "Load the given file(s) executing the last comment if given");
+                  "Load the given file(s) executing the last comment if given",
+                  kCmdRequireProcessor);
 
     sCommands.add("x",
       sCommands.add("X", &doXCommand, "<filename>[args]",
         "Same as .L and runs a function with signature: "
-        "ret_type filename(args)"));
+        "ret_type filename(args)", kCmdRequireProcessor));
+
+    sCommands.add("U", &doUCommand, "<library>", "Unloads the given file",
+                  kCmdRequireProcessor);
+    sCommands.add("F", &doFCommand, "<framework>", "Load the given framework",
+                  kCmdRequireProcessor);
+
+    sCommands.add("q", &doQCommand, nullptr, "Exit the program",
+                  kCmdRequireProcessor);
+
+    sCommands.add("@", &doAtCommand, nullptr,
+      "Cancels and ignores the multiline input",
+                  kCmdRequireProcessor);
 
     sCommands.add(">", &doRedirectCommand, "<filename>",
       "Redirect command to a given file\n"
       "      '>' or '1>'\t\t- Redirects the stdout stream only\n"
       "      '2>'\t\t\t- Redirects the stderr stream only\n"
       "      '&>' (or '2>&1')\t\t- Redirects both stdout and stderr\n"
-      "      '>>'\t\t\t- Appends to the given file", kCmdCustomSyntax);
+      "      '>>'\t\t\t- Appends to the given file",
+                kCmdCustomSyntax | kCmdRequireProcessor);
 
-    sCommands.add("U", &doUCommand, "<library>", "Unloads the given file");
-    sCommands.add("F", &doFCommand, "<framework>", "Load the given framework");
     sCommands.add("I", &doICommand, "[path]",
       "Add give path to list of header search paths,"
       " or show the include paths if none is given.");
@@ -495,9 +641,6 @@ CommandTable* CommandTable::create() {
 
     sCommands.add("rawInput", &doRawInputCommand, "[0|1]",
       "Toggle wrapping and printing the execution results of the input");
-
-    sCommands.add("@", &doAtCommand, nullptr,
-      "Cancels and ignores the multiline input");
 
     sCommands.add("Class",
       sCommands.add("class", &doClassCommand, "<name>",
@@ -535,8 +678,6 @@ CommandTable* CommandTable::create() {
 
     sCommands.add("?",
       sCommands.add("help", &doHelpCommand, nullptr, "Shows this information"));
-
-    sCommands.add("q", &doQCommand, nullptr, "Exit the program");
   
     sCommands.add("T", doTCommand);
     sCommands.add("/", sCommands.add("!", doShellCommand, nullptr,
@@ -611,9 +752,9 @@ bool CommandTable::doHelpCommand(CommandArguments& Params,
   
   std::sort(sorted.begin(), sorted.end(), &CommandTable::sort);
 
-  std::string& Meta = Params.Processor->getInterpreter().getOptions().MetaString;
-  llvm::raw_ostream& Out = Params.Processor->getOuts();
-  Out << "\n Cling (C/C++ interpreter) meta commands usage\n"
+  std::string& Meta = Params.Interpreter.getOptions().MetaString;
+  llvm::raw_ostream& Out = Params.Output;
+  Params.Output << "\n Cling (C/C++ interpreter) meta commands usage\n"
     " All commands must be preceded by a '" << Meta << "', except\n"
     " for the evaluation statement { }\n" <<
     std::string(80, '=') << "\n" <<
@@ -627,21 +768,19 @@ bool CommandTable::doHelpCommand(CommandArguments& Params,
   Out << "\n";
   return true;
 }
-  
+
 int
-CommandTable::execute(llvm::StringRef CmdStr, const MetaProcessor* Mp, Value* Val) {
-  CommandTable* Cmds = create();
-  if (!Cmds)
-    return 0;
+CommandTable::execute(llvm::StringRef CmdStr, Interpreter& Interp,
+                     llvm::raw_ostream& Output, MetaProcessor* Mp, Value* Val) {
   
-  CommandArguments CmdArgs(CmdStr, Mp, Val);
+  CommandArguments CmdArgs(CmdStr, Interp, Output, Mp, Val);
 
   const Argument Arg0 = CmdArgs.curArg();
   llvm::StringMap<CommandObj*>::iterator CmdItr = m_Commands.find(
                          llvm::StringRef(Arg0.getBufStart(), Arg0.getLength()));
 
-  if (CmdItr == Cmds->m_Commands.end()) {
-    for (auto& CmdPair : Cmds->m_Commands) {
+  if (CmdItr == m_Commands.end()) {
+    for (auto& CmdPair : m_Commands) {
       const CommandObj* Cmd = CmdPair.second;
       if (Cmd->Flags & kCmdCustomSyntax) {
         if (Cmd->Callback.Callback0(CmdArgs))
@@ -653,6 +792,11 @@ CommandTable::execute(llvm::StringRef CmdStr, const MetaProcessor* Mp, Value* Va
   }
 
   const CommandObj* Cmd = CmdItr->second;
+  if (!Mp && (Cmd->Flags & kCmdRequireProcessor)) {
+    llvm::errs() << "Command cannot be run in this context\n";
+    return -1;
+  }
+
   if (Cmd->Flags & kCmdCallback1) {
     llvm::StringRef Argument = CmdArgs.nextString();
     do {

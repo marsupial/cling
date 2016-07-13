@@ -8,12 +8,12 @@
 //------------------------------------------------------------------------------
 
 #include "cling/MetaProcessor/MetaProcessor.h"
+#include "cling/MetaProcessor/CommandTable.h"
 
 #include "Display.h"
 #include "InputValidator.h"
 #include "MetaParser.h"
 #include "MetaSema.h"
-#include "CommandTable.h"
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/Value.h"
 
@@ -118,7 +118,7 @@ namespace cling {
 
   MetaProcessor::MetaProcessor(Interpreter& interp, raw_ostream& outs)
     : m_Interp(interp), m_InputValidator(new InputValidator),
-      m_Actions(new MetaSema(*this)), m_Outs(&outs) {
+      m_Actions(new MetaSema(*this)), m_Outs(&outs), m_QuitRequested(false) {
     m_backupFDStdout = copyFileDescriptor(STDOUT_FILENO);
     m_backupFDStderr = copyFileDescriptor(STDERR_FILENO);
   }
@@ -129,10 +129,10 @@ namespace cling {
   }
 
   Interpreter::CompilationResult
-  MetaProcessor::doMetaCommand(llvm::StringRef cmd, Value* result) const {
+  MetaProcessor::doMetaCommand(llvm::StringRef cmd, Value* result) {
     // Init the parser
     if (meta::CommandTable* Cmds = meta::CommandTable::create()) {
-      if (const int Rval = Cmds->execute(cmd, this, result))
+      if (const int Rval = Cmds->execute(cmd, m_Interp, getOuts(), this, result))
         return Rval > 0 ? Interpreter::kSuccess : Interpreter::kFailure;
     }
     return Interpreter::kMoreInputExpected;
@@ -168,7 +168,7 @@ namespace cling {
                                           m_Interp.getOptions().MetaString)) {
         // Skip over the symbols marking this as a command input
         compRes = doMetaCommand(llvm::StringRef(input_line).substr(sz), result);
-        if (m_Actions->isQuitRequested())
+        if (m_QuitRequested)
           return -1;
 
         // ExpectedIndent might have changed after meta command.

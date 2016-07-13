@@ -73,6 +73,9 @@ namespace cling {
     //Counter to handle more than one redirection RAAI's
     int m_RedirectionRAIILevel = 0;
 
+    //Was quit requested?
+    bool m_QuitRequested;
+
   public:
     enum RedirectionScope {
       kSTDOUT = 1,
@@ -161,7 +164,7 @@ namespace cling {
     /// or kMoreInputExpected if it wasn't even a command.
     ///
     Interpreter::CompilationResult doMetaCommand(llvm::StringRef cmd,
-                                                 Value* result) const;
+                                                 Value* result);
 
     ///\brief Reads prompt input from file.
     ///
@@ -196,6 +199,7 @@ namespace cling {
     bool registerUnloadPoint(const Transaction* T, llvm::StringRef filename);
 
     MetaSema& getActions() const { return *m_Actions; }
+    bool& quit() { return m_QuitRequested; }
 
   private:
     ///\brief Set a stream to a file
