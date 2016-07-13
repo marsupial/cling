@@ -34,7 +34,6 @@ namespace cling {
   class MetaSema {
   private:
     MetaProcessor& m_MetaProcessor;
-    bool m_IsQuitRequested;
     typedef llvm::DenseMap<const clang::FileEntry*, const Transaction*> Watermarks;
     typedef llvm::DenseMap<const Transaction*, const clang::FileEntry*> ReverseWatermarks;
     std::unique_ptr< std::pair<Watermarks, ReverseWatermarks> > m_Watermarks;
@@ -55,9 +54,8 @@ namespace cling {
       AR_Success = 1
     };
 
-    MetaSema(MetaProcessor& meta);
+    MetaSema(MetaProcessor& meta) : m_MetaProcessor(meta) {}
 
-    bool isQuitRequested() const { return m_IsQuitRequested; }
 
     ///\brief L command includes the given file or loads the given library.
     ///
@@ -73,36 +71,7 @@ namespace cling {
     ///\param[out] transaction - Transaction containing the loaded file.
     ///
     ActionResult actOnFCommand(llvm::StringRef file,
-                               Transaction** transaction);
-    ActionResult actOnFCommand(llvm::StringRef file) { return actOnFCommand(file,NULL); }
-    // ###FIXME here to get pointer to member function working in actOnRemainingArguments
-
-    ///\brief T command prepares the tag files for giving semantic hints.
-    ///
-    ///\param[in] inputFile - The source file of the map.
-    ///\param[in] outputFile - The forward declaration file.
-    ///
-    ActionResult actOnTCommand(llvm::StringRef inputFile,
-                               llvm::StringRef outputFile);
-
-    ///\brief < Redirect command.
-    ///
-    ///\param[in] file - The file where the output is redirected
-    ///\param[in] stream - The optional stream to redirect.
-    ///\param[in] append - Write or append to the file.
-    ///
-    ActionResult actOnRedirectCommand(llvm::StringRef file,
-                                      MetaProcessor::RedirectionScope stream,
-                                      bool append);
-
-    ///\brief Actions that need to be performed on occurance of a comment.
-    ///
-    /// That is useful when the comments are meaningful for the interpreter. For
-    /// example when we run in -verify mode.
-    ///
-    ///\param[in] comment - The comment to act on.
-    ///
-    void actOnComment(llvm::StringRef comment) const;
+                               Transaction** transaction = 0);
 
     ///\brief Actions to be performed on a given file. Loads the given file and
     /// calls a function with the name of the file.
@@ -118,125 +87,11 @@ namespace cling {
     ActionResult actOnxCommand(llvm::StringRef file, llvm::StringRef args,
                                Value* result);
 
-    ///\brief Actions to be performed on quit.
-    ///
-    void actOnqCommand();
-
-    ///\brief Actions to be performed on request to cancel continuation.
-    ///
-    void actOnAtCommand();
-
-    ///\brief Unloads the last N inputs lines.
-    ///
-    ///\param[in] N - The inputs to unload.
-    ///
-    ActionResult actOnUndoCommand(unsigned N = 1);
-
     ///\brief Actions to be performed on unload command.
     ///
     ///\param[in] file - The file to unload.
     ///
     ActionResult actOnUCommand(llvm::StringRef file);
-    ActionResult actOnUCommand(const llvm::StringRef &file, FileEntry fileEntry);
-
-    ///\brief Actions to be performed on add include path. It registers new
-    /// folder where header files can be searched.
-    ///
-    ///\param[in] path - The path to add to header search.
-    ///
-    void actOnICommand(llvm::StringRef path) const;
-
-    ///\brief Changes the input mode to raw input. In that mode we act more like
-    /// a compiler by bypassing many of cling's features.
-    ///
-    ///\param[in] mode - either on/off or toggle.
-    ///
-    void actOnrawInputCommand(SwitchMode mode = kToggle) const;
-
-    ///\brief Generates debug info for the JIT.
-    ///
-    ///\param[in] mode - either on/off or toggle.
-    ///
-    void actOndebugCommand(llvm::Optional<int> mode) const;
-
-    ///\brief Prints out the the Debug information of the state changes.
-    ///
-    ///\param[in] mode - either on/off or toggle.
-    ///
-    void actOnprintDebugCommand(SwitchMode mode = kToggle) const;
-
-    ///\brief Store the interpreter's state.
-    ///
-    ///\param[in] name - Name of the files where the state will be stored
-    ///
-    void actOnstoreStateCommand(llvm::StringRef name) const;
-
-    ///\brief Compare the interpreter's state with the one previously stored
-    ///
-    ///\param[in] name - Name of the files where the previous state was stored
-    ///
-    void actOncompareStateCommand(llvm::StringRef name) const;
-
-    ///\brief Show stats for various internal data structures.
-    ///
-    ///\param[in] name - Name of the structure.
-    ///
-    void actOnstatsCommand(llvm::StringRef name) const;
-
-    ///\brief Switches on/off the experimental dynamic extensions (dynamic
-    /// scopes) and late binding.
-    ///
-    ///\param[in] mode - either on/off or toggle.
-    ///
-    void actOndynamicExtensionsCommand(SwitchMode mode = kToggle) const;
-
-    ///\brief Prints out the help message with the description of the meta
-    /// commands.
-    ///
-    void actOnhelpCommand() const;
-
-    ///\brief Prints out some file statistics.
-    ///
-    void actOnfileExCommand() const;
-
-    ///\brief Prints out some CINT-like file statistics.
-    ///
-    void actOnfilesCommand() const;
-
-    ///\brief Prints out class CINT-like style.
-    ///
-    ///\param[in] className - the specific class to be printed.
-    ///
-    void actOnclassCommand(llvm::StringRef className) const;
-
-    ///\brief Prints out class CINT-like style more verbosely.
-    ///
-    void actOnClassCommand() const;
-
-    ///\brief Prints out namespace names.
-    ///
-    void actOnNamespaceCommand() const;
-
-    ///\brief Prints out information about global variables.
-    ///
-    ///\param[in] varName - The name of the global variable
-    //                      if empty prints them all.
-    ///
-    void actOngCommand(llvm::StringRef varName) const;
-
-    ///\brief Prints out information about typedefs.
-    ///
-    ///\param[in] typedefName - The name of typedef if empty prints them all.
-    ///
-    void actOnTypedefCommand(llvm::StringRef typedefName) const;
-
-    ///\brief '.! cmd [args]' syntax.
-    ///
-    ///\param[in] commandLine - shell command + optional list of parameters.
-    ///\param[out] result - if not NULL will hold shell exit code at return.
-    ///
-    ActionResult actOnShellCommand(llvm::StringRef commandLine,
-                                   Value* result) const;
 
     ///\brief Register the file as an upload point for the current
     ///  Transaction: when unloading that file, all transactions after
@@ -251,6 +106,11 @@ namespace cling {
     ///
     bool registerUnloadPoint(const Transaction* T, FileEntry filename);
 
+  private:
+    ///\brief Private actOnUCommand that takes a resolved FileEntry
+    ///
+    ActionResult doUCommand(const llvm::StringRef& file,
+                            const FileEntry& fileEntry);
   };
 
 } // end namespace cling

@@ -8,15 +8,11 @@
 //------------------------------------------------------------------------------
 
 #include "MetaSema.h"
-
-#include "Display.h"
-
 #include "cling/Interpreter/DynamicLibraryManager.h"
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/Transaction.h"
 #include "cling/Interpreter/Value.h"
 #include "cling/MetaProcessor/MetaProcessor.h"
-
 #include "../lib/Interpreter/IncrementalParser.h"
 
 #include "clang/AST/ASTContext.h"
@@ -46,13 +42,10 @@
 
 namespace cling {
 
-  MetaSema::MetaSema(MetaProcessor& meta)
-    :  m_MetaProcessor(meta), m_IsQuitRequested(false) { }
-
   MetaSema::ActionResult MetaSema::actOnLCommand(llvm::StringRef file,
                                              Transaction** transaction /*= 0*/){
     FileEntry fe = getInterpreter().lookupFileOrLibrary(file);
-    ActionResult result = actOnUCommand(file, fe);
+    ActionResult result = doUCommand(file, fe);
     if (result != AR_Success)
       return result;
 
@@ -358,25 +351,6 @@ namespace cling {
     return AR_Failure;
   }
 
-  MetaSema::ActionResult MetaSema::actOnTCommand(llvm::StringRef inputFile,
-                                                 llvm::StringRef outputFile) {
-    getInterpreter().GenerateAutoloadingMap(inputFile, outputFile);
-    return AR_Success;
-  }
-
-  MetaSema::ActionResult MetaSema::actOnRedirectCommand(llvm::StringRef file,
-                         MetaProcessor::RedirectionScope stream,
-                         bool append) {
-
-    m_MetaProcessor.setStdStream(file, stream, append);
-    return AR_Success;
-  }
-
-  void MetaSema::actOnComment(llvm::StringRef comment) const {
-    // Some of the comments are meaningful for the cling::Interpreter
-    getInterpreter().declare(comment);
-  }
-
   MetaSema::ActionResult MetaSema::actOnxCommand(llvm::StringRef file,
                                                  llvm::StringRef args,
                                                  Value* result) {
@@ -421,20 +395,8 @@ namespace cling {
     return actionResult;
   }
 
-  void MetaSema::actOnqCommand() {
-    m_IsQuitRequested = true;
-  }
-
-  void MetaSema::actOnAtCommand() {
-    m_MetaProcessor.cancelContinuation();
-  }
-
-  MetaSema::ActionResult MetaSema::actOnUndoCommand(unsigned N/*=1*/) {
-    getInterpreter().unload(N);
-    return AR_Success;
-  }
-
-  MetaSema::ActionResult MetaSema::actOnUCommand(const llvm::StringRef &file, FileEntry fe ) {
+  MetaSema::ActionResult MetaSema::doUCommand(const llvm::StringRef &file,
+                                              const FileEntry &fe ) {
     if (!m_Watermarks.get())
       return AR_Success;
 
@@ -484,259 +446,10 @@ namespace cling {
     }
     return AR_Success;
   }
+
   MetaSema::ActionResult MetaSema::actOnUCommand(llvm::StringRef file) {
     //Get the canonical path, taking into account interp and system search paths
-    return actOnUCommand(file, getInterpreter().lookupFileOrLibrary(file));
-  }
-
-  void MetaSema::actOnICommand(llvm::StringRef path) const {
-    if (path.empty())
-      getInterpreter().DumpIncludePath();
-    else
-      getInterpreter().AddIncludePath(path.str());
-  }
-
-  void MetaSema::actOnrawInputCommand(SwitchMode mode/* = kToggle*/) const {
-    if (mode == kToggle) {
-      bool flag = !getInterpreter().isRawInputEnabled();
-      getInterpreter().enableRawInput(flag);
-      // FIXME:
-      m_MetaProcessor.getOuts() << (flag ? "U" :"Not u") << "sing raw input\n";
-    }
-    else
-      getInterpreter().enableRawInput(mode);
-  }
-
-  void MetaSema::actOndebugCommand(llvm::Optional<int> mode) const {
-    clang::CodeGenOptions& CGO = getInterpreter().getCI()->getCodeGenOpts();
-    if (!mode) {
-      bool flag = CGO.getDebugInfo() == clang::codegenoptions::NoDebugInfo;
-      if (flag)
-        CGO.setDebugInfo(clang::codegenoptions::LimitedDebugInfo);
-      else
-        CGO.setDebugInfo(clang::codegenoptions::NoDebugInfo);
-      // FIXME:
-      m_MetaProcessor.getOuts() << (flag ? "G" : "Not g")
-                                << "enerating debug symbols\n";
-    }
-    else {
-      static const int NumDebInfos = 5;
-      clang::codegenoptions::DebugInfoKind DebInfos[NumDebInfos] = {
-        clang::codegenoptions::NoDebugInfo,
-        clang::codegenoptions::LocTrackingOnly,
-        clang::codegenoptions::DebugLineTablesOnly,
-        clang::codegenoptions::LimitedDebugInfo,
-        clang::codegenoptions::FullDebugInfo
-      };
-      if (*mode >= NumDebInfos)
-        mode = NumDebInfos - 1;
-      else if (*mode < 0)
-        mode = 0;
-      CGO.setDebugInfo(DebInfos[*mode]);
-      if (!*mode) {
-        m_MetaProcessor.getOuts() << "Not generating debug symbols\n";
-      } else {
-        m_MetaProcessor.getOuts() << "Generating debug symbols level "
-                                  << *mode << '\n';
-      }
-    }
-  }
-
-  void MetaSema::actOnprintDebugCommand(SwitchMode mode/* = kToggle*/) const {
-    if (mode == kToggle) {
-      bool flag = !getInterpreter().isPrintingDebug();
-      getInterpreter().enablePrintDebug(flag);
-      // FIXME:
-      m_MetaProcessor.getOuts() << (flag ? "P" : "Not p") << "rinting Debug\n";
-    }
-    else
-      getInterpreter().enablePrintDebug(mode);
-  }
-
-  void MetaSema::actOnstoreStateCommand(llvm::StringRef name) const {
-    getInterpreter().storeInterpreterState(name);
-  }
-
-  void MetaSema::actOncompareStateCommand(llvm::StringRef name) const {
-    getInterpreter().compareInterpreterState(name);
-  }
-
-  void MetaSema::actOnstatsCommand(llvm::StringRef name) const {
-    if (name.equals("decl")) {
-      ClangInternalState::printLookupTables(m_MetaProcessor.getOuts(),
-       getInterpreter().getCI()->getSema().getASTContext());
-    }
-    else if (name.equals("ast"))
-      getInterpreter().getCI()->getSema().getASTContext().PrintStats();
-    else if (name.equals("undo"))
-      getInterpreter().getIncrParser().printTransactionStructure();
-  }
-
-  void MetaSema::actOndynamicExtensionsCommand(SwitchMode mode/* = kToggle*/)
-    const {
-    if (mode == kToggle) {
-      bool flag = !getInterpreter().isDynamicLookupEnabled();
-      getInterpreter().enableDynamicLookup(flag);
-      // FIXME:
-      m_MetaProcessor.getOuts()
-        << (flag ? "U" : "Not u") << "sing dynamic extensions\n";
-    }
-    else
-      getInterpreter().enableDynamicLookup(mode);
-  }
-
-  void MetaSema::actOnhelpCommand() const {
-    std::string& metaString = getInterpreter().getOptions().MetaString;
-    llvm::raw_ostream& outs = m_MetaProcessor.getOuts();
-    outs << "\n Cling (C/C++ interpreter) meta commands usage\n"
-      " All commands must be preceded by a '" << metaString << "', except\n"
-      " for the evaluation statement { }\n"
-      " ==============================================================================\n"
-      " Syntax: " << metaString << "Command [arg0 arg1 ... argN]\n"
-      "\n"
-      "   " << metaString << "L <filename>\t\t- Load the given file or library\n\n"
-
-      "   " << metaString << "(x|X) <filename>[args]\t- Same as .L and runs a function with"
-                             "\n\t\t\t\t  signature: ret_type filename(args)\n"
-      "\n"
-      "   " << metaString << "> <filename>\t\t- Redirect command to a given file\n"
-        "      '>' or '1>'\t\t- Redirects the stdout stream only\n"
-        "      '2>'\t\t\t- Redirects the stderr stream only\n"
-        "      '&>' (or '2>&1')\t\t- Redirects both stdout and stderr\n"
-        "      '>>'\t\t\t- Appends to the given file\n"
-      "\n"
-      "   " << metaString << "undo [n]\t\t\t- Unloads the last 'n' inputs lines\n"
-      "\n"
-      "   " << metaString << "U <filename>\t\t- Unloads the given file\n"
-      "\n"
-      "   " << metaString << "I [path]\t\t\t- Shows the include path. If a path is given -"
-                             "\n\t\t\t\t  adds the path to the include paths\n"
-      "\n"
-      "   " << metaString << "O <level>\t\t\t- Sets the optimization level (0-3)"
-                             "\n\t\t\t\t  (not yet implemented)\n"
-      "\n"
-      "   " << metaString << "class <name>\t\t- Prints out class <name> in a CINT-like style\n"
-      "\n"
-      "   " << metaString << "files \t\t\t- Prints out some CINT-like file statistics\n"
-      "\n"
-      "   " << metaString << "fileEx \t\t\t- Prints out some file statistics\n"
-      "\n"
-      "   " << metaString << "g \t\t\t\t- Prints out information about global variable"
-                             "\n\t\t\t\t  'name' - if no name is given, print them all\n"
-      "\n"
-      "   " << metaString << "@ \t\t\t\t- Cancels and ignores the multiline input\n"
-      "\n"
-      "   " << metaString << "rawInput [0|1]\t\t- Toggle wrapping and printing the"
-                             "\n\t\t\t\t  execution results of the input\n"
-      "\n"
-      "   " << metaString << "dynamicExtensions [0|1]\t- Toggles the use of the dynamic scopes and the"
-                             "\n\t\t\t\t  late binding\n"
-      "\n"
-      "   " << metaString << "printDebug [0|1]\t\t- Toggles the printing of input's corresponding"
-                             "\n\t\t\t\t  state changes\n"
-      "\n"
-      "   " << metaString << "storeState <filename>\t- Store the interpreter's state to a given file\n"
-      "\n"
-      "   " << metaString << "compareState <filename>\t- Compare the interpreter's state with the one"
-                             "\n\t\t\t\t  saved in a given file\n"
-      "\n"
-      "   " << metaString << "stats [name]\t\t- Show stats for internal data structures\n"
-                             "\t\t\t\t  'ast'  abstract syntax tree stats\n"
-                             "\t\t\t\t  'decl' dump ast declarations\n"
-                             "\t\t\t\t  'undo' show undo stack\n"
-      "\n"
-      "   " << metaString << "help\t\t\t- Shows this information\n"
-      "\n"
-      "   " << metaString << "q\t\t\t\t- Exit the program\n"
-      "\n";
-  }
-
-  void MetaSema::actOnfileExCommand() const {
-    const clang::SourceManager& SM = getInterpreter().getCI()->getSourceManager();
-    SM.getFileManager().PrintStats();
-
-    m_MetaProcessor.getOuts() << "\n***\n\n";
-
-    for (clang::SourceManager::fileinfo_iterator I = SM.fileinfo_begin(),
-           E = SM.fileinfo_end(); I != E; ++I) {
-      m_MetaProcessor.getOuts() << (*I).first->getName();
-      m_MetaProcessor.getOuts() << "\n";
-    }
-    /* Only available in clang's trunk:
-    clang::ASTReader* Reader = getInterpreter().getCI()->getModuleManager();
-    const clang::serialization::ModuleManager& ModMan
-      = Reader->getModuleManager();
-    for (clang::serialization::ModuleManager::ModuleConstIterator I
-           = ModMan.begin(), E = ModMan.end(); I != E; ++I) {
-      typedef
-        std::vector<llvm::PointerIntPair<const clang::FileEntry*, 1, bool> >
-        InputFiles_t;
-      const InputFiles_t& InputFiles = (*I)->InputFilesLoaded;
-      for (InputFiles_t::const_iterator IFI = InputFiles.begin(),
-             IFE = InputFiles.end(); IFI != IFE; ++IFI) {
-        m_MetaProcessor.getOuts() << IFI->getPointer()->getName();
-        m_MetaProcessor.getOuts() << "\n";
-      }
-    }
-    */
-  }
-
-  void MetaSema::actOnfilesCommand() const {
-    getInterpreter().printIncludedFiles(m_MetaProcessor.getOuts());
-  }
-
-  void MetaSema::actOnclassCommand(llvm::StringRef className) const {
-    if (!className.empty())
-      DisplayClass(m_MetaProcessor.getOuts(),
-                   &getInterpreter(), className.str().c_str(), true);
-    else
-      DisplayClasses(m_MetaProcessor.getOuts(), &getInterpreter(), false);
-  }
-
-  void MetaSema::actOnClassCommand() const {
-    DisplayClasses(m_MetaProcessor.getOuts(), &getInterpreter(), true);
-  }
-
-  void MetaSema::actOnNamespaceCommand() const {
-    DisplayNamespaces(m_MetaProcessor.getOuts(), &getInterpreter());
-  }
-
-  void MetaSema::actOngCommand(llvm::StringRef varName) const {
-    if (varName.empty())
-      DisplayGlobals(m_MetaProcessor.getOuts(), &getInterpreter());
-    else
-      DisplayGlobal(m_MetaProcessor.getOuts(),
-                    &getInterpreter(), varName.str().c_str());
-  }
-
-  void MetaSema::actOnTypedefCommand(llvm::StringRef typedefName) const {
-    if (typedefName.empty())
-      DisplayTypedefs(m_MetaProcessor.getOuts(), &getInterpreter());
-    else
-      DisplayTypedef(m_MetaProcessor.getOuts(),
-                     &getInterpreter(), typedefName.str().c_str());
-  }
-
-  MetaSema::ActionResult
-  MetaSema::actOnShellCommand(llvm::StringRef commandLine,
-                              Value* result) const {
-    llvm::StringRef trimmed(commandLine.trim(" \t\n\v\f\r "));
-    if (!trimmed.empty()) {
-      int ret = std::system(trimmed.str().c_str());
-
-      // Build the result
-      clang::ASTContext& Ctx = getInterpreter().getCI()->getASTContext();
-      if (result) {
-        *result = Value(Ctx.IntTy, getInterpreter());
-        result->getAs<long long>() = ret;
-      }
-
-      return (ret == 0) ? AR_Success : AR_Failure;
-    }
-    if (result)
-      *result = Value();
-    // nothing to run - should this be success or failure?
-    return AR_Failure;
+    return doUCommand(file, getInterpreter().lookupFileOrLibrary(file));
   }
 
   bool MetaSema::registerUnloadPoint(const Transaction* unloadPoint,

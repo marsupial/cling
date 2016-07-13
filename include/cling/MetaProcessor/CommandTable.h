@@ -13,9 +13,14 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringMap.h"
 
+namespace llvm {
+  class raw_ostream;
+}
+
 namespace cling {
   class Value;
   class MetaProcessor;
+  class Interpreter;
 
   namespace meta {
     class CommandArguments;
@@ -33,7 +38,7 @@ namespace cling {
         } Callback;
         const char* Syntax;
         const char* Help;
-        unsigned Flags : 5;
+        unsigned Flags : 6;
         
         // llvm::StringMap needs this
         CommandObj() : Syntax(nullptr), Help(nullptr), Flags(0) {}
@@ -53,11 +58,12 @@ namespace cling {
       ~CommandTable();
 
       enum CommandFlags {
-        kCmdCallback0    = 0,
-        kCmdCallback1    = 2,
-        kCmdCustomSyntax = 4,
-        kCmdDebug        = 8,
-        kCmdExperimental = 16,
+        kCmdCallback0        = 0,
+        kCmdCallback1        = 2,
+        kCmdCustomSyntax     = 4,
+        kCmdRequireProcessor = 8,
+        kCmdDebug            = 16,
+        kCmdExperimental     = 32,
       };
 
       template <class T> CommandObj*
@@ -66,8 +72,8 @@ namespace cling {
                unsigned = kCmdCallback0);
   
       static CommandTable* create();
-      static int execute(llvm::StringRef, const MetaProcessor* = nullptr,
-                         Value* = nullptr);
+      int execute(llvm::StringRef, Interpreter&, llvm::raw_ostream&,
+                  MetaProcessor* = nullptr, Value* = nullptr);
     };
   }
 }

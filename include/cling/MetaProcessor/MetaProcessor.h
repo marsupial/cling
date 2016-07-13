@@ -62,6 +62,9 @@ namespace cling {
     class RedirectOutput;
     std::unique_ptr<RedirectOutput> m_RedirectOutput;
 
+    //Was quit requested?
+    bool m_QuitRequested;
+
   public:
     enum RedirectionScope {
       kSTDOUT  = 1,
@@ -130,7 +133,7 @@ namespace cling {
     /// or kMoreInputExpected if it wasn't even a command.
     ///
     Interpreter::CompilationResult doMetaCommand(llvm::StringRef cmd,
-                                                 Value* result) const;
+                                                 Value* result);
 
     ///\brief Reads prompt input from file.
     ///
@@ -166,6 +169,9 @@ namespace cling {
 
     ///\brief Return the MetaSema actions of the MetaProcessor
     MetaSema& getActions() const { return *m_Actions; }
+
+    ///\brief Return a reference to query/set whether quit was requested
+    bool& quit() { return m_QuitRequested; }
   };
 } // end namespace cling
 
