@@ -10,6 +10,7 @@
 #include "ClingPragmas.h"
 
 #include "cling/Interpreter/Interpreter.h"
+#include "cling/MetaProcessor/CommandTable.h"
 
 #include "clang/AST/ASTContext.h"
 #include "clang/Basic/TokenKinds.h"
@@ -46,151 +47,170 @@ namespace {
     }
   }
 
-  class ClingPragmaHandler: public PragmaHandler {
-    Interpreter& m_Interp;
-
-    struct SkipToEOD {
-      Preprocessor& m_PP;
-      Token& m_Tok;
-      SkipToEOD(Preprocessor& PParg, Token& Tok):
-        m_PP(PParg), m_Tok(Tok) {
-      }
-      ~SkipToEOD() {
-        // Can't use Preprocessor::DiscardUntilEndOfDirective, as we may
-        // already be on an eod token
-        while (!m_Tok.isOneOf(tok::eod, tok::eof))
-          m_PP.LexUnexpandedToken(m_Tok);
-      }
-    };
-
-    bool GetNextLiteral(Preprocessor& PP, Token& Tok, std::string& Literal,
-                        const char* firstTime = nullptr) const {
-      Literal.clear();
-      PP.Lex(Tok);
-      if (Tok.isLiteral()) {
-        SmallVector<Token, 1> StrToks(1, Tok);
-        StringLiteralParser LitParse(StrToks, PP);
-        if (!LitParse.hadError)
-          Literal = LitParse.GetString();
-      }
-      else if (Tok.is(tok::comma))
-        return GetNextLiteral(PP, Tok, Literal);
-      else if (firstTime) {
-        if (Tok.is(tok::l_paren)) {
-          if (!PP.LexStringLiteral(Tok, Literal, firstTime,
-                                   false /*allowMacroExpansion*/)) {
-            // already diagnosed.
-            return false;
-          }
-        }
-      }
-
-      if (Literal.empty())
-        return false;
-
-      replaceEnvVars(Literal);
-      return true;
+  struct SkipToEOD {
+    Preprocessor& m_PP;
+    Token& m_Tok;
+    SkipToEOD(Preprocessor& PParg, Token& Tok):
+      m_PP(PParg), m_Tok(Tok) {
     }
-
-    void ReportCommandErr(Preprocessor& PP, const Token& Tok) {
-      PP.Diag(Tok.getLocation(), diag::err_expected)
-        << "load, add_library_path, or add_include_path";
-    }
-
-    int GetCommand(const StringRef CommandStr) {
-      if (CommandStr == "load")
-        return 0;
-      else if (CommandStr == "add_library_path")
-        return 1;
-      else if (CommandStr == "add_include_path")
-        return 2;
-
-      return -1;
-    }
-
-    void LoadCommand(Preprocessor& PP, Token& Tok, std::string Literal) {
-
-      // Need to parse them all until the end to handle the possible
-      // #include stements that will be generated
-      std::vector<std::string> Files;
-      Files.push_back(std::move(Literal));
-      while (GetNextLiteral(PP, Tok, Literal))
-        Files.push_back(std::move(Literal));
-      
-      clang::Parser& P = m_Interp.getParser();
-      Parser::ParserCurTokRestoreRAII savedCurToken(P);
-      // After we have saved the token reset the current one to something
-      // which is safe (semi colon usually means empty decl)
-      Token& CurTok = const_cast<Token&>(P.getCurToken());
-      CurTok.setKind(tok::semi);
-      
-      Preprocessor::CleanupAndRestoreCacheRAII cleanupRAII(PP);
-      // We can't PushDeclContext, because we go up and the routine that
-      // pops the DeclContext assumes that we drill down always.
-      // We have to be on the global context. At that point we are in a
-      // wrapper function so the parent context must be the global.
-      TranslationUnitDecl* TU =
-      m_Interp.getCI()->getASTContext().getTranslationUnitDecl();
-      Sema::ContextAndScopeRAII pushedDCAndS(m_Interp.getSema(),
-                                            TU, m_Interp.getSema().TUScope);
-      Interpreter::PushTransactionRAII pushedT(&m_Interp);
-
-      for (std::string& File : Files) {
-        if (m_Interp.loadFile(File, true) != Interpreter::kSuccess)
-          return;
-      }
-    }
-
-  public:
-    ClingPragmaHandler(Interpreter& interp):
-      PragmaHandler("cling"), m_Interp(interp) {}
-
-    void HandlePragma(Preprocessor& PP,
-                      PragmaIntroducerKind Introducer,
-                      Token& FirstToken) override {
-
-      Token Tok;
-      PP.Lex(Tok);
-      SkipToEOD OnExit(PP, Tok);
-
-      // #pragma cling(load, "A")
-      if (Tok.is(tok::l_paren))
-        PP.Lex(Tok);
-
-      if (Tok.isNot(tok::identifier)) {
-        ReportCommandErr(PP, Tok);
-        return;
-      }
-
-      const StringRef CommandStr = Tok.getIdentifierInfo()->getName();
-      const int Command = GetCommand(CommandStr);
-      if (Command < 0) {
-        ReportCommandErr(PP, Tok);
-        return;
-      }
-
-      std::string Literal;
-      if (!GetNextLiteral(PP, Tok, Literal, CommandStr.data())) {
-        PP.Diag(Tok.getLocation(), diag::err_expected_after)
-          << CommandStr << "argument";
-        return;
-      }
-  
-      if (Command == 0)
-        return LoadCommand(PP, Tok, std::move(Literal));
-
-      do{
-        if (Command == 1)
-          m_Interp.getOptions().LibSearchPath.push_back(std::move(Literal));
-        else if (Command == 2)
-          m_Interp.AddIncludePath(Literal);
-      } while (GetNextLiteral(PP, Tok, Literal));
+    ~SkipToEOD() {
+      // Can't use Preprocessor::DiscardUntilEndOfDirective, as we may
+      // already be on an eod token
+      while (!m_Tok.isOneOf(tok::eod, tok::eof))
+        m_PP.LexUnexpandedToken(m_Tok);
     }
   };
 }
 
-void cling::addClingPragmas(Interpreter& interp) {
+bool ClingPragmaHandler::GetNextLiteral(Preprocessor& PP, Token& Tok,
+                                        std::string& Literal,
+                                        const char* firstTime) const {
+  Literal.clear();
+  PP.Lex(Tok);
+  if (Tok.isLiteral()) {
+    SmallVector<Token, 1> StrToks(1, Tok);
+    StringLiteralParser LitParse(StrToks, PP);
+    if (!LitParse.hadError)
+      Literal = LitParse.GetString();
+  }
+  else if (Tok.is(tok::comma))
+    return GetNextLiteral(PP, Tok, Literal);
+  else if (firstTime) {
+    if (Tok.is(tok::l_paren)) {
+      if (!PP.LexStringLiteral(Tok, Literal, firstTime,
+                               false /*allowMacroExpansion*/)) {
+        // already diagnosed.
+        return false;
+      }
+    }
+  }
+
+  if (Literal.empty())
+    return false;
+
+  replaceEnvVars(Literal);
+  return true;
+}
+
+void ClingPragmaHandler::ReportCommandErr(Preprocessor& PP, const Token& Tok) {
+  PP.Diag(Tok.getLocation(), diag::err_expected)
+    << "load, add_library_path, or add_include_path";
+}
+
+int ClingPragmaHandler::GetCommand(const StringRef CommandStr) const {
+  if (CommandStr == "load")
+    return 0;
+  else if (CommandStr == "add_library_path")
+    return 1;
+  else if (CommandStr == "add_include_path")
+    return 2;
+
+  return -1;
+}
+
+void ClingPragmaHandler::LoadCommand(Preprocessor& PP, Token& Tok,
+                                     std::string Literal) {
+
+  // Need to parse them all until the end to handle the possible
+  // #include stements that will be generated
+  std::vector<std::string> Files;
+  Files.push_back(std::move(Literal));
+  while (GetNextLiteral(PP, Tok, Literal))
+    Files.push_back(std::move(Literal));
+  
+  clang::Parser& P = m_Interp.getParser();
+  Parser::ParserCurTokRestoreRAII savedCurToken(P);
+  // After we have saved the token reset the current one to something
+  // which is safe (semi colon usually means empty decl)
+  Token& CurTok = const_cast<Token&>(P.getCurToken());
+  CurTok.setKind(tok::semi);
+  
+  Preprocessor::CleanupAndRestoreCacheRAII cleanupRAII(PP);
+  // We can't PushDeclContext, because we go up and the routine that
+  // pops the DeclContext assumes that we drill down always.
+  // We have to be on the global context. At that point we are in a
+  // wrapper function so the parent context must be the global.
+  TranslationUnitDecl* TU =
+  m_Interp.getCI()->getASTContext().getTranslationUnitDecl();
+  Sema::ContextAndScopeRAII pushedDCAndS(m_Interp.getSema(),
+                                        TU, m_Interp.getSema().TUScope);
+  Interpreter::PushTransactionRAII pushedT(&m_Interp);
+
+  for (std::string& File : Files) {
+    if (m_Interp.loadFile(File, true) != Interpreter::kSuccess)
+      return;
+  }
+}
+
+ClingPragmaHandler::ClingPragmaHandler(Interpreter& interp) :
+  PragmaHandler("cling"), m_Interp(interp), m_Commands(nullptr) {}
+
+bool ClingPragmaHandler::RunCommand(clang::Lexer* Lex,
+                                    const StringRef& CommandStr) const {
+  if (m_Commands) {
+    SmallString<256> Str;
+    (CommandStr+Lex->getBufferLocation()).toStringRef(Str);
+
+    // strip any trailing whitespace
+    while (Str.size() && ::isspace(Str[Str.size()-1]))
+      Str.resize(Str.size()-1);
+
+    return m_Commands->execute(Str.c_str(), m_Interp, llvm::outs());
+  }
+  return false;
+}
+
+void ClingPragmaHandler::HandlePragma(Preprocessor& PP,
+                                      PragmaIntroducerKind Introducer,
+                                      Token& FirstToken) {
+
+  Token Tok;
+  PP.Lex(Tok);
+  SkipToEOD OnExit(PP, Tok);
+
+  // #pragma cling(load, "A")
+  if (Tok.is(tok::l_paren))
+    PP.Lex(Tok);
+
+  if (Tok.isNot(tok::identifier)) {
+    if (Tok.is(tok::raw_identifier) || Tok.is(tok::eof)
+        || Tok.isAnnotation() || Tok.isLiteral()) {
+      ReportCommandErr(PP, Tok);
+      return;
+    }
+    // Anything else can still be a command name
+  }
+
+  const StringRef CommandStr = Tok.getIdentifierInfo()->getName();
+  const int Command = GetCommand(CommandStr);
+  if (Command < 0) {
+    if (!RunCommand(static_cast<Lexer*>(PP.getCurrentLexer()), CommandStr))
+      ReportCommandErr(PP, Tok);
+    return;
+  }
+
+  std::string Literal;
+  if (!GetNextLiteral(PP, Tok, Literal, CommandStr.data())) {
+    PP.Diag(Tok.getLocation(), diag::err_expected_after)
+      << CommandStr << "argument";
+    return;
+  }
+
+  if (Command == 0)
+    return LoadCommand(PP, Tok, std::move(Literal));
+
+  do{
+    if (Command == 1)
+      m_Interp.getOptions().LibSearchPath.push_back(std::move(Literal));
+    else if (Command == 2)
+      m_Interp.AddIncludePath(Literal);
+  } while (GetNextLiteral(PP, Tok, Literal));
+}
+
+ClingPragmaHandler* ClingPragmaHandler::install(Interpreter& interp) {
   Preprocessor& PP = interp.getCI()->getPreprocessor();
   // PragmaNamespace / PP takes ownership of sub-handlers.
-  PP.AddPragmaHandler(StringRef(), new ClingPragmaHandler(interp));
+  ClingPragmaHandler* Handler = new ClingPragmaHandler(interp);
+  PP.AddPragmaHandler(StringRef(), Handler);
+  return Handler;
 }

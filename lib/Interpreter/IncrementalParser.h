@@ -43,6 +43,10 @@ namespace cling {
   class Transaction;
   class TransactionPool;
   class ASTTransformer;
+  class ClingPragmaHandler;
+  namespace meta {
+    class CommandTable;
+  }
 
   ///\brief Responsible for the incremental parsing and compilation of input.
   ///
@@ -92,6 +96,10 @@ namespace cling {
     ///\brief Pool of reusable block-allocated transactions.
     ///
     std::unique_ptr<TransactionPool> m_TransactionPool;
+
+    ///\brief The installed pragma handler, not owned by us.
+    ///
+    ClingPragmaHandler *m_PragmaHandler;
 
   public:
     enum EParseResult {
@@ -223,6 +231,8 @@ namespace cling {
     ///\brief Add the trnasformers to the Incremental Parser.
     ///
     void SetTransformers(bool isChildInterpreter);
+
+    void setCommands(meta::CommandTable*);
 
   private:
     ///\brief Finalizes the consumers (e.g. CodeGen) on a transaction.

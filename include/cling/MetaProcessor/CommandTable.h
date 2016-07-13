@@ -55,7 +55,8 @@ namespace cling {
       CommandObj* add(const char* Name, CommandObj*);
 
     public:
-      ~CommandTable();
+      static CommandTable* create(bool InstanceOnly = false);
+      virtual ~CommandTable();
 
       enum CommandFlags {
         kCmdCallback0        = 0,
@@ -71,8 +72,8 @@ namespace cling {
                const char* Syntax = nullptr, const char* Help = nullptr,
                unsigned = kCmdCallback0);
   
-      static CommandTable* create();
-      int execute(llvm::StringRef, Interpreter&, llvm::raw_ostream&,
+      // FIXME: only virtual to avoid linking / circular dependencies
+      virtual int execute(llvm::StringRef, Interpreter&, llvm::raw_ostream&,
                   MetaProcessor* = nullptr, Value* = nullptr);
     };
   }

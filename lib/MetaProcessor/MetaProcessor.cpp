@@ -7,15 +7,13 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-#include "cling/MetaProcessor/MetaProcessor.h"
-#include "cling/MetaProcessor/CommandTable.h"
-
-#include "Display.h"
 #include "InputValidator.h"
-#include "MetaParser.h"
 #include "MetaSema.h"
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/Value.h"
+#include "cling/MetaProcessor/MetaProcessor.h"
+#include "cling/MetaProcessor/CommandTable.h"
+#include "../lib/Interpreter/IncrementalParser.h"
 
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/TargetInfo.h"
@@ -236,6 +234,7 @@ namespace cling {
   MetaProcessor::MetaProcessor(Interpreter& interp, raw_ostream& outs)
     : m_Interp(interp), m_InputValidator(new InputValidator),
       m_Actions(new MetaSema(*this)), m_Outs(&outs), m_QuitRequested(false) {
+    interp.getIncrParser().setCommands(meta::CommandTable::create(true));
   }
 
   MetaProcessor::~MetaProcessor() {

@@ -175,7 +175,7 @@ namespace cling {
   IncrementalParser::IncrementalParser(Interpreter* interp, const char* llvmdir):
     m_Interpreter(interp),
     m_CI(CIFactory::createCI("", interp->getOptions(), llvmdir)),
-    m_Consumer(nullptr), m_ModuleNo(0) {
+    m_Consumer(nullptr), m_ModuleNo(0), m_PragmaHandler(nullptr) {
 
     if (!m_CI) {
       llvm::errs() << "Compiler instance could not be created.\n";
@@ -256,7 +256,7 @@ namespace cling {
     }
 
     if (Success) {
-      addClingPragmas(*m_Interpreter);
+      m_PragmaHandler = ClingPragmaHandler::install(*m_Interpreter);
 
       // Must happen after attaching the PCH, else PCH elements will end up
       // being lexed.
@@ -302,6 +302,10 @@ namespace cling {
     result.push_back(PRT);
 
     return Success;
+  }
+
+  void IncrementalParser::setCommands(meta::CommandTable* Cmds) {
+    m_PragmaHandler->setCommands(Cmds);
   }
 
   bool IncrementalParser::isValid(bool initialized) const {
