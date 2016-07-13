@@ -7,16 +7,15 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-#include "cling/MetaProcessor/CommandTable.h"
 #include "MetaParser.h"
 #include "MetaSema.h"
 #include "Display.h"
-
-#include "../lib/Interpreter/IncrementalParser.h"
 #include "cling/Interpreter/ClangInternalState.h"
 #include "cling/Interpreter/Interpreter.h"
-#include "cling/MetaProcessor/MetaProcessor.h"
 #include "cling/Interpreter/Value.h"
+#include "cling/MetaProcessor/MetaProcessor.h"
+#include "cling/MetaProcessor/CommandTable.h"
+#include "../lib/Interpreter/IncrementalParser.h"
 
 #include "llvm/Support/Format.h"
 #include "clang/Sema/Sema.h"
@@ -596,9 +595,9 @@ CommandTable::add<CommandTable::CommandObj::CommandCallback1>(
   return nullptr;
 }
 
-CommandTable* CommandTable::create() {
+CommandTable* CommandTable::create(bool InstanceOnly) {
   static CommandTable sCommands;
-  if (sCommands.m_Commands.empty()) {
+  if (sCommands.m_Commands.empty() && !InstanceOnly) {
 
     sCommands.add("L", &doLCommand, "<file|library>[//]",
                   "Load the given file(s) executing the last comment if given",
@@ -773,6 +772,9 @@ int
 CommandTable::execute(llvm::StringRef CmdStr, Interpreter& Interp,
                      llvm::raw_ostream& Output, MetaProcessor* Mp, Value* Val) {
   
+  if (m_Commands.empty())
+    create(false);
+
   CommandArguments CmdArgs(CmdStr, Interp, Output, Mp, Val);
 
   const Argument Arg0 = CmdArgs.curArg();
@@ -802,14 +804,14 @@ CommandTable::execute(llvm::StringRef CmdStr, Interpreter& Interp,
     do {
       if (!Cmd->Callback.Callback1(CmdArgs, Argument)) {
         showHelp(CmdItr, Output);
-        return 0;
+        return -1;
       }
       Argument = CmdArgs.nextString();
     } while (!Argument.empty());
     
   } else if (!Cmd->Callback.Callback0(CmdArgs)) {
     showHelp(CmdItr, Output);
-    return 0;
+    return -1;
   }
 
   return CmdArgs.Result == MetaSema::AR_Success ? 1 : -1;
