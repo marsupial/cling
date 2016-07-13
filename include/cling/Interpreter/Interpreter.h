@@ -95,7 +95,6 @@ namespace cling {
     public:
       StateDebuggerRAII(const Interpreter* i);
       ~StateDebuggerRAII();
-      void pop() const;
     };
 
     ///\brief RAII object to manage merging transactions
