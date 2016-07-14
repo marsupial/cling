@@ -35,13 +35,19 @@ namespace cling {
 
       if (Call == Transaction::kCCIHandleVTable)
         continue;
+
       // The non templated classes come through HandleTopLevelDecl and
       // HandleTagDeclDefinition, this is why we need to filter.
-      if (Call == Transaction::kCCIHandleTagDeclDefinition)
-      if (const CXXRecordDecl* D
-        = dyn_cast<CXXRecordDecl>(DGR.getSingleDecl()))
-      if (D->getTemplateSpecializationKind() == TSK_Undeclared)
-        continue;
+      if (Call == Transaction::kCCIHandleTagDeclDefinition) {
+        if (const CXXRecordDecl* D =
+                                 dyn_cast<CXXRecordDecl>(DGR.getSingleDecl())) {
+          // Make sure it's actually a template with getDescribedClassTemplate
+          // TSK_Undeclared can be returned for classes that aren't templates
+          if (D->getDescribedClassTemplate() &&
+              D->getTemplateSpecializationKind() == TSK_Undeclared)
+            continue;
+        }
+      }
 
       if (Call == Transaction::kCCINone)
         m_Interp->unload(*(*T->rnested_begin()));
