@@ -49,9 +49,14 @@ namespace cling {
     ///
     FileIDs m_FilesToUncache;
 
+    ///\brief Mark whether we are recursing via VisitSpecializations.
+    ///
+    bool m_VisSpecializations;
+
   public:
     DeclUnloader(clang::Sema* S, clang::CodeGenerator* CG, const Transaction* T)
-      : m_Sema(S), m_CodeGen(CG), m_CurTransaction(T) { }
+      : m_Sema(S), m_CodeGen(CG), m_CurTransaction(T),
+        m_VisSpecializations(false) { }
     ~DeclUnloader();
 
     ///\brief Interface with nice name, forwarding to Visit.
@@ -293,7 +298,7 @@ namespace cling {
     /// This is used to test whether the declaration holding specializations
     /// was actullay part of the transaction being unloaded.
     ///
-    bool wasInstatiatedBefore(clang::Decl *D, const clang::SourceLocation &Loc) const;
+    bool wasInstatiatedBefore(clang::SourceLocation Loc) const;
 
     template <class DeclT>
     bool VisitSpecializations(DeclT *D);
