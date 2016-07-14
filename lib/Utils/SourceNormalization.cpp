@@ -14,6 +14,7 @@
 #include "clang/Lex/Lexer.h"
 
 #include <utility>
+#include <regex>
 
 using namespace clang;
 
@@ -162,6 +163,30 @@ size_t cling::utils::getWrapPoint(std::string& source,
         return std::string::npos;
       if (keyword.equals("template"))
         return std::string::npos;
+
+      // Defining a function?
+      std::regex re("^\\s*(?:static\\s+)?(?:inline\\s+)?"
+                    "[_A-Za-z][_A-Za-z0-9:]+\\s+([_A-Za-z][_A-Za-z0-9:]*)"
+                    "\\s*\\([^]*\\)[^]*\\{");
+      std::smatch match;
+      if (std::regex_search(source, match, re,
+                            std::regex_constants::match_continuous)) {
+        if (match.size() == 2) {
+          return std::string::npos;
+        }
+      }
+
+      // Defining a consructor or destructor?
+      re = std::regex("^\\s*([_A-Za-z][_A-Za-z0-9:]*)\\s*::\\s*"
+                      "~?([_A-Za-z][_A-Za-z0-9:]*)\\s*\\([^]*\\)[^]*\\{");
+       if (std::regex_search(source, match, re,
+                            std::regex_constants::match_continuous)) {
+        if (match.size() == 3) {
+          // Dont't wrap if match identifier on both sides of ::
+          if (match[1].str() == match[2].str())
+            return std::string::npos;
+        }
+      }
 
       // There is something else here that needs to be wrapped.
       return getFileOffset(Tok);
