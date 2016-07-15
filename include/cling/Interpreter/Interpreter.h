@@ -14,6 +14,7 @@
 #include "cling/Utils/FileEntry.h"
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/PointerUnion.h"
 
 #include <cstdlib>
 #include <memory>
@@ -47,6 +48,8 @@ namespace clang {
   class SourceManager;
   class PresumedLoc;
   class FileEntry;
+  class ValueDecl;
+  class MacroDirective;
 }
 
 namespace cling {
@@ -717,6 +720,15 @@ namespace cling {
     ///
     void* getAddressOfGlobal(llvm::StringRef SymName, bool* fromJIT = 0) const;
 
+    ///\brief Lookup the given name in the Interpreter, without loading any
+    /// aditional declarations from an AST source.
+    ///
+    ///\param[in]  name - the declaration or macro to lookup
+    ///\returns the ValueDecl, MacroDirective, or null
+    ///
+    llvm::PointerUnion<const clang::ValueDecl*,const clang::MacroDirective*>
+    lookupDefinition(llvm::StringRef name) const;
+  
     ///\brief Add an atexit function.
     ///
     ///\param[in] Func - Function to be called.
