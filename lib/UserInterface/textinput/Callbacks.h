@@ -30,7 +30,7 @@ namespace textinput {
                           EditorRange& R /*out*/,
                           std::vector<std::string>& DisplayCompletions /*out*/)
     = 0;
-    virtual ~TabCompletion();
+    virtual ~TabCompletion() {}
   };
 
   class FunKey {

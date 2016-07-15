@@ -538,6 +538,5 @@ namespace textinput {
   }
 
    // Pin vtables:
-   TabCompletion::~TabCompletion() {}
    FunKey::~FunKey() {}
 }

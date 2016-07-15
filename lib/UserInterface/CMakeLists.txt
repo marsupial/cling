@@ -40,6 +40,10 @@ add_cling_library(clingUserInterface
   clingInterpreter
 )
 
+if(NOT WIN32)
+set_source_files_properties(UserInterface.cpp COMPILE_FLAGS "-fexceptions -frtti")
+endif()
+
 IF(MSVC)
   add_definitions(-UUNICODE -U_UNICODE)
   # windows.h doesn't compile with /Za
