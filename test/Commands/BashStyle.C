@@ -21,5 +21,14 @@ const char* named = "NAMED";
 // CHECK: 8|lit|NAMED|6|more "'	  spaces|12|test|2
 // CHECK: (int) 10
 
+.x CallMain.h named "arg1" 45 unnamed 50
+// CHECK: main[0]: 'CallMain.h'
+// CHECK: main[1]: 'NAMED'
+// CHECK: main[2]: 'arg1'
+// CHECK: main[3]: '45'
+// CHECK: main[4]: 'unnamed'
+// CHECK: main[5]: '50'
+// CHECK: (int) 0
+
 //expected-no-diagnostics
 .q

@@ -351,43 +351,78 @@ namespace cling {
     return AR_Failure;
   }
 
-  static std::string buildArguments(const char* buf) {
-    std::string args(1, '(');
-    while (*buf) {
-      // Skip whitespace
-      while (*buf && ::isspace(*buf))
-        ++buf;
+  static std::string buildArguments(const char* buf,
+                                    llvm::StringRef* fileName = nullptr,
+                                    unsigned* argCount = nullptr) {
+    const char* scopeTok[] = { "()", "{}" };
+    const bool brack = fileName != nullptr;
 
-      if (const char tok = *buf) {
-        // Mark current state
-        
-        const char* end = buf+1;
-        if (tok == '\'' || tok == '"') {
-          // Grab literal
-          while (*end && *end != tok) {
-            if (*(++end) == '\\')
-              end += 2; // jump whatever it is
+    std::string args(1, scopeTok[brack][0]);
+    if (fileName) {
+      // Add argv[0]: filename
+      args.append(1, '"');
+      args.append(fileName->str());
+      args.append(1, '"');
+    }
+    unsigned nArgs = 1;
+
+    if (buf) {
+      while (*buf) {
+        // Skip whitespace
+        while (*buf && ::isspace(*buf))
+          ++buf;
+
+        if (const char tok = *buf) {
+          // Mark current state
+          
+          const char* end = buf+1;
+          const bool isLit = tok == '"';
+          if (tok == '\'' || isLit) {
+            // Grab literal
+            while (*end && *end != tok) {
+              if (*(++end) == '\\')
+                end += 2; // jump whatever it is
+            }
+            if (brack && !isLit) {
+              // Make 'some string' to "some string"
+              ++buf;
+            } else if (*end)
+              ++end;
+          } else {
+            // Grab whatever
+            while (*end && !::isspace(*end))
+              ++end;
           }
-          if (*end)
-            ++end;
-        } else {
-          // Grab whatever
-          while (*end && !::isspace(*end))
-            ++end;
-        }
-        if (const size_t N = end-buf) {
-          const llvm::StringRef arg(buf, N);
-          if (args.size() > 1)
-            args.append(1, ',');
+          if (const size_t N = end-buf) {
+            ++nArgs;
 
-          args.append(arg.str());
+            const llvm::StringRef arg(buf, N);
+            if (args.size() > 1)
+              args.append(1, ',');
+
+            if (brack && !isLit) {
+              args.append(1, '"');
+              args.append(arg.str());
+              args.append(1, '"');
+            }
+            else {
+              args.append(arg.str());
+
+              // Advance over terminating '
+              if (brack && tok == '\'')
+                ++end;
+            }
+          }
+          buf = end;
         }
-        buf = end;
       }
     }
 
     // Close it out
-    args.append(1, ')');
+    args.append(1, scopeTok[brack][1]);
+    if (argCount)
+      *argCount = nArgs;
+
     return args;
   }
   
@@ -408,18 +443,45 @@ namespace cling {
       using namespace clang;
       NamedDecl* ND = nullptr;
       StringRefPair pairFuncExt = pairPathFile.second.rsplit('.');
-      std::string scoped;
+      std::string expression;
 
       // T can be nullptr if there is no code (but comments)
-      if (T && (ND = T->containsNamedDecl(pairFuncExt.first))) {
-        if (!args.empty()) {
-          if (args[0] != '(') {
-            // Bash style
-            scoped = buildArguments(args.data());
-            args = scoped;
+      if (T) {
+        if ((ND = T->containsNamedDecl(pairFuncExt.first))) {
+          // Function matching filename was found
+          expression = pairFuncExt.first.str();
+          if (!args.empty()) {
+            if (args[0] != '(') {
+              // Bash style
+              expression += buildArguments(args.data());
+            } else {
+              // C-style
+              expression += args.str();
+            }
+          } else {
+            // No args given
+            expression += "()";
           }
-        } else
-          args = "()";
+          expression += " /* invoking function corresponding to '.x' */";
+        } else {
+          const llvm::StringRef main("main", 4);
+          if ((ND = T->containsNamedDecl(main))) {
+            // No function matching filename, but 'main' was found
+            if (args.empty() || args[0] != '(') {
+              // Convert bash args to args to argc, argv[]
+              unsigned nArgs;
+              const std::string bargs = buildArguments(args.data(), &file,
+                                                       &nArgs);
+              llvm::raw_string_ostream argStr(expression);
+              argStr << "int argc = " << nArgs << "; const char* argv[] = "
+                     << std::move(bargs) << ";" << main << "(argc, argv);";
+            } else {
+              // Users responsibility to be set up correctly
+              expression = main.str() + args.str();
+            }
+            expression += " /* invoking main from .x */";
+          }
+        }
       }
       if (!ND) {
         DiagnosticsEngine& Diags = getInterpreter().getCI()->getDiagnostics();
@@ -434,8 +496,8 @@ namespace cling {
         return AR_Success;
       }
 
-      const std::string expression = pairFuncExt.first.str() + args.str() +
-                               " /* invoking function corresponding to '.x' */";
+      assert(!expression.empty() && "Invocation expression wasn't built");
+                               ;
       if (getInterpreter().echo(expression, result) != Interpreter::kSuccess)
         actionResult = AR_Failure;
     }
