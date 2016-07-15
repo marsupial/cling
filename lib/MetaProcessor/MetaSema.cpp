@@ -8,6 +8,7 @@
 //------------------------------------------------------------------------------
 
 #include "MetaSema.h"
+#include "MetaLexer.h"
 #include "cling/Interpreter/DynamicLibraryManager.h"
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/Transaction.h"
@@ -351,7 +352,7 @@ namespace cling {
     return AR_Failure;
   }
 
-  static std::string buildArguments(const char* buf,
+  static std::string buildArguments(const char* buf, Interpreter *I = nullptr,
                                     llvm::StringRef* fileName = nullptr,
                                     unsigned* argCount = nullptr) {
     const char* scopeTok[] = { "()", "{}" };
@@ -377,6 +378,7 @@ namespace cling {
           
           const char* end = buf+1;
           const bool isLit = tok == '"';
+          bool makeLit = false;
           if (tok == '\'' || isLit) {
             // Grab literal
             while (*end && *end != tok) {
@@ -385,13 +387,37 @@ namespace cling {
             }
             if (brack && !isLit) {
               // Make 'some string' to "some string"
+              makeLit = true;
               ++buf;
             } else if (*end)
               ++end;
           } else {
             // Grab whatever
-            while (*end && !::isspace(*end))
+            while (*end && !::isspace(*end)) {
               ++end;
+            }
+            if (I && end != buf) {
+              if (::isalpha(buf[0]) || buf[0]=='_') {
+                // Legal identifier
+                llvm::StringRef name(buf, end-buf);
+
+                // Make sure were not stringifying a valid expression
+                MetaLexer Lex(name);
+                Token Tok;
+                do {
+                  Lex.Lex(Tok);
+                } while (!Tok.isOneOf(tok::eof|tok::ident));
+
+                // If argument.method(), then lookup argument
+                if (Tok.is(tok::ident)) {
+                  name = Tok.getIdent();
+                  makeLit = I->lookupDefinition(name).isNull();
+                } else
+                  makeLit = brack;
+              } else
+                makeLit = brack;
+            } else
+              makeLit = brack; // All arguments are literalized
           }
           if (const size_t N = end-buf) {
             ++nArgs;
@@ -400,7 +426,7 @@ namespace cling {
             if (args.size() > 1)
               args.append(1, ',');
 
-            if (brack && !isLit) {
+            if (makeLit) {
               args.append(1, '"');
               args.append(arg.str());
               args.append(1, '"');
@@ -464,7 +490,7 @@ namespace cling {
             if (!args.empty()) {
               if (args[0] != '(') {
                 // Bash style
-                expression += buildArguments(args.data());
+                expression += buildArguments(args.data(), &getInterpreter());
               } else {
                 // C-style
                 expression += args.str();
@@ -479,8 +505,9 @@ namespace cling {
             if (args.empty() || args[0] != '(') {
               // Convert bash args to args to argc, argv[]
               unsigned nArgs;
-              const std::string bargs = buildArguments(args.data(), &file,
-                                                       &nArgs);
+              const std::string bargs =
+                  buildArguments(args.data(), &getInterpreter(), &file, &nArgs);
+
               llvm::raw_string_ostream argStr(expression);
               argStr << "int argc = " << nArgs << "; const char* argv[] = "
                      << std::move(bargs) << ";" << main << "(argc, argv);";

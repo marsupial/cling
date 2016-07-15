@@ -1470,6 +1470,26 @@ namespace cling {
     T.setState(Transaction::kCommitted);
   }
 
-
+  llvm::PointerUnion<const clang::ValueDecl*,const MacroDirective*>
+  Interpreter::lookupDefinition(llvm::StringRef name) const {
+    Sema& SemaRef = getSema();
+    DeclContext* DC = SemaRef.getASTContext().getTranslationUnitDecl();
+    Preprocessor& PP = SemaRef.getPreprocessor();
+    if (IdentifierInfo *dataII = &PP.getIdentifierTable().get(name)) {
+      DeclarationName declName(dataII);
+      DeclContext::lookup_result lookup = DC->noload_lookup(declName);
+      for (DeclContext::lookup_iterator I = lookup.begin(), E = lookup.end();
+           I != E; ++I) {
+        const ValueDecl *result = dyn_cast<ValueDecl>(*I);
+        if (result)
+          return llvm::PointerUnion<const clang::ValueDecl*,
+                                    const MacroDirective*>(result);
+      }
+      return llvm::PointerUnion<const clang::ValueDecl*,
+                                const MacroDirective*>(
+                             PP.getMacroDefinition(dataII).getLocalDirective());
+    }
+    return llvm::PointerUnion<const clang::ValueDecl*,const MacroDirective*>();
+  }
 
 } //end namespace cling
