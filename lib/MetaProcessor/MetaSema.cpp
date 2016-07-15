@@ -447,25 +447,27 @@ namespace cling {
 
       // T can be nullptr if there is no code (but comments)
       if (T) {
-        if ((ND = T->containsNamedDecl(pairFuncExt.first))) {
-          // Function matching filename was found
-          expression = pairFuncExt.first.str();
-          if (!args.empty()) {
-            if (args[0] != '(') {
-              // Bash style
-              expression += buildArguments(args.data());
+        const llvm::StringRef main("main", 4);
+        llvm::PointerIntPair<clang::NamedDecl*, 1, bool> Named =
+          T->containsNamedDecl(pairFuncExt.first, &main);
+        if ((ND = Named.getPointer())) {
+          if (Named.getInt() == 0) {
+            // Function matching filename was found
+            expression = pairFuncExt.first.str();
+            if (!args.empty()) {
+              if (args[0] != '(') {
+                // Bash style
+                expression += buildArguments(args.data());
+              } else {
+                // C-style
+                expression += args.str();
+              }
             } else {
-              // C-style
-              expression += args.str();
+              // No args given
+              expression += "()";
             }
+            expression += " /* invoking function corresponding to '.x' */";
           } else {
-            // No args given
-            expression += "()";
-          }
-          expression += " /* invoking function corresponding to '.x' */";
-        } else {
-          const llvm::StringRef main("main", 4);
-          if ((ND = T->containsNamedDecl(main))) {
             // No function matching filename, but 'main' was found
             if (args.empty() || args[0] != '(') {
               // Convert bash args to args to argc, argv[]

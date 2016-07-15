@@ -332,9 +332,16 @@ namespace cling {
       return clang::DeclGroupRef();
     }
 
-    ///\brief Returns the NamedDecl* if a Decl with name is present, 0 otherwise.
+    ///\brief Look for a NamedDecl* in the transaction.
     ///
-    clang::NamedDecl* containsNamedDecl(llvm::StringRef name) const;
+    ///\param[in] name - Name to lookup, exhaustively.
+    ///\param[in] fallback - Alternate option if name wasn't found.
+    ///
+    ///\returns The decl and which name was found.
+    ///
+    llvm::PointerIntPair<clang::NamedDecl*, 1, bool>
+    containsNamedDecl(llvm::StringRef name,
+                      const llvm::StringRef *fallback = nullptr) const;
 
     ///\brief Returns the current last transaction. Useful when the transaction
     /// in still incomplete.

@@ -56,24 +56,33 @@ namespace cling {
       }
   }
 
-  NamedDecl* Transaction::containsNamedDecl(llvm::StringRef name) const {
+  llvm::PointerIntPair<NamedDecl*, 1, bool>
+  Transaction::containsNamedDecl(llvm::StringRef name,
+                                 const llvm::StringRef *fallback) const {
+    NamedDecl* alt = nullptr;
     for (auto I = decls_begin(), E = decls_end(); I < E; ++I) {
       for (auto DI : I->m_DGR) {
         if (NamedDecl* ND = dyn_cast<NamedDecl>(DI)) {
-          if (name.equals(ND->getNameAsString()))
-            return ND;
+          const std::string declName = ND->getNameAsString();
+          if (name.equals(declName))
+            return llvm::PointerIntPair<NamedDecl*, 1, bool>(ND, 0);
+          else if (fallback && !alt && fallback->equals(declName))
+            alt = ND;
         }
         else if (LinkageSpecDecl* LSD = dyn_cast<LinkageSpecDecl>(DI)) {
           for (Decl* DI : LSD->decls()) {
             if (NamedDecl* ND = dyn_cast<NamedDecl>(DI)) {
-              if (name.equals(ND->getNameAsString()))
-                return ND;
+              const std::string declName = ND->getNameAsString();
+              if (name.equals(declName))
+                return llvm::PointerIntPair<NamedDecl*, 1, bool>(ND, 0);
+              else if (fallback && !alt && fallback->equals(declName))
+                alt = ND;
             }
           }
         }
       }
     }
-    return 0;
+    return llvm::PointerIntPair<NamedDecl*, 1, bool>(alt, 1);
   }
 
   void Transaction::addNestedTransaction(Transaction* nested) {
