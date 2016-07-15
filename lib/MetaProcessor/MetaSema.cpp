@@ -442,8 +442,15 @@ namespace cling {
 
       using namespace clang;
       NamedDecl* ND = nullptr;
-      StringRefPair pairFuncExt = pairPathFile.second.rsplit('.');
       std::string expression;
+
+      StringRefPair pairFuncExt = pairPathFile.second.rsplit('.');
+      // Strip any spaces in filename, it's not possible to be a legal
+      // identifier otherwise.
+      std::string legalName = pairFuncExt.first.str();
+      legalName.erase(std::remove_if(legalName.begin(), legalName.end(),
+                                      ::isspace), legalName.end());
+      pairFuncExt.first = legalName;
 
       // T can be nullptr if there is no code (but comments)
       if (T) {
