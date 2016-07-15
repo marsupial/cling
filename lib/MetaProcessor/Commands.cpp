@@ -207,11 +207,9 @@ static bool doXCommand(CommandArguments& Params) {
   if (F.empty())
     return false;
 
-  // '(' to end of string:
-  llvm::StringRef Args = Params.remaining();
-  if (Args.empty())
-    Args = "()";
-  Params.Result = Params.actions().actOnxCommand(F, Args, Params.OutValue);
+  // actOnxCommand sorts out the arguments
+  Params.Result = Params.actions().actOnxCommand(F, Params.remaining(),
+                                                 Params.OutValue);
   return true;
 }
 
