@@ -351,12 +351,49 @@ namespace cling {
     return AR_Failure;
   }
 
+  static std::string buildArguments(const char* buf) {
+    std::string args(1, '(');
+    while (*buf) {
+      // Skip whitespace
+      while (*buf && ::isspace(*buf))
+        ++buf;
+
+      if (const char tok = *buf) {
+        // Mark current state
+        
+        const char* end = buf+1;
+        if (tok == '\'' || tok == '"') {
+          // Grab literal
+          while (*end && *end != tok) {
+            if (*(++end) == '\\')
+              end += 2; // jump whatever it is
+          }
+          if (*end)
+            ++end;
+        } else {
+          // Grab whatever
+          while (*end && !::isspace(*end))
+            ++end;
+        }
+        if (const size_t N = end-buf) {
+          const llvm::StringRef arg(buf, N);
+          if (args.size() > 1)
+            args.append(1, ',');
+
+          args.append(arg.str());
+        }
+        buf = end;
+      }
+    }
+
+    // Close it out
+    args.append(1, ')');
+    return args;
+  }
+  
   MetaSema::ActionResult MetaSema::actOnxCommand(llvm::StringRef file,
                                                  llvm::StringRef args,
                                                  Value* result) {
-
-    // Check if there is a function named after the file.
-    assert(!args.empty() && "Arguments must be provided (at least \"()\"");
     cling::Transaction* T = 0;
     MetaSema::ActionResult actionResult = actOnLCommand(file, &T);
     if (actionResult == AR_Success) {
@@ -368,27 +405,37 @@ namespace cling {
         pairPathFile.second = pairPathFile.first;
       }
 
-      StringRefPair pairFuncExt = pairPathFile.second.rsplit('.');
-      std::string expression = pairFuncExt.first.str() + args.str();
-      // Give the user some context in case we have a problem in an invocation.
-      expression += " /* invoking function corresponding to '.x' */";
-
       using namespace clang;
+      NamedDecl* ND = nullptr;
+      StringRefPair pairFuncExt = pairPathFile.second.rsplit('.');
+      std::string scoped;
+
       // T can be nullptr if there is no code (but comments)
-      NamedDecl* ND = T ? T->containsNamedDecl(pairFuncExt.first) : 0;
-      DiagnosticsEngine& Diags = getInterpreter().getCI()->getDiagnostics();
-      SourceLocation noLoc;
+      if (T && (ND = T->containsNamedDecl(pairFuncExt.first))) {
+        if (!args.empty()) {
+          if (args[0] != '(') {
+            // Bash style
+            scoped = buildArguments(args.data());
+            args = scoped;
+          }
+        } else
+          args = "()";
+      }
       if (!ND) {
-        unsigned diagID
-          = Diags.getCustomDiagID (DiagnosticsEngine::Level::Warning,
-                                   "cannot find function '%0()'; falling back to .L");
-        //FIXME: Figure out how to pass in proper source locations, which we can
-        // use with -verify.
-        Diags.Report(noLoc, diagID)
-          << pairFuncExt.first;
+        DiagnosticsEngine& Diags = getInterpreter().getCI()->getDiagnostics();
+        SourceLocation Loc;
+        if (T)
+          Loc = T->getSourceStart(Diags.getSourceManager());
+
+        Diags.Report(Loc, Diags.getCustomDiagID(
+                             DiagnosticsEngine::Level::Warning,
+                             "cannot find function '%0()'; falling back to .L"))
+            << pairFuncExt.first;
         return AR_Success;
       }
 
+      const std::string expression = pairFuncExt.first.str() + args.str() +
+                               " /* invoking function corresponding to '.x' */";
       if (getInterpreter().echo(expression, result) != Interpreter::kSuccess)
         actionResult = AR_Failure;
     }
