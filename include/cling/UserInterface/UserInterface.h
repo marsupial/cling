@@ -14,28 +14,33 @@
 
 namespace cling {
   class Interpreter;
-  class MetaProcessor;
+  namespace meta {
+    class Processor;
+  }
+  namespace ui {
 
-  ///\brief Makes the interpreter interactive
-  ///
-  class UserInterface {
-  private:
-    std::unique_ptr<MetaProcessor> m_MetaProcessor;
-
-    ///\brief Prints cling's startup logo
+    ///\brief Makes the interpreter interactive
     ///
-    void PrintLogo();
-  public:
-    UserInterface(Interpreter& interp);
-    ~UserInterface();
+    class UserInterface {
+    private:
+      std::unique_ptr<meta::Processor> m_MetaProcessor;
 
-    MetaProcessor* getMetaProcessor() { return m_MetaProcessor.get(); }
+      ///\brief Prints cling's startup logo
+      ///
+      void PrintLogo();
+    public:
+      UserInterface(Interpreter& interp);
+      ~UserInterface();
 
-    ///\brief Drives the interactive prompt talking to the user.
-    /// @param[in] nologo - whether to show cling's welcome logo or not
-    ///
-    void runInteractively(bool nologo = false);
-  };
+      meta::Processor* getMetaProcessor() { return m_MetaProcessor.get(); }
+
+      ///\brief Drives the interactive prompt talking to the user.
+      /// @param[in] nologo - whether to show cling's welcome logo or not
+      ///
+      void runInteractively(bool nologo = false);
+    };
+
+  }
 }
 
 #endif // CLING_USERINTERFACE_H

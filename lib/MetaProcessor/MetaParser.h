@@ -11,51 +11,36 @@
 #define CLING_META_PARSER_H
 
 #include "MetaLexer.h"
-#include "MetaSema.h"
 #include "llvm/ADT/SmallVector.h"
-
 #include <memory>
 
-namespace llvm {
-  class StringRef;
-}
 
 namespace cling {
-  class MetaSema;
-  class Value;
   namespace meta {
-    class CommandArguments;
-  }
 
-  class MetaParser {
-  private:
-    MetaLexer m_Lexer;
-    llvm::SmallVector<Token, 2> m_TokenCache;
+    class Parser {
+    private:
+      MetaLexer m_Lexer;
+      llvm::SmallVector<Token, 2> m_TokenCache;
 
-    const Token& lookAhead(unsigned Num);
-    ///\brief Returns the current token without consuming it.
-    ///
-    inline const Token& getCurTok() { return lookAhead(0); }
+      const Token& lookAhead(unsigned Num);
 
-    ///\brief Consume the current 'peek' token.
-    ///
-    void consumeToken();
-    void skipWhitespace();
-    void consumeAnyStringToken(tok::TokenKind stopAt = tok::space);
+    public:
+      ///\brief Returns the current token without consuming it.
+      ///
+      inline const Token& getCurTok() { return lookAhead(0); }
 
-  public:
-    friend class meta::CommandArguments;
+      ///\brief Consume the current 'peek' token.
+      ///
+      void consumeToken();
+      void skipWhitespace();
+      void consumeAnyStringToken(tok::TokenKind stopAt = tok::space);
 
-    MetaParser(llvm::StringRef Line);
+      Parser(llvm::StringRef Line) : m_Lexer(Line) {}
+    };
 
-    ///\brief Drives the recursive decendent parsing.
-    ///
-    ///\returns true if it was meta command.
-    ///
-    bool doMetaCommand(MetaSema::ActionResult& actionResult,
-                       Value* resultValue);
-
-  };
+  } // end namespace meta
+  typedef meta::Parser MetaParser;
 } // end namespace cling
 
 #endif // CLING_META_PARSER_H

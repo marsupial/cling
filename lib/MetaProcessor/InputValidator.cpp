@@ -11,11 +11,9 @@
 #include "MetaLexer.h"
 #include <algorithm>
 
-namespace cling {
-  bool InputValidator::inBlockComment() const {
-    return std::find(m_ParenStack.begin(), m_ParenStack.end(), tok::slash)
-             != m_ParenStack.end();
-  }
+using namespace cling::meta;
+
+namespace {
 
   static int findNestedBlockComments(const char* startPos, const char* endPos) {
     // While probably not standard compliant, it should work fine for the indent
@@ -69,7 +67,7 @@ namespace cling {
   static bool endIdentifier(Token& Tok, const char* curPos, const char *end,
                             const char** begin, std::deque<int>& m_ParenStack) {
       const int kind = Tok.getKind();
-      MetaLexer Lex(curPos);
+      Lexer Lex(curPos);
       Lex.SkipWhitespace();
       Lex.LexAnyString(Tok);
       const llvm::StringRef iDent = Tok.getIdent();
@@ -90,153 +88,158 @@ namespace cling {
 
     return true;
   }
+}
 
-  InputValidator::ValidationResult
-  InputValidator::validate(llvm::StringRef line, bool objC) {
-    ValidationResult Res = kComplete;
+bool InputValidator::inBlockComment() const {
+  return std::find(m_ParenStack.begin(), m_ParenStack.end(), tok::slash)
+           != m_ParenStack.end();
+}
 
-    Token Tok;
-    const char* curPos = line.data();
-    bool multilineComment = inBlockComment();
-    int commentTok = multilineComment ? tok::asterik : tok::slash;
+InputValidator::ValidationResult
+InputValidator::validate(llvm::StringRef line, bool objC) {
+  ValidationResult Res = kComplete;
 
-    if (!multilineComment && m_ParenStack.empty()) {
-      // Only check for 'template' if we're not already indented
-      MetaLexer Lex(curPos, true);
-      Lex.Lex(Tok);
-      curPos = Lex.getLocation();
-      if (Tok.is(tok::ident)) {
-        if (Tok.getIdent()=="template")
-          m_ParenStack.push_back(tok::greater);
-      } else
-        curPos -= Tok.getLength();   // Static Lex methods below rewuire rewound buffer
-    }
+  Token Tok;
+  const char* curPos = line.data();
+  bool multilineComment = inBlockComment();
+  int commentTok = multilineComment ? tok::asterik : tok::slash;
 
-    do {
-      const char* prevStart = curPos;
-      MetaLexer::LexPunctuatorAndAdvance(curPos, Tok);
-      const int kind = (int)Tok.getKind();
+  if (!multilineComment && m_ParenStack.empty()) {
+    // Only check for 'template' if we're not already indented
+    MetaLexer Lex(curPos, true);
+    Lex.Lex(Tok);
+    curPos = Lex.getLocation();
+    if (Tok.is(tok::ident)) {
+      if (Tok.getIdent()=="template")
+        m_ParenStack.push_back(tok::greater);
+    } else
+      curPos -= Tok.getLength();   // Static Lex methods below rewuire rewound buffer
+  }
 
-      if (kind == commentTok) {
-        if (kind == tok::slash) {
-          if (multilineComment) {
-            // exiting a comment, unwind the stack
-            multilineComment = false;
-            commentTok = tok::slash;
-            unwindTokens(m_ParenStack, tok::slash);
-          }
-          // If we have a closing comment without a start it will be transformed
-          // to */; and clang reports an error for both the */ and the ;
-          // If we return kIncomplete, then just one error is printed, but too
-          // late: after the user has another expression which will always fail.
-          // So just deal with two errors for now
-          // else if (prevKind == tok::asterik) {
-          //  Res = kIncomplete;
-          // break;
-          // }
-          else   // wait for an asterik
-            commentTok = tok::asterik;
+  do {
+    const char* prevStart = curPos;
+    MetaLexer::LexPunctuatorAndAdvance(curPos, Tok);
+    const int kind = (int)Tok.getKind();
+
+    if (kind == commentTok) {
+      if (kind == tok::slash) {
+        if (multilineComment) {
+          // exiting a comment, unwind the stack
+          multilineComment = false;
+          commentTok = tok::slash;
+          unwindTokens(m_ParenStack, tok::slash);
         }
-        else {
-          assert(commentTok == tok::asterik && "Comment token not / or *");
-          if (!multilineComment) {
-            // entering a new comment
-            multilineComment = true;
-            m_ParenStack.push_back(tok::slash);
-          }
-          else // wait for closing / (must be next token)
-            commentTok = tok::slash;
-        }
+        // If we have a closing comment without a start it will be transformed
+        // to */; and clang reports an error for both the */ and the ;
+        // If we return kIncomplete, then just one error is printed, but too
+        // late: after the user has another expression which will always fail.
+        // So just deal with two errors for now
+        // else if (prevKind == tok::asterik) {
+        //  Res = kIncomplete;
+        // break;
+        // }
+        else   // wait for an asterik
+          commentTok = tok::asterik;
       }
       else {
-        // If we're in a multiline, and waiting for the closing slash
-        // we gonna have to wait for another asterik first
-        if (multilineComment) {
-          if (kind == tok::eof) {
-            switch (findNestedBlockComments(prevStart, curPos)) {
-              case -1: unwindTokens(m_ParenStack, tok::slash);
-              case  1:
-              case  0: break;
-              default: assert(0 && "Nested block comment count"); break;
-            }
-            // eof, were done anyway
-            break;
-          }
-          else if (commentTok == tok::slash)
-            commentTok = tok::asterik;
+        assert(commentTok == tok::asterik && "Comment token not / or *");
+        if (!multilineComment) {
+          // entering a new comment
+          multilineComment = true;
+          m_ParenStack.push_back(tok::slash);
         }
-
-        // Balance braces
-        if (kind >= tok::l_square && kind <= tok::r_brace) {
-          if (kind & (tok::r_square|tok::r_paren|tok::r_brace)) {
-            // closing the proper one?
-            if (m_ParenStack.empty() || m_ParenStack.back() != (kind >> 1)) {
-              if (multilineComment)
-                continue;
-
-              Res = kMismatch;
-              break;
-            }
-            m_ParenStack.pop_back();
-
-            // Right brace will pop a template if their is one
-            if (kind == tok::r_brace && m_ParenStack.size() == 1 ) {
-              if (m_ParenStack.back() == tok::greater)
-                m_ParenStack.pop_back();
-            }
-          }
-          else
-            m_ParenStack.push_back(kind);
-        }
-        else if (kind == tok::hash) {
-          const char* begin[] = { "if", 0 };
-          if (!endIdentifier(Tok, curPos, "endif", begin, m_ParenStack)) {
-            Res = kMismatch;
-            break;
-          }
-        }
-        else if (objC && kind == tok::at) {
-          const char* begin[] = { "interface", "implementation", "protocol", 0 };
-          if (!endIdentifier(Tok, curPos, "end", begin, m_ParenStack)) {
-            Res = kMismatch;
-            break;
-          }
-        }
-        else if (kind == tok::semicolon) {
-          // Template forward declatation
-          if (m_ParenStack.size() == 1 && m_ParenStack.back()==tok::greater)
-            m_ParenStack.pop_back();
-        }
-        else if (Tok.isOneOf(tok::stringlit|tok::charlit))
-          MetaLexer::LexQuotedStringAndAdvance(curPos, Tok);
+        else // wait for closing / (must be next token)
+          commentTok = tok::slash;
       }
-    } while (Tok.isNot(tok::eof));
-
-    if (!m_ParenStack.empty() && Res != kMismatch)
-      Res = kIncomplete;
-
-    if (!m_Input.empty()) {
-      if (!m_ParenStack.empty() && (m_ParenStack.back() == tok::stringlit
-                                    || m_ParenStack.back() == tok::charlit))
-        m_Input.append("\\n");
-      else
-        m_Input.append("\n");
     }
+    else {
+      // If we're in a multiline, and waiting for the closing slash
+      // we gonna have to wait for another asterik first
+      if (multilineComment) {
+        if (kind == tok::eof) {
+          switch (findNestedBlockComments(prevStart, curPos)) {
+            case -1: unwindTokens(m_ParenStack, tok::slash);
+            case  1:
+            case  0: break;
+            default: assert(0 && "Nested block comment count"); break;
+          }
+          // eof, were done anyway
+          break;
+        }
+        else if (commentTok == tok::slash)
+          commentTok = tok::asterik;
+      }
+
+      // Balance braces
+      if (kind >= tok::l_square && kind <= tok::r_brace) {
+        if (kind & (tok::r_square|tok::r_paren|tok::r_brace)) {
+          // closing the proper one?
+          if (m_ParenStack.empty() || m_ParenStack.back() != (kind >> 1)) {
+            if (multilineComment)
+              continue;
+
+            Res = kMismatch;
+            break;
+          }
+          m_ParenStack.pop_back();
+
+          // Right brace will pop a template if their is one
+          if (kind == tok::r_brace && m_ParenStack.size() == 1 ) {
+            if (m_ParenStack.back() == tok::greater)
+              m_ParenStack.pop_back();
+          }
+        }
+        else
+          m_ParenStack.push_back(kind);
+      }
+      else if (kind == tok::hash) {
+        const char* begin[] = { "if", 0 };
+        if (!endIdentifier(Tok, curPos, "endif", begin, m_ParenStack)) {
+          Res = kMismatch;
+          break;
+        }
+      }
+      else if (objC && kind == tok::at) {
+        const char* begin[] = { "interface", "implementation", "protocol", 0 };
+        if (!endIdentifier(Tok, curPos, "end", begin, m_ParenStack)) {
+          Res = kMismatch;
+          break;
+        }
+      }
+      else if (kind == tok::semicolon) {
+        // Template forward declatation
+        if (m_ParenStack.size() == 1 && m_ParenStack.back()==tok::greater)
+          m_ParenStack.pop_back();
+      }
+      else if (Tok.isOneOf(tok::stringlit|tok::charlit))
+        MetaLexer::LexQuotedStringAndAdvance(curPos, Tok);
+    }
+  } while (Tok.isNot(tok::eof));
+
+  if (!m_ParenStack.empty() && Res != kMismatch)
+    Res = kIncomplete;
+
+  if (!m_Input.empty()) {
+    if (!m_ParenStack.empty() && (m_ParenStack.back() == tok::stringlit
+                                  || m_ParenStack.back() == tok::charlit))
+      m_Input.append("\\n");
     else
-      m_Input = "";
-
-    m_Input.append(line);
-
-    return Res;
+      m_Input.append("\n");
   }
+  else
+    m_Input = "";
 
-  void InputValidator::reset(std::string* input) {
-    if (input) {
-      assert(input->empty() && "InputValidator::reset got non empty argument");
-      input->swap(m_Input);
-    } else
-      std::string().swap(m_Input);
+  m_Input.append(line);
 
-    std::deque<int>().swap(m_ParenStack);
-  }
-} // end namespace cling
+  return Res;
+}
+
+void InputValidator::reset(std::string* input) {
+  if (input) {
+    assert(input->empty() && "InputValidator::reset got non empty argument");
+    input->swap(m_Input);
+  } else
+    std::string().swap(m_Input);
+
+  std::deque<int>().swap(m_ParenStack);
+}

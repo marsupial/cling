@@ -21,16 +21,18 @@
 #include <stdio.h>
 
 namespace cling {
-
   class Interpreter;
   class InputValidator;
-  class MetaSema;
   class Value;
+
+  namespace meta {
+
+  class Actions;
 
   ///\brief Class that helps processing meta commands, which add extra
   /// interactivity. Syntax .Command [arg0 arg1 ... argN]
   ///
-  class MetaProcessor {
+  class Processor {
   private:
     ///\brief Reference to the interpreter
     ///
@@ -43,7 +45,7 @@ namespace cling {
 
     ///\brief The actions/state that can be performed.
     ///
-    std::unique_ptr<MetaSema> m_Actions;
+    std::unique_ptr<Actions> m_Actions;
 
     ///\brief Currently executing file as passed into executeFile
     ///
@@ -88,11 +90,11 @@ namespace cling {
     /// able to redirect std.
     class MaybeRedirectOutputRAII {
     private:
-      MetaProcessor* m_MetaProcessor;
+      Processor* m_MetaProcessor;
       int m_isCurrentlyRedirecting;
 
     public:
-      MaybeRedirectOutputRAII(MetaProcessor* p);
+      MaybeRedirectOutputRAII(Processor* p);
       ~MaybeRedirectOutputRAII();
 
       // Don't mess with m_RedirectionRAIILevel
@@ -104,13 +106,13 @@ namespace cling {
     private:
       void pop();
       void redirect(FILE* file, const std::string& fileName,
-                    MetaProcessor::RedirectionScope scope);
+                    Processor::RedirectionScope scope);
       void unredirect(int backFD, int expectedFD, FILE* file);
     };
 
   public:
-    MetaProcessor(Interpreter& interp, llvm::raw_ostream& outs);
-    ~MetaProcessor();
+    Processor(Interpreter& interp, llvm::raw_ostream& outs);
+    ~Processor();
 
     Interpreter& getInterpreter() const { return m_Interp; }
 
@@ -198,7 +200,7 @@ namespace cling {
     ///
     bool registerUnloadPoint(const Transaction* T, llvm::StringRef filename);
 
-    MetaSema& getActions() const { return *m_Actions; }
+    Actions& getActions() const { return *m_Actions; }
     bool& quit() { return m_QuitRequested; }
 
   private:
@@ -218,6 +220,11 @@ namespace cling {
     ///\returns - The copy of the file descriptor.
     int copyFileDescriptor(int fd);
   };
+
+  } // end namespace meta
+
+  typedef meta::Processor MetaProcessor;
+
 } // end namespace cling
 
 #endif // CLING_METAPROCESSOR_H

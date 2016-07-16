@@ -51,7 +51,7 @@ int main( int argc, char **argv ) {
     interp.loadFile(opts.LibsToLoad[I]);
   }
 
-  cling::UserInterface ui(interp);
+  cling::ui::UserInterface ui(interp);
   // If we are not interactive we're supposed to parse files
   if (!opts.IsInteractive()) {
     for (const std::string &input : opts.Inputs) {

@@ -12,8 +12,8 @@
 #include "cling/UserInterface/CompilationException.h"
 #include "cling/Interpreter/Exception.h"
 #include "cling/MetaProcessor/MetaProcessor.h"
-#include "textinput/Callbacks.h"
 #include "textinput/TextInput.h"
+#include "textinput/Callbacks.h"
 #include "textinput/StreamReader.h"
 #include "textinput/TerminalDisplay.h"
 
@@ -49,6 +49,9 @@
 
 #include <memory>
 
+using namespace cling;
+using namespace cling::ui;
+
 namespace {
   // Handle fatal llvm errors by throwing an exception.
   // Yes, throwing exceptions in error handlers is bad.
@@ -56,7 +59,7 @@ namespace {
   void exceptionErrorHandler(void * /*user_data*/,
                              const std::string& reason,
                              bool /*gen_crash_diag*/) {
-    throw cling::CompilationException(reason);
+    throw CompilationException(reason);
   }
 #if defined(LLVM_ON_UNIX)
   static void GetUserHomeDirectory(llvm::SmallVectorImpl<char>& str) {
@@ -84,9 +87,7 @@ namespace {
 #else
 # error "Unsupported platform."
 #endif
-}
 
-namespace {
   ///\brief Class that specialises the textinput TabCompletion to allow Cling
   /// to code complete through its own textinput mechanism which is part of the
   /// UserInterface.
@@ -107,111 +108,108 @@ namespace {
       return true;
     }
   };
+
+} // anonymous namespace
+
+// Declared in CompilationException.h; vtable pinned here.
+CompilationException::~CompilationException() throw() {}
+
+UserInterface::UserInterface(Interpreter& interp) {
+  // We need stream that doesn't close its file descriptor, thus we are not
+  // using llvm::outs. Keeping file descriptor open we will be able to use
+  // the results in pipes (Savannah #99234).
+  static llvm::raw_fd_ostream m_MPOuts (STDOUT_FILENO, /*ShouldClose*/false);
+  m_MetaProcessor.reset(new MetaProcessor(interp, m_MPOuts));
+  llvm::install_fatal_error_handler(&exceptionErrorHandler);
 }
 
-namespace cling {
-  // Declared in CompilationException.h; vtable pinned here.
-  CompilationException::~CompilationException() throw() {}
+UserInterface::~UserInterface() {}
 
-  UserInterface::UserInterface(Interpreter& interp) {
-    // We need stream that doesn't close its file descriptor, thus we are not
-    // using llvm::outs. Keeping file descriptor open we will be able to use
-    // the results in pipes (Savannah #99234).
-    static llvm::raw_fd_ostream m_MPOuts (STDOUT_FILENO, /*ShouldClose*/false);
-    m_MetaProcessor.reset(new MetaProcessor(interp, m_MPOuts));
-    llvm::install_fatal_error_handler(&exceptionErrorHandler);
+void UserInterface::runInteractively(bool nologo /* = false */) {
+  if (!nologo) {
+    PrintLogo();
   }
 
-  UserInterface::~UserInterface() {}
-
-  void UserInterface::runInteractively(bool nologo /* = false */) {
-    if (!nologo) {
-      PrintLogo();
-    }
-
-    llvm::SmallString<512> histfilePath;
-    if (!getenv("CLING_NOHISTORY")) {
-      // History file is $HOME/.cling_history
-      static const char* histfile = ".cling_history";
-      GetUserHomeDirectory(histfilePath);
-      llvm::sys::path::append(histfilePath, histfile);
-    }
-
-    using namespace textinput;
-    std::unique_ptr<StreamReader> R(StreamReader::Create());
-    std::unique_ptr<TerminalDisplay> D(TerminalDisplay::Create());
-    TextInput TI(*R, *D, histfilePath.empty() ? 0 : histfilePath.c_str());
-
-    // Inform text input about the code complete consumer
-    // TextInput owns the TabCompletion.
-    UITabCompletion* Completion =
-                      new UITabCompletion(m_MetaProcessor->getInterpreter());
-    TI.SetCompletion(Completion);
-
-    TI.SetPrompt("[cling]$ ");
-    std::string line;
-    while (true) {
-      try {
-        m_MetaProcessor->getOuts().flush();
-        TextInput::EReadResult RR = TI.ReadInput();
-        TI.TakeInput(line);
-        if (RR == TextInput::kRREOF) {
-          break;
-        }
-
-        cling::Interpreter::CompilationResult compRes;
-        MetaProcessor::MaybeRedirectOutputRAII RAII(m_MetaProcessor.get());
-        int indent
-          = m_MetaProcessor->process(line.c_str(), compRes, 0/*result*/);
-        // Quit requested
-        if (indent < 0)
-          break;
-        std::string Prompt = "[cling]";
-        if (m_MetaProcessor->getInterpreter().isRawInputEnabled())
-          Prompt.append("! ");
-        else
-          Prompt.append("$ ");
-
-        if (indent > 0)
-          // Continuation requested.
-          Prompt.append('?' + std::string(indent * 3, ' '));
-
-        TI.SetPrompt(Prompt.c_str());
-
-      }
-      catch(InvalidDerefException& e) {
-        e.diagnose();
-      }
-      catch(InterpreterException& e) {
-        llvm::errs() << ">>> Caught an interpreter exception!\n"
-                     << ">>> " << e.what() << '\n';
-      }
-      catch(std::exception& e) {
-        llvm::errs() << ">>> Caught a std::exception!\n"
-                     << ">>> " << e.what() << '\n';
-      }
-      catch(...) {
-        llvm::errs() << "Exception occurred. Recovering...\n";
-      }
-    }
+  llvm::SmallString<512> histfilePath;
+  if (!getenv("CLING_NOHISTORY")) {
+    // History file is $HOME/.cling_history
+    static const char* histfile = ".cling_history";
+    GetUserHomeDirectory(histfilePath);
+    llvm::sys::path::append(histfilePath, histfile);
   }
 
-  void UserInterface::PrintLogo() {
-    llvm::raw_ostream& outs = m_MetaProcessor->getOuts();
-    const clang::LangOptions& LangOpts
-      = m_MetaProcessor->getInterpreter().getCI()->getLangOpts();
-    if (LangOpts.CPlusPlus) {
-      outs << "\n"
-        "****************** CLING ******************\n"
-        "* Type C++ code and press enter to run it *\n"
-        "*             Type .q to exit             *\n"
-        "*******************************************\n";
-    } else {
-      outs << "\n"
-        "***************** CLING *****************\n"
-        "* Type C code and press enter to run it *\n"
-        "*            Type .q to exit            *\n"
-        "*****************************************\n";
+  using namespace textinput;
+  std::unique_ptr<StreamReader> R(StreamReader::Create());
+  std::unique_ptr<TerminalDisplay> D(TerminalDisplay::Create());
+  TextInput TI(*R, *D, histfilePath.empty() ? 0 : histfilePath.c_str());
+
+  // Inform text input about the code complete consumer
+  // TextInput owns the TabCompletion.
+  TI.SetCompletion(new UITabCompletion(m_MetaProcessor->getInterpreter()));
+
+  TI.SetPrompt("[cling]$ ");
+  std::string line;
+  while (true) {
+    try {
+      m_MetaProcessor->getOuts().flush();
+      TextInput::EReadResult RR = TI.ReadInput();
+      TI.TakeInput(line);
+      if (RR == TextInput::kRREOF) {
+        break;
+      }
+
+      cling::Interpreter::CompilationResult compRes;
+      MetaProcessor::MaybeRedirectOutputRAII RAII(m_MetaProcessor.get());
+      int indent
+        = m_MetaProcessor->process(line.c_str(), compRes, 0/*result*/);
+      // Quit requested
+      if (indent < 0)
+        break;
+      std::string Prompt = "[cling]";
+      if (m_MetaProcessor->getInterpreter().isRawInputEnabled())
+        Prompt.append("! ");
+      else
+        Prompt.append("$ ");
+
+      if (indent > 0)
+        // Continuation requested.
+        Prompt.append('?' + std::string(indent * 3, ' '));
+
+      TI.SetPrompt(Prompt.c_str());
+
+    }
+    catch(InvalidDerefException& e) {
+      e.diagnose();
+    }
+    catch(InterpreterException& e) {
+      llvm::errs() << ">>> Caught an interpreter exception!\n"
+                   << ">>> " << e.what() << '\n';
+    }
+    catch(std::exception& e) {
+      llvm::errs() << ">>> Caught a std::exception!\n"
+                   << ">>> " << e.what() << '\n';
+    }
+    catch(...) {
+      llvm::errs() << "Exception occurred. Recovering...\n";
     }
   }
-} // end namespace cling
+}
+
+void UserInterface::PrintLogo() {
+  llvm::raw_ostream& outs = m_MetaProcessor->getOuts();
+  const clang::LangOptions& LangOpts
+    = m_MetaProcessor->getInterpreter().getCI()->getLangOpts();
+  if (LangOpts.CPlusPlus) {
+    outs << "\n"
+      "****************** CLING ******************\n"
+      "* Type C++ code and press enter to run it *\n"
+      "*             Type .q to exit             *\n"
+      "*******************************************\n";
+  } else {
+    outs << "\n"
+      "***************** CLING *****************\n"
+      "* Type C code and press enter to run it *\n"
+      "*            Type .q to exit            *\n"
+      "*****************************************\n";
+  }
+}

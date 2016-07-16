@@ -21,56 +21,58 @@ namespace clang {
 }
 
 namespace cling {
+  namespace meta {
 
-  ///\brief Provides storage for the input and tracks down whether the (, [, {
-  /// are balanced.
-  ///
-  class InputValidator {
-  private:
-    ///\brief The input being collected.
+    ///\brief Provides storage for the input and tracks down whether
+    /// (, [, {, are balanced.
     ///
-    std::string m_Input;
+    class InputValidator {
+    private:
+      ///\brief The input being collected.
+      ///
+      std::string m_Input;
 
-    ///\brief Stack used for checking the brace balance.
-    ///
-    std::deque<int> m_ParenStack;
+      ///\brief Stack used for checking the brace balance.
+      ///
+      std::deque<int> m_ParenStack;
 
-  public:
-    InputValidator() {}
-    ~InputValidator() {}
+    public:
+      InputValidator() {}
+      ~InputValidator() {}
 
-    ///\brief Brace balance validation could encounter.
-    ///
-    enum ValidationResult {
-      kIncomplete, ///< There is dangling brace.
-      kComplete, ///< All braces are in balance.
-      kMismatch ///< Closing brace doesn't match to opening. Eg: void f(};
+      ///\brief Brace balance validation could encounter.
+      ///
+      enum ValidationResult {
+        kIncomplete, ///< There is dangling brace.
+        kComplete, ///< All braces are in balance.
+        kMismatch ///< Closing brace doesn't match to opening. Eg: void f(};
+      };
+
+      ///\brief Checks whether the input contains balanced number of braces
+      ///
+      ///\param[in] line - Input line to validate.
+      ///\param[in] objC - Parse objective-c tokens.
+      ///\returns Information about the outcome of the validation.
+      ///
+      ValidationResult validate(llvm::StringRef line, bool objC);
+
+      ///\brief Retrieves the number of spaces that the next input line should
+      /// be indented.
+      ///
+      int getExpectedIndent() { return m_ParenStack.size(); }
+
+      ///\brief Resets the collected input and its corresponding brace stack.
+      ///
+      ///\param[in] input - Grab the collected input before reseting.
+      ///
+      void reset(std::string* input = nullptr);
+
+      ///\brief Return whether we are inside a mult-line comment
+      ///
+      ///\returns true if currently inside a multi-line comment block
+      ///
+      bool inBlockComment() const;
     };
-
-    ///\brief Checks whether the input contains balanced number of braces
-    ///
-    ///\param[in] line - Input line to validate.
-    ///\param[in] objC - Parse objective-c tokens.
-    ///\returns Information about the outcome of the validation.
-    ///
-    ValidationResult validate(llvm::StringRef line, bool objC);
-
-    ///\brief Retrieves the number of spaces that the next input line should be
-    /// indented.
-    ///
-    int getExpectedIndent() { return m_ParenStack.size(); }
-
-    ///\brief Resets the collected input and its corresponding brace stack.
-    ///
-    ///\param[in] input - Grab the collected input before reseting.
-    ///
-    void reset(std::string* input = nullptr);
-
-    ///\brief Return whether we are inside a mult-line comment
-    ///
-    ///\returns true if currently inside a multi-line comment block
-    ///
-    bool inBlockComment() const;
-  };
+  }
 }
 #endif // CLING_INPUT_VALIDATOR_H

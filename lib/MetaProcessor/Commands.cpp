@@ -8,7 +8,7 @@
 //------------------------------------------------------------------------------
 
 #include "MetaParser.h"
-#include "MetaSema.h"
+#include "MetaActions.h"
 #include "Display.h"
 #include "cling/Interpreter/ClangInternalState.h"
 #include "cling/Interpreter/Interpreter.h"
@@ -22,6 +22,9 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Serialization/ASTReader.h"
 #include "clang/Frontend/CompilerInstance.h"
+
+using namespace cling;
+using namespace cling::meta;
 
 namespace cling {
 namespace meta {
@@ -43,7 +46,7 @@ llvm::StringRef static argumentAsString(const Argument &tk) {
 
 class CommandArguments
 {
-  MetaParser m_Parser;
+  Parser m_Parser;
 
   const Token& skipToNextToken() {
     m_Parser.consumeToken();
@@ -61,14 +64,14 @@ public:
   Interpreter& Interpreter;
   llvm::raw_ostream& Output;
   const StringRef CommandName;
-  MetaProcessor *Processor; // Can be null!
-  MetaSema::ActionResult Result;
+  Processor *Processor; // Can be null!
+  Actions::ActionResult Result;
   Value* OutValue;
 
   CommandArguments(llvm::StringRef Cmd, class Interpreter& I,
-                   llvm::raw_ostream& Out, MetaProcessor* Pr, Value* V)
+                   llvm::raw_ostream& Out, class Processor* Pr, Value* V)
     : m_Parser(Cmd), Interpreter(I), Output(Out), CommandName(Cmd),
-      Processor(Pr), Result(MetaSema::AR_Success), OutValue(V) {
+      Processor(Pr), Result(Actions::AR_Success), OutValue(V) {
     if (OutValue) *OutValue = Value();
   }
   
@@ -99,7 +102,7 @@ public:
   const Argument&  nextArg()     { return skipToNextToken(); }
   llvm::StringRef  nextString()  { return argumentAsString(nextArg(tok::space));}
 
-  MetaSema& actions() const {
+  Actions& actions() const {
     assert(Processor && "MetaProcessor not available");
     return Processor->getActions();
   }
@@ -161,7 +164,7 @@ static bool doLCommand(CommandArguments& Params) {
     }
 
     File = argumentAsString(arg);
-  } while (!File.empty() && Params.Result == MetaSema::AR_Success);
+  } while (!File.empty() && Params.Result == Actions::AR_Success);
 
   return true;
 }
@@ -530,7 +533,7 @@ static bool doShellCommand(CommandArguments& Params) {
         *Params.OutValue = Value(Ctx.IntTy, Params.Interpreter);
         Params.OutValue->getAs<long long>() = ret;
       }
-      Params.Result = (ret == 0) ? MetaSema::AR_Success : MetaSema::AR_Failure;
+      Params.Result = (ret == 0) ? Actions::AR_Success : Actions::AR_Failure;
     }
     return true;
   }
@@ -784,7 +787,7 @@ CommandTable::execute(llvm::StringRef CmdStr, Interpreter& Interp,
       const CommandObj* Cmd = CmdPair.second;
       if (Cmd->Flags & kCmdCustomSyntax) {
         if (Cmd->Callback.Callback0(CmdArgs))
-          return CmdArgs.Result == MetaSema::AR_Success ? 1 : -1;
+          return CmdArgs.Result == Actions::AR_Success ? 1 : -1;
       }
     }
     // No command found
@@ -812,7 +815,7 @@ CommandTable::execute(llvm::StringRef CmdStr, Interpreter& Interp,
     return -1;
   }
 
-  return CmdArgs.Result == MetaSema::AR_Success ? 1 : -1;
+  return CmdArgs.Result == Actions::AR_Success ? 1 : -1;
 }
 
 } //namespace meta

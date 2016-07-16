@@ -17,7 +17,7 @@ add_cling_library(clingMetaProcessor OBJECT
   MetaLexer.cpp
   MetaParser.cpp
   MetaProcessor.cpp
-  MetaSema.cpp
+  MetaActions.cpp
   Commands.cpp
 
   LINK_LIBS
