@@ -44,11 +44,11 @@
 using namespace cling;
 using namespace cling::meta;
 
-Actions::ActionResult Actions::actOnLCommand(llvm::StringRef file,
-                                           Transaction** transaction /*= 0*/){
+CommandResult Actions::actOnLCommand(llvm::StringRef file,
+                                     Transaction** transaction /*= 0*/){
   FileEntry fe = getInterpreter().lookupFileOrLibrary(file);
-  ActionResult result = doUCommand(file, fe);
-  if (result != AR_Success)
+  CommandResult result = doUCommand(file, fe);
+  if (result != kCmdSuccess)
     return result;
 
   // In case of libraries we get .L lib.so, which might automatically pull in
@@ -64,13 +64,13 @@ Actions::ActionResult Actions::actOnLCommand(llvm::StringRef file,
   if (getInterpreter().loadFile(fe, true /*allowSharedLib*/, transaction)
       == Interpreter::kSuccess) {
     registerUnloadPoint(unloadPoint, std::move(fe));
-    return AR_Success;
+    return kCmdSuccess;
   }
-  return AR_Failure;
+  return kCmdFailure;
 }
 
-Actions::ActionResult Actions::actOnFCommand(llvm::StringRef file,
-                                             Transaction** T /*= 0*/){
+CommandResult Actions::actOnFCommand(llvm::StringRef file,
+                                     Transaction** T /*= 0*/){
 #if defined(__APPLE__)
   class FrameworkResolver {
   public:
@@ -312,7 +312,7 @@ Actions::ActionResult Actions::actOnFCommand(llvm::StringRef file,
       const bool haveLib = !paths.library.empty(),
                  haveHeader = !paths.header.empty();
       if (haveLib || haveHeader) {
-        if (m_Sema.actOnUCommand(paths.bundle) != Actions::AR_Success)
+        if (m_Sema.actOnUCommand(paths.bundle) != kCmdSuccess)
           return false;
 
         Interpreter &interp =
@@ -341,16 +341,16 @@ Actions::ActionResult Actions::actOnFCommand(llvm::StringRef file,
   FrameworkResolver fResolver(file);
   if (fResolver.isAbsolute()) {
     if (action(fResolver.resolve(file.str())))
-      return AR_Success;
+      return kCmdSuccess;
   } else if (llvm::sys::fs::is_regular_file(file))
     return actOnLCommand(file, T);
   else if (fResolver.resolve(file,
                getInterpreter().getCI()->getHeaderSearchOpts(),
                action))
-    return AR_Success;
+    return kCmdSuccess;
 
 #endif
-  return AR_Failure;
+  return kCmdFailure;
 }
 
 static std::string buildArguments(const char* buf, Interpreter *I = nullptr,
@@ -453,12 +453,12 @@ static std::string buildArguments(const char* buf, Interpreter *I = nullptr,
   return args;
 }
 
-Actions::ActionResult Actions::actOnxCommand(llvm::StringRef file,
-                                             llvm::StringRef args,
-                                             Value* result) {
+CommandResult Actions::actOnxCommand(llvm::StringRef file,
+                                     llvm::StringRef args,
+                                     Value* result) {
   cling::Transaction* T = 0;
-  Actions::ActionResult actionResult = actOnLCommand(file, &T);
-  if (actionResult == AR_Success) {
+  CommandResult actionResult = actOnLCommand(file, &T);
+  if (actionResult == kCmdSuccess) {
     // Look for start of parameters:
     typedef std::pair<llvm::StringRef,llvm::StringRef> StringRefPair;
 
@@ -530,21 +530,21 @@ Actions::ActionResult Actions::actOnxCommand(llvm::StringRef file,
                            DiagnosticsEngine::Level::Warning,
                            "cannot find function '%0()'; falling back to .L"))
           << pairFuncExt.first;
-      return AR_Success;
+      return kCmdSuccess;
     }
 
     assert(!expression.empty() && "Invocation expression wasn't built");
                              ;
     if (getInterpreter().echo(expression, result) != Interpreter::kSuccess)
-      actionResult = AR_Failure;
+      actionResult = kCmdFailure;
   }
   return actionResult;
 }
 
-Actions::ActionResult Actions::doUCommand(const llvm::StringRef &file,
-                                          const FileEntry &fe ) {
+CommandResult Actions::doUCommand(const llvm::StringRef &file,
+                                  const FileEntry &fe ) {
   if (!m_Watermarks.get())
-    return AR_Success;
+    return kCmdSuccess;
 
   // FIXME: unload, once implemented, must return success / failure
   // Lookup the file
@@ -590,10 +590,10 @@ Actions::ActionResult Actions::doUCommand(const llvm::StringRef &file,
       m_Watermarks->first.erase(Pos);
     }
   }
-  return AR_Success;
+  return kCmdSuccess;
 }
 
-Actions::ActionResult Actions::actOnUCommand(llvm::StringRef file) {
+CommandResult Actions::actOnUCommand(llvm::StringRef file) {
   //Get the canonical path, taking into account interp and system search paths
   return doUCommand(file, getInterpreter().lookupFileOrLibrary(file));
 }

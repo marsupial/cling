@@ -307,7 +307,7 @@ namespace cling {
     return Success;
   }
 
-  void IncrementalParser::setCommands(meta::CommandTable* Cmds) {
+  void IncrementalParser::setCommands(meta::Commands* Cmds) {
     m_PragmaHandler->setCommands(Cmds);
   }
 

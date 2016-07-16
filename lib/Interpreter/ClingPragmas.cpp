@@ -10,7 +10,7 @@
 #include "ClingPragmas.h"
 
 #include "cling/Interpreter/Interpreter.h"
-#include "cling/MetaProcessor/CommandTable.h"
+#include "cling/MetaProcessor/Commands.h"
 
 #include "clang/AST/ASTContext.h"
 #include "clang/Basic/TokenKinds.h"
@@ -155,7 +155,10 @@ bool ClingPragmaHandler::RunCommand(clang::Lexer* Lex,
     while (Str.size() && ::isspace(Str[Str.size()-1]))
       Str.resize(Str.size()-1);
 
-    return m_Commands->execute(Str.c_str(), m_Interp, llvm::outs());
+    // Error reporting handled via commands, but if command wasn't found
+    // print out pragma help text.
+    return m_Commands->execute(Str.c_str(), m_Interp, llvm::outs())
+            != meta::kCmdNotFound;
   }
   return false;
 }

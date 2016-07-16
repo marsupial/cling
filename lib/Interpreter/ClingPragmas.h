@@ -20,12 +20,12 @@ namespace clang {
 namespace cling {
   class Interpreter;
   namespace meta {
-    class CommandTable;
+    class Commands;
   }
   
   class ClingPragmaHandler: public clang::PragmaHandler {
     Interpreter& m_Interp;
-    meta::CommandTable* m_Commands;
+    meta::Commands* m_Commands;
 
     void ReportCommandErr(clang::Preprocessor&, const clang::Token&);
     void LoadCommand(clang::Preprocessor&, clang::Token&, std::string);
@@ -42,7 +42,7 @@ namespace cling {
 
     static ClingPragmaHandler* install(Interpreter&);
 
-    void setCommands(meta::CommandTable* Cmds) { m_Commands = Cmds; }
+    void setCommands(meta::Commands* Cmds) { m_Commands = Cmds; }
   };
 } // namespace cling
 

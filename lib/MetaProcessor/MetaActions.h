@@ -11,6 +11,7 @@
 #define CLING_META_SEMA_H
 
 #include "cling/MetaProcessor/MetaProcessor.h"
+#include "cling/MetaProcessor/Commands.h"
 #include "cling/Interpreter/Transaction.h"
 
 #include "clang/Basic/FileManager.h" // for DenseMap<FileEntry*>
@@ -44,17 +45,12 @@ namespace cling {
         return m_MetaProcessor.getInterpreter();
       }
 
-    public:
-      enum SwitchMode {
-        kOff = 0,
-        kOn = 1,
-        kToggle = 2
-      };
+      ///\brief Private actOnUCommand that takes a resolved FileEntry
+      ///
+      CommandResult doUCommand(const llvm::StringRef& file,
+                               const FileEntry& fileEntry);
 
-      enum ActionResult {
-        AR_Failure = 0,
-        AR_Success = 1
-      };
+    public:
 
       Actions(MetaProcessor& meta) : m_MetaProcessor(meta) {}
 
@@ -63,8 +59,8 @@ namespace cling {
       ///\param[in] file - The file/library to be loaded.
       ///\param[out] transaction - Transaction containing the loaded file.
       ///
-      ActionResult actOnLCommand(llvm::StringRef file,
-                                 Transaction** transaction = 0);
+      CommandResult actOnLCommand(llvm::StringRef file,
+                                  Transaction** transaction = 0);
 
       ///\brief F command loads the given framework and optioanlly its root
       /// header (OS X only)
@@ -72,8 +68,8 @@ namespace cling {
       ///\param[in] file - The frameowrk to b eloaded
       ///\param[out] transaction - Transaction containing the loaded file.
       ///
-      ActionResult actOnFCommand(llvm::StringRef file,
-                                 Transaction** transaction = 0);
+      CommandResult actOnFCommand(llvm::StringRef file,
+                                  Transaction** transaction = 0);
 
       ///\brief Actions to be performed on a given file. Loads the given file
       /// and calls a function with the name of the file.
@@ -86,14 +82,14 @@ namespace cling {
       ///\param[out] result - If not NULL, will hold the value of the last
       ///                     expression.
       ///
-      ActionResult actOnxCommand(llvm::StringRef file, llvm::StringRef args,
-                                 Value* result);
+      CommandResult actOnxCommand(llvm::StringRef file, llvm::StringRef args,
+                                  Value* result);
 
       ///\brief Actions to be performed on unload command.
       ///
       ///\param[in] file - The file to unload.
       ///
-      ActionResult actOnUCommand(llvm::StringRef file);
+      CommandResult actOnUCommand(llvm::StringRef file);
 
       ///\brief Register the file as an upload point for the current
       ///  Transaction: when unloading that file, all transactions after
@@ -107,12 +103,6 @@ namespace cling {
       ///\returns Whether registration was successful or not.
       ///
       bool registerUnloadPoint(const Transaction* T, FileEntry filename);
-
-    private:
-      ///\brief Private actOnUCommand that takes a resolved FileEntry
-      ///
-      ActionResult doUCommand(const llvm::StringRef& file,
-                              const FileEntry& fileEntry);
     };
 
   } // end namespace meta

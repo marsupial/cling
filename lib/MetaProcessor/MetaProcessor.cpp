@@ -12,7 +12,7 @@
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/Value.h"
 #include "cling/MetaProcessor/MetaProcessor.h"
-#include "cling/MetaProcessor/CommandTable.h"
+#include "cling/MetaProcessor/Commands.h"
 #include "../lib/Interpreter/IncrementalParser.h"
 
 #include "clang/Basic/FileManager.h"
@@ -119,7 +119,7 @@ Processor::Processor(Interpreter& interp, raw_ostream& outs)
   m_backupFDStdout = copyFileDescriptor(STDOUT_FILENO);
   m_backupFDStderr = copyFileDescriptor(STDERR_FILENO);
 
-  interp.getIncrParser().setCommands(meta::CommandTable::create(true));
+  interp.getIncrParser().setCommands(&meta::Commands::get());
 }
 
 Processor::~Processor() {
@@ -129,12 +129,16 @@ Processor::~Processor() {
 
 Interpreter::CompilationResult
 Processor::doMetaCommand(llvm::StringRef cmd, Value* result) {
-  // Init the parser
-  if (meta::CommandTable* Cmds = meta::CommandTable::create()) {
-    if (const int Rval = Cmds->execute(cmd, m_Interp, getOuts(), this, result))
-      return Rval > 0 ? Interpreter::kSuccess : Interpreter::kFailure;
+  meta::Commands& Cmds = meta::Commands::get();
+  switch (Cmds.execute(cmd, m_Interp, getOuts(), this, result)) {
+    case kCmdSuccess:
+      return Interpreter::kSuccess;
+    case kCmdInvalidSyntax:
+      return Interpreter::kMoreInputExpected;
+    default:
+      return Interpreter::kFailure;
   }
-  return Interpreter::kMoreInputExpected;
+  return Interpreter::kFailure;
 }
 
 static size_t isMetaCommand(const std::string& str, const std::string& meta) {

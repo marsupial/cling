@@ -46,7 +46,7 @@ namespace cling {
   class ASTTransformer;
   class ClingPragmaHandler;
   namespace meta {
-    class CommandTable;
+    class Commands;
   }
 
   ///\brief Responsible for the incremental parsing and compilation of input.
@@ -234,7 +234,7 @@ namespace cling {
     ///
     void SetTransformers(bool isChildInterpreter);
 
-    void setCommands(meta::CommandTable*);
+    void setCommands(meta::Commands*);
 
   private:
     ///\brief Finalizes the consumers (e.g. CodeGen) on a transaction.

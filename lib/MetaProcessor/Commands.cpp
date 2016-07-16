@@ -14,9 +14,10 @@
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/Value.h"
 #include "cling/MetaProcessor/MetaProcessor.h"
-#include "cling/MetaProcessor/CommandTable.h"
+#include "cling/MetaProcessor/Commands.h"
 #include "../lib/Interpreter/IncrementalParser.h"
 
+#include "llvm/ADT/StringMap.h"
 #include "llvm/Support/Format.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Basic/SourceManager.h"
@@ -26,10 +27,7 @@
 using namespace cling;
 using namespace cling::meta;
 
-namespace cling {
-namespace meta {
-
-typedef Token Argument;
+typedef CommandArguments::Argument Argument;
 
 llvm::StringRef static argumentAsString(const Argument &tk) {
   switch (tk.getKind()) {
@@ -44,69 +42,92 @@ llvm::StringRef static argumentAsString(const Argument &tk) {
   return llvm::StringRef();
 }
 
-class CommandArguments
-{
-  Parser m_Parser;
+CommandArguments::CommandArguments(Parser& Pa, class Interpreter& I,
+                                   llvm::raw_ostream& Out,
+                                   class Processor* Pr, Value* V)
+  : m_Parser(Pa), Interpreter(I), Output(Out),
+    CommandName(Pa.getCurTok().getBufStart(), Pa.getCurTok().getLength()),
+    Processor(Pr), OutValue(V) {
+  if (OutValue)
+    *OutValue = Value();
+}
 
-  const Token& skipToNextToken() {
-    m_Parser.consumeToken();
-    m_Parser.skipWhitespace();
-    return m_Parser.getCurTok();
-  }
-  
-public:
-  enum SwitchMode {
-    kOff = 0,
-    kOn = 1,
-    kToggle = 2
-  };
-  
-  Interpreter& Interpreter;
-  llvm::raw_ostream& Output;
-  const StringRef CommandName;
-  Processor *Processor; // Can be null!
-  Actions::ActionResult Result;
-  Value* OutValue;
+const Token& CommandArguments::skipToNextToken() {
+  m_Parser.consumeToken();
+  m_Parser.skipWhitespace();
+  return m_Parser.getCurTok();
+}
 
-  CommandArguments(llvm::StringRef Cmd, class Interpreter& I,
-                   llvm::raw_ostream& Out, class Processor* Pr, Value* V)
-    : m_Parser(Cmd), Interpreter(I), Output(Out), CommandName(Cmd),
-      Processor(Pr), Result(Actions::AR_Success), OutValue(V) {
-    if (OutValue) *OutValue = Value();
-  }
-  
-  const Argument& nextArg(unsigned tk) {
-    m_Parser.consumeAnyStringToken(tok::TokenKind(tk));
-    return m_Parser.getCurTok();
-  }
-  llvm::Optional<int> optionalInt() {
-    llvm::Optional<int> value ;
-    const Argument      &arg = nextArg();
-    if (arg.is(tok::constant))
-      value = arg.getConstant();
-    else if (arg.is(tok::ident)) {
-      int tmp;
-      if (!arg.getIdent().getAsInteger(10, tmp))
-        value = tmp;
-    }
-    return value;
-  }
+const Argument& CommandArguments::nextArg(unsigned tk) {
+  m_Parser.consumeAnyStringToken(tok::TokenKind(tk));
+  return m_Parser.getCurTok();
+}
 
-  SwitchMode modeToken() {
-    llvm::Optional<int> mode = optionalInt();
-    return mode.hasValue() ? SwitchMode(mode.getValue()) : kToggle;
-  }
+llvm::Optional<int> CommandArguments::optionalInt(bool bools, bool* WasBool) {
+  if (WasBool)
+    *WasBool = false;
 
-  const Argument&  curArg ()     { return m_Parser.getCurTok(); }
-  llvm::StringRef  remaining()   { return argumentAsString(nextArg(tok::eof)); }
-  const Argument&  nextArg()     { return skipToNextToken(); }
-  llvm::StringRef  nextString()  { return argumentAsString(nextArg(tok::space));}
+  llvm::Optional<int> value ;
+  const Argument &arg = nextArg();
+  if (arg.is(tok::constant))
+    value = arg.getConstant();
+  else if (arg.is(tok::ident)) {
+    int tmp;
+    const llvm::StringRef str = arg.getIdent();
 
-  Actions& actions() const {
-    assert(Processor && "MetaProcessor not available");
-    return Processor->getActions();
+    // Returns true on error!
+    if (str.getAsInteger(10, tmp)) {
+      if (bools) {
+        if (str.equals("true")) {
+          if (WasBool) *WasBool = true;
+          value = 1;
+        } else if (str.equals("false")) {
+          if (WasBool) *WasBool = true;
+          value = 0;
+        }
+      }
+    } else
+      value = tmp;
   }
-};
+  return value;
+}
+
+const Argument& CommandArguments::curArg () {
+  return m_Parser.getCurTok();
+}
+
+const Argument& CommandArguments::nextArg() {
+  return skipToNextToken();
+}
+
+llvm::StringRef CommandArguments::nextString(unsigned tok) {
+  return argumentAsString(nextArg(tok));
+}
+
+llvm::StringRef CommandArguments::nextString() {
+  return nextString(tok::space);
+}
+
+llvm::StringRef CommandArguments::remaining() {
+  return nextString(tok::eof);
+}
+
+CommandResult CommandArguments::execute(llvm::StringRef Cmd,
+                                        std::string* Str,
+                                        cling::Value* Value) {
+  if (Str) {
+    llvm::raw_string_ostream Out(*Str);
+    return Commands::get().execute(Cmd, Interpreter, Out,
+                                   Processor, Value ? Value : OutValue);
+  }
+  return Commands::get().execute(Cmd, Interpreter, Output,
+                                 Processor, Value ? Value : OutValue);
+}
+
+Actions& CommandArguments::actions() const {
+  assert(Processor && "MetaProcessor not available");
+  return Processor->getActions();
+}
 
 namespace {
   
@@ -148,80 +169,99 @@ namespace {
 //                 Ident := a-zA-Z{a-zA-Z0-9}
 //
 
-static bool doLCommand(CommandArguments& Params) {
-  llvm::StringRef File =
-                    argumentAsString(Params.nextArg(tok::comment|tok::space));
-  if (File.empty())
-      return false;  // TODO: Some fine grained diagnostics
+CommandResult doLCommand(CommandArguments& Params) {
+  llvm::StringRef File = Params.nextString(tok::comment|tok::space);
+  CommandResult Result = kCmdInvalidSyntax;
+  if (!File.empty()) {
+    do {
+      Result = Params.actions().actOnLCommand(File);
 
-  do {
-    Params.Result = Params.actions().actOnLCommand(File);
+      const Argument &arg = Params.nextArg(tok::comment|tok::space);
+      if (arg.is(tok::comment)) {
+        Params.Interpreter.declare(Params.remaining());
+        break;
+      }
 
-    const Argument &arg = Params.nextArg(tok::comment|tok::space);
-    if (arg.is(tok::comment)) {
-      Params.Interpreter.declare(Params.remaining());
-      break;
-    }
-
-    File = argumentAsString(arg);
-  } while (!File.empty() && Params.Result == Actions::AR_Success);
-
-  return true;
+      File = argumentAsString(arg);
+    } while (!File.empty() && Result == kCmdSuccess);
+  }
+  return Result;
 }
 
-static bool doUCommand(CommandArguments& Params, llvm::StringRef Name) {
-  Params.Result = Params.actions().actOnUCommand(Name);
-  return true;
+CommandResult doUCommand(CommandArguments& Params, llvm::StringRef Name) {
+  Params.actions().actOnUCommand(Name);
+  return kCmdSuccess;
 }
 
 // F := 'F' FilePath Comment
 // FilePath := AnyString
 // AnyString := .*^('\t' Comment)
-static bool doFCommand(CommandArguments& Params, llvm::StringRef Name) {
+CommandResult doFCommand(CommandArguments& Params, llvm::StringRef Name) {
 #if defined(__APPLE__)
-  Params.Result = Params.actions().actOnFCommand(Name);
-  return true;
+  return Params.actions().actOnFCommand(Name);
 #endif
-  return false;
+  return kCmdFailure;
 }
 
 // T := 'T' FilePath Comment
 // FilePath := AnyString
 // AnyString := .*^('\t' Comment)
-static bool doTCommand(CommandArguments& Params) {
+CommandResult doTCommand(CommandArguments& Params) {
   const llvm::StringRef inputFile = Params.nextString();
   if (!inputFile.empty()) {
     const llvm::StringRef outputFile = Params.nextString();
     if (!outputFile.empty()) {
       Params.Interpreter.GenerateAutoloadingMap(inputFile, outputFile);
-      return true;
+      return kCmdSuccess;
     }
   }
-  // TODO: Some fine grained diagnostics
-  return false;
+  return kCmdInvalidSyntax;
 }
 
 // XCommand := 'x' FilePath[ArgList] | 'X' FilePath[ArgList]
 // FilePath := AnyString
 // ArgList := (ExtraArgList) ' ' [ArgList]
 // ExtraArgList := AnyString [, ExtraArgList]
-static bool doXCommand(CommandArguments& Params) {
-  llvm::StringRef F = argumentAsString(Params.nextArg(tok::l_paren|tok::space));
+CommandResult doXCommand(CommandArguments& Params) {
+  llvm::StringRef F = Params.nextString(tok::l_paren|tok::space);
   if (F.empty())
-    return false;
+    return kCmdInvalidSyntax;
 
   // actOnxCommand sorts out the arguments
-  Params.Result = Params.actions().actOnxCommand(F, Params.remaining(),
-                                                 Params.OutValue);
-  return true;
+  return Params.actions().actOnxCommand(F, Params.remaining(), Params.OutValue);
 }
 
-static bool doDebugCommand(CommandArguments& Params) {
-  llvm::Optional<int> mode = Params.optionalInt();
-
+CommandResult doDebugCommand(CommandArguments& Params) {
+  bool argWasBool;
+  llvm::Optional<int> mode = Params.optionalInt(true, &argWasBool);
   clang::CodeGenOptions& CGO = Params.Interpreter.getCI()->getCodeGenOpts();
-  if (!mode) {
-    bool flag = CGO.getDebugInfo() == clang::codegenoptions::NoDebugInfo;
+  if (mode && !argWasBool) {
+    const int value = mode.getValue();
+    const int NumDebInfos = 5;
+    if (value > 0 && value < NumDebInfos) {
+      clang::codegenoptions::DebugInfoKind DebInfos[NumDebInfos] = {
+        clang::codegenoptions::NoDebugInfo,
+        clang::codegenoptions::LocTrackingOnly,
+        clang::codegenoptions::DebugLineTablesOnly,
+        clang::codegenoptions::LimitedDebugInfo,
+        clang::codegenoptions::FullDebugInfo
+      };
+      CGO.setDebugInfo(DebInfos[value]);
+      if (!value)
+        Params.Output << "Not generating debug symbols\n";
+      else
+        Params.Output << "Generating debug symbols level " << value << '\n';
+    } else {
+      llvm::errs() << "Debug level must be between 0-" << NumDebInfos-1 << "\n";
+      return kCmdFailure;
+    }
+  } else {
+    // No mode, but we had an argument, show user how to use the command
+    if (!mode && !Params.curArg().is(tok::eof))
+      return kCmdInvalidSyntax;
+
+    bool flag = argWasBool ? mode.getValue() :
+                       CGO.getDebugInfo() == clang::codegenoptions::NoDebugInfo;
     if (flag)
       CGO.setDebugInfo(clang::codegenoptions::LimitedDebugInfo);
     else
@@ -229,126 +269,104 @@ static bool doDebugCommand(CommandArguments& Params) {
     // FIXME:
     Params.Output << (flag ? "G" : "Not g") << "enerating debug symbols\n";
   }
-  else {
-    static const int NumDebInfos = 5;
-    clang::codegenoptions::DebugInfoKind DebInfos[NumDebInfos] = {
-      clang::codegenoptions::NoDebugInfo,
-      clang::codegenoptions::LocTrackingOnly,
-      clang::codegenoptions::DebugLineTablesOnly,
-      clang::codegenoptions::LimitedDebugInfo,
-      clang::codegenoptions::FullDebugInfo
-    };
-    if (*mode >= NumDebInfos)
-      mode = NumDebInfos - 1;
-    else if (*mode < 0)
-      mode = 0;
-    CGO.setDebugInfo(DebInfos[*mode]);
-    if (!*mode) {
-      Params.Output << "Not generating debug symbols\n";
-    } else {
-      Params.Output << "Generating debug symbols level " << *mode << '\n';
-    }
-  }
-  return true;
+  return kCmdSuccess;
 }
 
-static bool doQCommand(CommandArguments& Params) {
+CommandResult doQCommand(CommandArguments& Params) {
   Params.Processor->quit() = true;
-  return true;
+  return kCmdSuccess;
 }
 
-static bool doAtCommand(CommandArguments& Params) {
+CommandResult doAtCommand(CommandArguments& Params) {
   Params.Processor->cancelContinuation();
-  return true;
+  return kCmdSuccess;
 }
 
-static bool doICommand(CommandArguments& Params, llvm::StringRef Argument) {
+CommandResult doICommand(CommandArguments& Params, llvm::StringRef Argument) {
   if (Argument.empty())
     Params.Interpreter.DumpIncludePath();
   else
     Params.Interpreter.AddIncludePath(Argument.str());
-  return true;
+  return kCmdSuccess;
 }
 
-static bool doRawInputCommand(CommandArguments& Params) {
-  const CommandArguments::SwitchMode mode = Params.modeToken();
-
-  if (mode == CommandArguments::kToggle) {
+CommandResult doRawInputCommand(CommandArguments& Params) {
+  const llvm::Optional<int> mode = Params.optionalInt();
+  if (!mode.hasValue()) {
     bool flag = !Params.Interpreter.isRawInputEnabled();
     Params.Interpreter.enableRawInput(flag);
     Params.Output << (flag ? "U" :"Not u") << "sing raw input\n";
   }
   else
-    Params.Interpreter.enableRawInput(mode);
-  return true;
+    Params.Interpreter.enableRawInput(mode.getValue());
+  return kCmdSuccess;
 }
 
-static bool doPrintDebugCommand(CommandArguments& Params) {
-  const CommandArguments::SwitchMode mode = Params.modeToken();
-
-  if (mode == CommandArguments::kToggle) {
+CommandResult doPrintDebugCommand(CommandArguments& Params) {
+  const llvm::Optional<int> mode = Params.optionalInt();
+  if (!mode.hasValue()) {
     bool flag = !Params.Interpreter.isPrintingDebug();
     Params.Interpreter.enablePrintDebug(flag);
     Params.Output << (flag ? "P" : "Not p") << "rinting Debug\n";
   }
   else
-    Params.Interpreter.enablePrintDebug(mode);
-  return true;
+    Params.Interpreter.enablePrintDebug(mode.getValue());
+  return kCmdSuccess;
 }
 
-static bool doDynamicExtensionsCommand(CommandArguments& Params) {
-  const CommandArguments::SwitchMode mode = Params.modeToken();
-
-  if (mode == CommandArguments::kToggle) {
+CommandResult doDynamicExtensionsCommand(CommandArguments& Params) {
+  const llvm::Optional<int> mode = Params.optionalInt();
+  if (!mode.hasValue()) {
     bool flag = !Params.Interpreter.isDynamicLookupEnabled();
     Params.Interpreter.enableDynamicLookup(flag);
     Params.Output << (flag ? "U" : "Not u") << "sing dynamic extensions\n";
   }
   else
-    Params.Interpreter.enableDynamicLookup(mode);
-  return true;
+    Params.Interpreter.enableDynamicLookup(mode.getValue());
+  return kCmdSuccess;
 }
 
-static bool doStoreStateCommand(CommandArguments& Params, llvm::StringRef Name) {
+CommandResult doStoreStateCommand(CommandArguments& Params,
+                                  llvm::StringRef Name) {
   if (Name.empty())
-      return false;
+      return kCmdInvalidSyntax;
 
   Params.Interpreter.storeInterpreterState(Name);
-  return true;
+  return kCmdSuccess;
 }
 
-static bool
+CommandResult
 doCompareStateCommand(CommandArguments& Params, llvm::StringRef Name) {
   if (Name.empty())
-      return false;
+      return kCmdInvalidSyntax;
 
   Params.Interpreter.compareInterpreterState(Name);
-  return true;
+  return kCmdSuccess;
 }
 
-static bool doStatsCommand(CommandArguments& Params, llvm::StringRef Name) {
+CommandResult doStatsCommand(CommandArguments& Params, llvm::StringRef Name) {
   if (Name.equals("decl")) {
     ClangInternalState::printLookupTables(Params.Output,
       Params.Interpreter.getCI()->getSema().getASTContext());
-    return true;
+    return kCmdSuccess;
   }
   else if (Name.equals("ast")) {
     Params.Interpreter.getCI()->getSema().getASTContext().PrintStats();
-    return true;
+    return kCmdSuccess;
   } else if (Name.equals("undo")) {
     Params.Interpreter.getIncrParser().printTransactionStructure();
-    return true;
+    return kCmdSuccess;
   }
-  return false;
+  return kCmdInvalidSyntax;
 }
 
-static bool doUndoCommand(CommandArguments& Params) {
+CommandResult doUndoCommand(CommandArguments& Params) {
   const llvm::Optional<int> arg = Params.optionalInt();
   Params.Interpreter.unload(arg.hasValue() ? arg.getValue() : 1);
-  return true;
+  return kCmdSuccess;
 }
 
-static bool doFileExCommand(CommandArguments& Params) {
+CommandResult doFileExCommand(CommandArguments& Params) {
   clang::CompilerInstance* CI = Params.Interpreter.getCI();
 
   const clang::SourceManager& SM = CI->getSourceManager();
@@ -375,47 +393,47 @@ static bool doFileExCommand(CommandArguments& Params) {
   }
 #endif
 
-  return true;
+  return kCmdSuccess;
 }
 
-static bool doFilesCommand(CommandArguments& Params) {
+CommandResult doFilesCommand(CommandArguments& Params) {
   Params.Interpreter.printIncludedFiles(Params.Output);
-  return true;
+  return kCmdSuccess;
 }
 
-static bool doNamespaceCommand(CommandArguments& Params) {
+CommandResult doNamespaceCommand(CommandArguments& Params) {
   DisplayNamespaces(Params.Output, &Params.Interpreter);
-  return true;
+  return kCmdSuccess;
 }
 
-static bool doClassCommand(CommandArguments& Params, llvm::StringRef Name) {
+CommandResult doClassCommand(CommandArguments& Params, llvm::StringRef Name) {
   if (Name.empty()) {
     const bool verbose = Params.CommandName[0] == 'C';
     DisplayClasses(Params.Output, &Params.Interpreter, verbose);
   } else
     DisplayClass(Params.Output, &Params.Interpreter, Name.str().c_str(), true);
-  return true;
+  return kCmdSuccess;
 }
 
-static bool doGCommand(CommandArguments& Params, llvm::StringRef Name) {
+CommandResult doGCommand(CommandArguments& Params, llvm::StringRef Name) {
   if (Name.empty())
     DisplayGlobals(Params.Output, &Params.Interpreter);
   else
     DisplayGlobal(Params.Output, &Params.Interpreter, Name.str().c_str());
-  return true;
+  return kCmdSuccess;
 }
 
-static bool doTypedefCommand(CommandArguments& Params, llvm::StringRef Name) {
+CommandResult doTypedefCommand(CommandArguments& Params, llvm::StringRef Name) {
   if (Name.empty())
     DisplayTypedefs(Params.Output, &Params.Interpreter);
   else
     DisplayTypedef(Params.Output, &Params.Interpreter, Name.str().c_str());
-  return true;
+  return kCmdSuccess;
 }
 
-static bool doOCommand(CommandArguments& Params) {
+CommandResult doOCommand(CommandArguments& Params) {
   // Does nothing
-  return false;
+  return kCmdUnimplemented;
 
   llvm::StringRef cmd = argumentAsString(Params.curArg());
   int             level = -1;
@@ -425,9 +443,9 @@ static bool doOCommand(CommandArguments& Params) {
       level = arg.getConstant();
   }
   else if (cmd.substr(1).getAsInteger(10, level) || level < 0)
-    return false;
+    return kCmdInvalidSyntax;
 
-  return true;
+  return kCmdSuccess;
   // ### TODO something.... with level and maybe more
   llvm::StringRef fName = Params.nextString();
   if (!fName.empty()) {
@@ -435,7 +453,7 @@ static bool doOCommand(CommandArguments& Params) {
       fName = Params.nextString();
     } while (!fName.empty());
   }
-  return true;
+  return kCmdSuccess;
 }
 
 static llvm::StringRef rawPath(const Argument& Arg) {
@@ -449,7 +467,7 @@ static llvm::StringRef rawPath(const Argument& Arg) {
 // >RedirectCommand := '>' FilePath
 // FilePath := AnyString
 // AnyString := .*^(' ' | '\t')
-static bool doRedirectCommand(CommandArguments& Params) {
+CommandResult doRedirectCommand(CommandArguments& Params) {
   unsigned constant_FD = 0;
   // Default redirect is stdout.
   MetaProcessor::RedirectionScope stream = MetaProcessor::kSTDOUT;
@@ -463,12 +481,12 @@ static bool doRedirectCommand(CommandArguments& Params) {
       stream = MetaProcessor::kSTDERR;
     // Wrong constant_FD, do not redirect.
     } else if (constant_FD != 1) {
-      llvm::errs() << "cling::MetaParser::isRedirectCommand():"
-                   << "invalid file descriptor number " << constant_FD <<"\n";
-      return true;
+      llvm::errs() << "invalid file descriptor number " << constant_FD <<"\n";
+      return kCmdInvalidSyntax;
     }
     arg = &Params.nextArg();
   }
+
   // &> redirection for both stdout & stderr
   if (arg->is(tok::ampersand)) {
     if (constant_FD != 2) {
@@ -476,9 +494,11 @@ static bool doRedirectCommand(CommandArguments& Params) {
     }
     arg = &Params.nextArg();
   }
+
   if (arg->is(tok::greater)) {
     bool append = false;
     arg = &Params.nextArg();
+
     // check for syntax like: 2>&1
     if (arg->is(tok::ampersand)) {
       if (constant_FD != 2) {
@@ -495,32 +515,30 @@ static bool doRedirectCommand(CommandArguments& Params) {
     llvm::StringRef file;
     if (arg->is(tok::constant)) {
       if (arg->getConstant() != 1)
-        return false;
+        return kCmdFailure;
       file = llvm::StringRef("_IO_2_1_stdout_");
     } else
       file = rawPath(*arg);
-
-    if (!Params.Processor) {
-      llvm::errs() << "Command cannot be run in this context\n";
-      return false;
-    }
 
     // Empty file means std.
     Params.Processor->setStdStream(file/*file*/,
                                    stream/*which stream to redirect*/,
                                    append/*append mode*/);
-    return true;
+    return kCmdSuccess;
   }
-  return false;
+  // return kCmdUnimplemented if we only read the first arguments
+  return arg == &Params.curArg() ? kCmdUnimplemented : kCmdInvalidSyntax;
 }
 
-static bool doShellCommand(CommandArguments& Params) {
+CommandResult doShellCommand(CommandArguments& Params) {
   llvm::StringRef CommandLine;
   const Argument *Arg = &Params.curArg();
   if (Arg->is(tok::comment))
     CommandLine = rawPath(*Arg);
   else if (Arg->isOneOf(tok::excl_mark|tok::slash))
     CommandLine = Params.remaining();
+  else
+    return kCmdInvalidSyntax;
 
   if (!CommandLine.empty()) {
     llvm::StringRef trimmed(CommandLine.trim(" \t\n\v\f\r "));
@@ -533,93 +551,343 @@ static bool doShellCommand(CommandArguments& Params) {
         *Params.OutValue = Value(Ctx.IntTy, Params.Interpreter);
         Params.OutValue->getAs<long long>() = ret;
       }
-      Params.Result = (ret == 0) ? Actions::AR_Success : Actions::AR_Failure;
+      return (ret == 0) ? kCmdSuccess : kCmdFailure;
     }
-    return true;
   }
-
-  // else nothing to run - should this be success or failure?
-  // Params.Result = AR_Failure;
-  return false;
+  return kCmdFailure;
 }
 
 } // anonymous namespace
 
-CommandTable::~CommandTable() {
-  std::set<CommandObj*> done;
-  for (auto& CmdPair : m_Commands) {
-    CommandObj* Cmd = CmdPair.second;
-    if (done.insert(Cmd).second)
-      delete Cmd;
-  }
-}
+struct Commands::CommandObj {
+  // Internal flags, make sure 'Flags' has enough bits
+  enum {
+    kCmdBuiltin   = 8,
+    kCmdCallback1 = 16,
+  };
 
-CommandTable::CommandObj*
-CommandTable::add(const char* Name, CommandObj* Cmd) {
+  union CommandCallback {
+    CmdCallback0 Callback0;
+    CmdCallback1 Callback1;
+    CommandCallback() : Callback0(nullptr) {}
+  } Callback;
+  const char* Syntax;
+  const char* Help;
+  unsigned Flags : 5;
+  
+  // llvm::StringMap needs this
+  CommandObj() : Syntax(nullptr), Help(nullptr), Flags(0) {}
+};
+
+namespace cling {
+ namespace meta {
+  namespace {
+  
+  // Commands implementation
+  class CommandTable : public Commands {
+
+    llvm::StringMap<CommandObj*> m_Commands;
+    bool m_HasBuiltins;
+
+    static bool sort(const llvm::StringMap<CommandObj*>::iterator& A,
+                     const llvm::StringMap<CommandObj*>::iterator& B) {
+      const CommandObj* LHS = A->second, * RHS = B->second;
+
+      // Sort by group: builtin, custom, debug
+      if (LHS->Flags & kCmdDebug) {
+        if (!(RHS->Flags & kCmdDebug))
+          return false;
+      } else if (RHS->Flags & kCmdDebug)
+        return true;
+      else if (LHS->Flags & CommandObj::kCmdBuiltin) {
+        if (!(RHS->Flags & CommandObj::kCmdBuiltin))
+          return true;
+      } else if (RHS->Flags & CommandObj::kCmdBuiltin)
+        return false;
+
+      // Sorth alphabetically, with alphanumeric chars first
+      const llvm::StringRef NameA = A->first(), NameB = B->first();
+      if (::isalpha(NameA[0])) {
+        if (!::isalpha(NameB[0]))
+          return true;
+      } else if (::isalpha(NameB[0]))
+        return false;
+
+      if (NameA.size() == NameB.size())
+        return NameA.compare_lower(NameB) == -1;
+
+      return NameA.size() < NameB.size();
+    }
+
+    bool checkContext(const CommandObj* Cmd, MetaProcessor* Mp) {
+      return Cmd->Flags & kCmdRequireProcessor ? Mp != nullptr : true;
+    }
+
+    public:
+
+    static void showHelp(const llvm::StringMap<CommandObj*>::iterator& Itr,
+                         llvm::raw_ostream& Out) {
+      const CommandObj* Cmd = Itr->second;
+      const llvm::StringRef CmdName = Itr->first();
+      if (Cmd->Syntax) {
+        llvm::SmallString<80> Buf;
+        llvm::Twine Joined(CmdName, " ");
+        Out << llvm::left_justify(Joined.concat(Cmd->Syntax).toStringRef(Buf),
+                                                25);
+      } else
+        Out << llvm::left_justify(CmdName, 25);
+
+      if (Cmd->Help)
+        Out << Cmd->Help;
+
+      Out << "\n";
+    }
+
+    static CommandResult doHelpCommand(CommandArguments& Params,
+                                       llvm::StringRef Cmd) {
+      CommandTable& Cmds = static_cast<CommandTable&>(Commands::get());
+
+      bool showAll = false;
+
+      // Filter help for a given command
+      if (!Cmd.empty()) {
+        // 'help all' has special meaning
+        if (!Cmd.equals("all")) {
+          llvm::StringMap<CommandObj*>::iterator Itr = Cmds.m_Commands.find(Cmd);
+          if (Itr == Cmds.m_Commands.end()) {
+            Params.Output << "Command '" << Cmd << "' not found.\n";
+            return kCmdNotFound;
+          }
+
+          showHelp(Itr, Params.Output);
+          return kCmdSuccess;
+        } else
+          showAll = true;
+      }
+
+      // Help preamble
+      std::string& Meta = Params.Interpreter.getOptions().MetaString;
+      llvm::raw_ostream& Out = Params.Output;
+      Params.Output << "\n Cling (C/C++ interpreter) meta commands usage\n"
+        " All commands must be preceded by a '" << Meta << "', except\n"
+        " for the evaluation statement { }\n" <<
+        std::string(80, '=') << "\n" <<
+        " Syntax: " << Meta << "Command [arg0 arg1 ... argN]\n"
+        "\n";
+
+      // Sort the stringmap alphabetically
+      std::vector<llvm::StringMap<CommandObj*>::iterator> sorted;
+      sorted.reserve(Cmds.m_Commands.size());
+
+      for (llvm::StringMap<CommandObj*>::iterator Itr = Cmds.m_Commands.begin(),
+           End = Cmds.m_Commands.end(); Itr != End; ++Itr) {
+        if (showAll || !(Itr->second->Flags&kCmdDebug))
+          sorted.push_back(Itr);
+      }
+
+      std::sort(sorted.begin(), sorted.end(), &CommandTable::sort);
+
+      for (const auto& CmdPair : sorted) {
+        Out << "   " << Meta;
+        showHelp(CmdPair, Out);
+      }
+      Out << "\n";
+
+      return kCmdSuccess;
+    }
+
+    CommandResult execute(llvm::StringRef CmdStr, Interpreter &Intp,
+                          llvm::raw_ostream& Out,  MetaProcessor* Mp,
+                          Value* Val) override {
+
+      if (!m_HasBuiltins) {
+        Commands::get(true);
+        assert(m_HasBuiltins && "No builtin commands loaded");
+      }
+
+      MetaParser Parser(CmdStr);
+      CommandArguments CmdArgs(Parser, Intp, Out, Mp, Val);
+
+      llvm::StringMap<CommandObj*>::iterator  CmdItr = m_Commands.find(
+                                                           CmdArgs.CommandName),
+                                              End = m_Commands.end();
+
+      CommandResult Result = kCmdNotFound;
+      if (CmdItr != End) {
+        const CommandObj* Cmd = CmdItr->second;
+        if (!checkContext(Cmd, Mp)) {
+          llvm::errs() << "Command cannot be run in this context\n";
+          return kCmdFailure;
+        }
+
+        // Callback variation 2, each argument is parsed and sent to the cmd
+        // First invocation is allowed to be empty / non-existant argument
+        if (Cmd->Flags & Commands::CommandObj::kCmdCallback1) {
+          llvm::StringRef Argument = CmdArgs.nextString();
+          do {
+            Result = Cmd->Callback.Callback1(CmdArgs, Argument);
+            Argument = CmdArgs.nextString();
+          } while (!Argument.empty() && Result==kCmdSuccess);
+          
+        } else
+          Result = Cmd->Callback.Callback0(CmdArgs);
+
+      } else {
+        for (CmdItr = m_Commands.begin(); CmdItr != End; ++CmdItr) {
+          auto& CmdPair = *CmdItr;
+          const CommandObj* Cmd = CmdPair.second;
+          if (Cmd->Flags & kCmdCustomSyntax && checkContext(Cmd, Mp)) {
+            Result = Cmd->Callback.Callback0(CmdArgs);
+            if (Result < kCmdUnimplemented)
+              break;
+          }
+        }
+      }
+
+      if (Result == kCmdInvalidSyntax) {
+        if (CmdItr != End)
+          showHelp(CmdItr, Out);
+        else
+          doHelpCommand(CmdArgs, "");
+      }
+
+      return Result;
+    }
+
+    bool validate(const char* Name, unsigned Flags, unsigned ChkNot) {
+      if (Flags & ChkNot) {
+        llvm::errs() << "Illegal flag value: " << Flags << "\n";
+        return false;
+      }
+
+      // Reserved for .help all
+      if (!strncmp(Name, "all", 3)) {
+        llvm::errs() << "'" << Name << "' cannot be used as a command name\n";
+        return false;
+      }
+
+      // Only allow builtins to be built from this file
+      if (m_HasBuiltins && (Flags & CommandObj::kCmdBuiltin)) {
+        llvm::errs() << "Cannot add builtin '" << Name << "'\n";
+        return false;
+      }
+
+      // And don't let them be replaced
+      llvm::StringMap<CommandObj*>::iterator CmdItr = m_Commands.find(Name);
+      if (CmdItr != m_Commands.end()) {
+        const CommandObj* Cmd = CmdItr->second;
+        if (Cmd->Flags & CommandObj::kCmdBuiltin) {
+          llvm::errs() << "Cannot replace builtin command '" << Name << "'\n";
+          return false;
+        }
+      }
+      return true;
+    }
+
+    CommandObj*& operator[] (llvm::StringRef Name) { return m_Commands[Name]; }
+    bool& builtins()  { return m_HasBuiltins; }
+
+    ~CommandTable() {
+      // Any object in m_Commands is not neccessarily unique
+      std::set<CommandObj*> done;
+      for (auto& CmdPair : m_Commands) {
+        CommandObj* Cmd = CmdPair.second;
+        if (done.insert(Cmd).second)
+          delete Cmd;
+      }
+    }
+  };
+
+} // anonymous namespace
+
+
+Commands::CommandObj*
+Commands::alias(const char* Name, CommandObj* Cmd) {
   if (Cmd) {
-    CommandObj*& Old = m_Commands[Name];
-    if (Old && Old != Cmd)
+    CommandObj*& Old = (*static_cast<CommandTable*>(this))[Name];
+    if (Old && Old != Cmd) {
+      // If a custom command was registered before a builtin one of the same
+      // name, report that.
+      if (!(Old->Flags & CommandObj::kCmdBuiltin) &&
+            Cmd->Flags & CommandObj::kCmdBuiltin) {
+        llvm::errs() << "Custom command '" << Name
+                     << "' is being replaced with a builtin\n";
+      } else
+        llvm::outs() << "Replaced command '" << Name << "'\n";
+
       delete Old;
+    }
     Old = Cmd;
   }
   return Cmd;
 }
 
 template <> CommandTable::CommandObj*
-CommandTable::add<CommandTable::CommandObj::CommandCallback0>(
-    const char* Name, CommandObj::CommandCallback0 Callback, const char* Syntax,
-    const char* Help, unsigned Flags) {
-  assert(!(Flags&kCmdCallback1) && "Cannot set kCmdCallback1 flag");
+Commands::add<Commands::CmdCallback0>(const char* Name, CmdCallback0 Callback,
+                                      const char* Syntax, const char* Help,
+                                      unsigned Flags) {
+
+  if (!static_cast<CommandTable *>(this)->validate(Name, Flags,
+                                                   CommandObj::kCmdCallback1)) {
+    return nullptr;
+  }
+
   if (CommandObj* Cmd = new CommandObj) {
     Cmd->Callback.Callback0 = Callback;
     Cmd->Syntax = Syntax;
     Cmd->Help = Help;
     Cmd->Flags = Flags;
-    return add(Name, Cmd);
+    return alias(Name, Cmd);
   }
   return nullptr;
 }
 
 template <> CommandTable::CommandObj*
-CommandTable::add<CommandTable::CommandObj::CommandCallback1>(
-    const char* Name, CommandObj::CommandCallback1 Callback, const char* Syntax,
-    const char* Help, unsigned Flags) {
-  assert(!(Flags & kCmdCustomSyntax) && "Cannot set kCmdCustomSyntax flag");
-  Flags |= kCmdCallback1;
+Commands::add<Commands::CmdCallback1>(const char* Name, CmdCallback1 Callback,
+                                      const char* Syntax, const char* Help,
+                                      unsigned Flags) {
+
+  if (!static_cast<CommandTable *>(this)->validate(Name, Flags,
+                                                   kCmdCustomSyntax)) {
+    return nullptr;
+  }
+
   if (CommandObj* Cmd = new CommandObj) {
     Cmd->Callback.Callback1 = Callback;
     Cmd->Syntax = Syntax;
     Cmd->Help = Help;
-    Cmd->Flags = Flags;
-    return add(Name, Cmd);
+    Cmd->Flags = Flags | CommandObj::kCmdCallback1;
+    return alias(Name, Cmd);
   }
   return nullptr;
 }
 
-CommandTable* CommandTable::create(bool InstanceOnly) {
+Commands& Commands::get(bool Populate) {
   static CommandTable sCommands;
-  if (sCommands.m_Commands.empty() && !InstanceOnly) {
+  if (Populate && !sCommands.builtins()) {
+    const unsigned Flags = CommandObj::kCmdBuiltin;
+    const unsigned MetaProcessor = Flags | kCmdRequireProcessor;
+    const unsigned Debug = Flags | kCmdDebug;
 
-    sCommands.add("L", &doLCommand, "<file|library>[//]",
+    sCommands.add("L", &doLCommand, "<file|library> [//]",
                   "Load the given file(s) executing the last comment if given",
-                  kCmdRequireProcessor);
+                  MetaProcessor);
 
-    sCommands.add("x",
-      sCommands.add("X", &doXCommand, "<filename>[args]",
+    sCommands.alias("x",
+      sCommands.add("X", &doXCommand, "<filename> [args]",
         "Same as .L and runs a function with signature: "
-        "ret_type filename(args)", kCmdRequireProcessor));
+        "ret_type filename(args)", MetaProcessor));
 
     sCommands.add("U", &doUCommand, "<library>", "Unloads the given file",
-                  kCmdRequireProcessor);
-    sCommands.add("F", &doFCommand, "<framework>", "Load the given framework",
-                  kCmdRequireProcessor);
+                  MetaProcessor);
 
-    sCommands.add("q", &doQCommand, nullptr, "Exit the program",
-                  kCmdRequireProcessor);
+    sCommands.add("F", &doFCommand, "<framework>", "Load the given framework",
+                  MetaProcessor);
+
+    sCommands.add("q", &doQCommand, nullptr, "Exit the program", MetaProcessor);
 
     sCommands.add("@", &doAtCommand, nullptr,
-      "Cancels and ignores the multiline input",
-                  kCmdRequireProcessor);
+                  "Cancels and ignores the multiline input", MetaProcessor);
 
     sCommands.add(">", &doRedirectCommand, "<filename>",
       "Redirect command to a given file\n"
@@ -627,196 +895,78 @@ CommandTable* CommandTable::create(bool InstanceOnly) {
       "      '2>'\t\t\t- Redirects the stderr stream only\n"
       "      '&>' (or '2>&1')\t\t- Redirects both stdout and stderr\n"
       "      '>>'\t\t\t- Appends to the given file",
-                kCmdCustomSyntax | kCmdRequireProcessor);
+                MetaProcessor | kCmdCustomSyntax);
 
     sCommands.add("I", &doICommand, "[path]",
       "Add give path to list of header search paths,"
-      " or show the include paths if none is given.");
+      " or show the include paths if none is given.", Flags);
 
-    sCommands.add("O", &doOCommand, "<level>",
-      "Sets the optimization level (0-3) (not yet implemented)");
+    sCommands.alias("?",
+      sCommands.add("help", &CommandTable::doHelpCommand,
+                    nullptr, "Shows this information", Flags));
+  
+    sCommands.add("T", doTCommand, "<infile> <outfile>",
+                  "Generate autoloading map from 'infile' to 'outfile'", Flags);
+
+    sCommands.alias("/", sCommands.add("!", doShellCommand, "<cmd> [args]",
+                             "Run shell command", Flags));
 
     sCommands.add("undo", &doUndoCommand, "[n]",
-      "Unloads the last 'n' inputs lines");
+                  "Unloads the last 'n' inputs lines", Flags);
 
     sCommands.add("rawInput", &doRawInputCommand, "[0|1]",
-      "Toggle wrapping and printing the execution results of the input");
+      "Toggle wrapping and printing the execution results of the input", Flags);
 
-    sCommands.add("Class",
+    sCommands.alias("Class",
       sCommands.add("class", &doClassCommand, "<name>",
-        "Prints out class <name> in a CINT-like style"));
+        "Prints out class <name> in a CINT-like style", Flags));
 
     sCommands.add("dynamicExtensions", &doDynamicExtensionsCommand, "[0|1]",
-      "Toggles the use of the dynamic scopes and the late binding");
+      "Toggles the use of the dynamic scopes and the late binding", Flags);
+
+    sCommands.add("O", &doOCommand, "<level>",
+      "Sets the optimization level (0-3) (not yet implemented)", Flags);
 
     sCommands.add("files", &doFilesCommand, nullptr,
-      "Prints out some CINT-like file statistics", kCmdDebug);
+      "Prints out some CINT-like file statistics", Debug);
 
     sCommands.add("filesEx", &doFileExCommand, nullptr,
-      "Prints out some file statistics", kCmdDebug);
+      "Prints out some file statistics", Debug);
 
     sCommands.add("g", &doGCommand, "[name]",
       "Prints out information about global variable"
-      " 'name' - if no name is given, print them all", kCmdDebug);
+      " 'name' - if no name is given, print them all", Debug);
 
     sCommands.add("printDebug", &doPrintDebugCommand, "[0|1]",
       "Toggles the printing of input's corresponding"
-      "\n\t\t\t\t  state changes", kCmdDebug);
+      "\n\t\t\t\t  state changes", Debug);
 
     sCommands.add("storeState", &doStoreStateCommand, "<filename>",
-      "Store the interpreter's state to a given file", kCmdDebug);
+      "Store the interpreter's state to a given file", Debug);
 
     sCommands.add("compareState", &doCompareStateCommand, "<filename>",
       "Compare the interpreter's state with the one saved in a given file",
-      kCmdDebug);
+      Debug);
 
     sCommands.add("stats", &doStatsCommand, "<name>",
       "Show stats for internal data structures"
       "\n\t\t\t\t  'ast'  abstract syntax tree stats"
       "\n\t\t\t\t  'decl' dump ast declarations"
-      "\n\t\t\t\t  'undo' show undo stack", kCmdDebug);
+      "\n\t\t\t\t  'undo' show undo stack", Debug);
 
-    sCommands.add("?",
-      sCommands.add("help", &doHelpCommand, nullptr, "Shows this information"));
+
+    sCommands.add("debug", doDebugCommand, "[level|true|false]",
+                  "Generate debug information at level given", Debug);
+
+    sCommands.add("namespace", doNamespaceCommand, nullptr, nullptr, Debug);
+    sCommands.add("typedef", doTypedefCommand, nullptr, nullptr, Debug);
   
-    sCommands.add("T", doTCommand);
-    sCommands.add("/", sCommands.add("!", doShellCommand, nullptr,
-                             "Run shell command", kCmdCustomSyntax));
-
-    sCommands.add("debug", doDebugCommand, nullptr, nullptr, kCmdDebug);
-    sCommands.add("namespace", doNamespaceCommand, nullptr, nullptr, kCmdDebug);
-    sCommands.add("typedef", doTypedefCommand, nullptr, nullptr, kCmdDebug);
+    sCommands.builtins() = true;
   }
-  return &sCommands;
+  return static_cast<Commands&>(sCommands);
 }
 
-bool CommandTable::sort(
-                 const llvm::StringMap<CommandTable::CommandObj*>::iterator& A,
-                 const llvm::StringMap<CommandTable::CommandObj*>::iterator& B) {
-
-  const CommandObj* LHS = A->second, * RHS = B->second;
-  if (RHS->Flags & kCmdExperimental) {
-    if (!(LHS->Flags & kCmdExperimental))
-      return true;
-  }
-  else if (RHS->Flags & kCmdDebug) {
-    if (!(LHS->Flags & kCmdDebug))
-      return true;
-  }
-  // Sorth alphabetically, with alphanumeric chars first
-  const llvm::StringRef NameA = A->first(), NameB = B->first();
-  if (!::isalpha(NameA[0])) {
-    if (::isalpha(NameB[0]))
-      return false;
-  }
-  return A->first() < B->first();
-}
-
-void CommandTable::showHelp(const llvm::StringMap<CommandObj*>::iterator& Itr,
-                            llvm::raw_ostream& Out) {
-  const CommandObj* Cmd = Itr->second;
-  const llvm::StringRef CmdName = Itr->first();
-  if (Cmd->Syntax) {
-    llvm::SmallString<80> Buf;
-    llvm::Twine Joined(CmdName, " ");
-    Out << llvm::left_justify(Joined.concat(Cmd->Syntax).toStringRef(Buf),
-                                            25);
-  } else
-    Out << llvm::left_justify(CmdName, 25);
-
-  if (Cmd->Help)
-    Out << Cmd->Help;
-
-  Out << "\n";
-}
-
-bool CommandTable::doHelpCommand(CommandArguments& Params,
-                                 llvm::StringRef Cmd) {
-  CommandTable* Cmds = CommandTable::create();
-
-  if (!Cmd.empty()) {
-    llvm::StringMap<CommandObj*>::iterator itr = Cmds->m_Commands.find(Cmd);
-    if (itr != Cmds->m_Commands.end())
-      showHelp(itr, Params.Output);
-    else
-      Params.Output << "Command '" << Cmd << "' not found.\n";
-    return true;
-  }
-
-  std::vector<llvm::StringMap<CommandObj*>::iterator> sorted;
-  sorted.reserve(Cmds->m_Commands.size());
-
-  for (llvm::StringMap<CommandObj*>::iterator itr = Cmds->m_Commands.begin(),
-       end = Cmds->m_Commands.end(); itr != end; ++itr)
-    sorted.push_back(itr);
-  
-  std::sort(sorted.begin(), sorted.end(), &CommandTable::sort);
-
-  std::string& Meta = Params.Interpreter.getOptions().MetaString;
-  llvm::raw_ostream& Out = Params.Output;
-  Params.Output << "\n Cling (C/C++ interpreter) meta commands usage\n"
-    " All commands must be preceded by a '" << Meta << "', except\n"
-    " for the evaluation statement { }\n" <<
-    std::string(80, '=') << "\n" <<
-    " Syntax: " << Meta << "Command [arg0 arg1 ... argN]\n"
-    "\n";
-
-  for (const auto& CmdPair : sorted) {
-    Out << "   " << Meta;
-    showHelp(CmdPair, Out);
-  }
-  Out << "\n";
-  return true;
-}
-
-int
-CommandTable::execute(llvm::StringRef CmdStr, Interpreter& Interp,
-                     llvm::raw_ostream& Output, MetaProcessor* Mp, Value* Val) {
-  
-  if (m_Commands.empty())
-    create(false);
-
-  CommandArguments CmdArgs(CmdStr, Interp, Output, Mp, Val);
-
-  const Argument Arg0 = CmdArgs.curArg();
-  llvm::StringMap<CommandObj*>::iterator CmdItr = m_Commands.find(
-                         llvm::StringRef(Arg0.getBufStart(), Arg0.getLength()));
-
-  if (CmdItr == m_Commands.end()) {
-    for (auto& CmdPair : m_Commands) {
-      const CommandObj* Cmd = CmdPair.second;
-      if (Cmd->Flags & kCmdCustomSyntax) {
-        if (Cmd->Callback.Callback0(CmdArgs))
-          return CmdArgs.Result == Actions::AR_Success ? 1 : -1;
-      }
-    }
-    // No command found
-    return 0;
-  }
-
-  const CommandObj* Cmd = CmdItr->second;
-  if (!Mp && (Cmd->Flags & kCmdRequireProcessor)) {
-    llvm::errs() << "Command cannot be run in this context\n";
-    return -1;
-  }
-
-  if (Cmd->Flags & kCmdCallback1) {
-    llvm::StringRef Argument = CmdArgs.nextString();
-    do {
-      if (!Cmd->Callback.Callback1(CmdArgs, Argument)) {
-        showHelp(CmdItr, Output);
-        return -1;
-      }
-      Argument = CmdArgs.nextString();
-    } while (!Argument.empty());
-    
-  } else if (!Cmd->Callback.Callback0(CmdArgs)) {
-    showHelp(CmdItr, Output);
-    return -1;
-  }
-
-  return CmdArgs.Result == Actions::AR_Success ? 1 : -1;
-}
-
-} //namespace meta
+ } // namespace meta
 } // namespace cling
+
+
