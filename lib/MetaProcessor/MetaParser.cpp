@@ -9,7 +9,7 @@
 
 #include "MetaParser.h"
 #include "MetaLexer.h"
-#include "MetaSema.h"
+#include "MetaActions.h"
 
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/InvocationOptions.h"
@@ -20,63 +20,58 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 
-namespace cling {
+using namespace cling::meta;
 
-  MetaParser::MetaParser(llvm::StringRef input) :
-    m_Lexer(input) {
-  }
+void Parser::consumeToken() {
+  if (m_TokenCache.size())
+    m_TokenCache.erase(m_TokenCache.begin());
 
-  void MetaParser::consumeToken() {
-    if (m_TokenCache.size())
-      m_TokenCache.erase(m_TokenCache.begin());
+  lookAhead(0);
+}
 
-    lookAhead(0);
-  }
+void Parser::consumeAnyStringToken(tok::TokenKind stopAt/*=tok::space*/) {
+  consumeToken();
+  // we have to merge the tokens from the queue until we reach eof token or
+  // space token
+  skipWhitespace();
+  // Add the new token in which we will merge the others.
+  Token& MergedTok = m_TokenCache.front();
 
-  void MetaParser::consumeAnyStringToken(tok::TokenKind stopAt/*=tok::space*/) {
-    consumeToken();
-    // we have to merge the tokens from the queue until we reach eof token or
-    // space token
-    skipWhitespace();
-    // Add the new token in which we will merge the others.
-    Token& MergedTok = m_TokenCache.front();
+  if (MergedTok.isOneOf(stopAt) || MergedTok.is(tok::eof)
+      || MergedTok.is(tok::comment) || MergedTok.is(tok::stringlit))
+    return;
 
-    if (MergedTok.isOneOf(stopAt) || MergedTok.is(tok::eof)
-        || MergedTok.is(tok::comment) || MergedTok.is(tok::stringlit))
-      return;
-
+  //look ahead for the next token without consuming it
+  Token Tok = lookAhead(1);
+  Token PrevTok = Tok;
+  while (!Tok.isOneOf(stopAt) && Tok.isNot(tok::eof)){
+    //MergedTok.setLength(MergedTok.getLength() + Tok.getLength());
+    m_TokenCache.erase(m_TokenCache.begin() + 1);
+    PrevTok = Tok;
     //look ahead for the next token without consuming it
-    Token Tok = lookAhead(1);
-    Token PrevTok = Tok;
-    while (!Tok.isOneOf(stopAt) && Tok.isNot(tok::eof)){
-      //MergedTok.setLength(MergedTok.getLength() + Tok.getLength());
-      m_TokenCache.erase(m_TokenCache.begin() + 1);
-      PrevTok = Tok;
-      //look ahead for the next token without consuming it
-      Tok = lookAhead(1);
-    }
-    MergedTok.setKind(tok::raw_ident);
-    if (PrevTok.is(tok::space)) {
-      // for "id <space> eof" the merged token should contain "id", not
-      // "id <space>".
-      Tok = PrevTok;
-    }
-    MergedTok.setLength(Tok.getBufStart() - MergedTok.getBufStart());
+    Tok = lookAhead(1);
   }
-
-  const Token& MetaParser::lookAhead(unsigned N) {
-    if (N < m_TokenCache.size())
-      return m_TokenCache[N];
-
-    for (unsigned C = N+1 - m_TokenCache.size(); C > 0; --C) {
-      m_TokenCache.push_back(Token());
-      m_Lexer.Lex(m_TokenCache.back());
-    }
-    return m_TokenCache.back();
+  MergedTok.setKind(tok::raw_ident);
+  if (PrevTok.is(tok::space)) {
+    // for "id <space> eof" the merged token should contain "id", not
+    // "id <space>".
+    Tok = PrevTok;
   }
+  MergedTok.setLength(Tok.getBufStart() - MergedTok.getBufStart());
+}
 
-  void MetaParser::skipWhitespace() {
-    while(getCurTok().is(tok::space))
-      consumeToken();
+const Token& Parser::lookAhead(unsigned N) {
+  if (N < m_TokenCache.size())
+    return m_TokenCache[N];
+
+  for (unsigned C = N+1 - m_TokenCache.size(); C > 0; --C) {
+    m_TokenCache.push_back(Token());
+    m_Lexer.Lex(m_TokenCache.back());
   }
-} // end namespace cling
+  return m_TokenCache.back();
+}
+
+void Parser::skipWhitespace() {
+  while(getCurTok().is(tok::space))
+    consumeToken();
+}

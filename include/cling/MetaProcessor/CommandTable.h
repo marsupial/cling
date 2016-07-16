@@ -19,11 +19,11 @@ namespace llvm {
 
 namespace cling {
   class Value;
-  class MetaProcessor;
   class Interpreter;
 
   namespace meta {
     class CommandArguments;
+    class Processor;
 
     class CommandTable
     {
@@ -74,7 +74,7 @@ namespace cling {
   
       // FIXME: only virtual to avoid linking / circular dependencies
       virtual int execute(llvm::StringRef, Interpreter&, llvm::raw_ostream&,
-                  MetaProcessor* = nullptr, Value* = nullptr);
+                          Processor* = nullptr, Value* = nullptr);
     };
   }
 }
