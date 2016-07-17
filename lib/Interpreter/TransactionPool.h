@@ -40,13 +40,13 @@ namespace cling {
         ::operator delete(m_Transactions[i]);
     }
 
-    Transaction* takeTransaction(clang::Sema& S) {
+    Transaction* takeTransaction() {
       Transaction *T;
       if (m_Transactions.empty()) {
         T = (Transaction*) ::operator new(sizeof(Transaction));
-        new(T) Transaction(S);
+        new(T) Transaction();
       } else
-        T = new (m_Transactions.pop_back_val()) Transaction(S);
+        T = new (m_Transactions.pop_back_val()) Transaction();
 
       return T;
     }

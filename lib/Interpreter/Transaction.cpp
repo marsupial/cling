@@ -26,17 +26,15 @@ using namespace clang;
 
 namespace cling {
 
-  Transaction::Transaction(Sema& S) : m_Sema(S) {
-    Initialize(S);
+  Transaction::Transaction() {
+    Initialize();
   }
 
-  Transaction::Transaction(const CompilationOptions& Opts, Sema& S)
-    : m_Sema(S) {
-    Initialize(S);
+  Transaction::Transaction(const CompilationOptions& Opts) {
     m_Opts = Opts; // intentional copy.
   }
 
-  void Transaction::Initialize(Sema& S) {
+  void Transaction::Initialize() {
     m_NestedTransactions.reset(0);
     m_Parent = 0;
     m_State = kCollecting;
@@ -46,7 +44,6 @@ namespace cling {
     m_ExeUnload = {(void*)(size_t)-1};
     m_WrapperFD = 0;
     m_Next = 0;
-    //m_Sema = S;
     m_BufferFID = FileID(); // sets it to invalid.
     m_Exe = 0;
   }
@@ -269,20 +266,21 @@ namespace cling {
     PP.printMacro(this->m_II, this->m_MD, Out);
   }
 
-  void Transaction::dump() const {
-    const ASTContext& C = m_Sema.getASTContext();
+  void Transaction::dump(const clang::Sema& Sema) const {
+    const ASTContext& C = Sema.getASTContext();
     PrintingPolicy Policy = C.getPrintingPolicy();
-    print(llvm::errs(), Policy, /*Indent*/0, /*PrintInstantiation*/true);
+    print(Sema, llvm::errs(), Policy, /*Indent*/0, /*PrintInstantiation*/true);
   }
 
-  void Transaction::dumpPretty() const {
-    const ASTContext& C = m_Sema.getASTContext();
+  void Transaction::dumpPretty(const clang::Sema& Sema) const {
+    const ASTContext& C = Sema.getASTContext();
     PrintingPolicy Policy(C.getLangOpts());
-    print(llvm::errs(), Policy, /*Indent*/0, /*PrintInstantiation*/true);
+    print(Sema, llvm::errs(), Policy, /*Indent*/0, /*PrintInstantiation*/true);
   }
 
-  void Transaction::print(llvm::raw_ostream& Out, const PrintingPolicy& Policy,
-                          unsigned Indent, bool PrintInstantiation) const {
+  void Transaction::print(const clang::Sema& Sema, llvm::raw_ostream& Out,
+                          const PrintingPolicy& Policy, unsigned Indent,
+                          bool PrintInstantiation) const {
     int nestedT = 0;
     for (const_iterator I = decls_begin(), E = decls_end(); I != E; ++I) {
       if (I->m_DGR.isNull()) {
@@ -292,7 +290,7 @@ namespace cling {
         Out<<"+====================================================+\n";
         Out<<"        Nested Transaction" << nestedT << "           \n";
         Out<<"+====================================================+\n";
-        (*m_NestedTransactions)[nestedT++]->print(Out, Policy, Indent,
+        (*m_NestedTransactions)[nestedT++]->print(Sema, Out, Policy, Indent,
                                                   PrintInstantiation);
         Out<< "\n";
         Out<<"+====================================================+\n";
@@ -311,7 +309,7 @@ namespace cling {
 
     for (Transaction::const_reverse_macros_iterator MI = rmacros_begin(),
            ME = rmacros_end(); MI != ME; ++MI) {
-      MI->print(Out, m_Sema.getPreprocessor());
+      MI->print(Out, Sema.getPreprocessor());
     }
   }
 
