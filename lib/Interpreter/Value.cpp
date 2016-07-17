@@ -241,16 +241,21 @@ namespace cling {
     std::string printValueInternal(const Value& V);
   } // end namespace valuePrinterInternal
 
-  void Value::print(llvm::raw_ostream& Out) const {
-
     // Get the default type string representation
-    std::string typeStr = cling::valuePrinterInternal::printTypeInternal(*this);
+  std::string Value::typeString() const {
+    return cling::valuePrinterInternal::printTypeInternal(*this);
+  }
     // Get the value string representation, by printValue() method overloading
-    std::string valueStr = cling::valuePrinterInternal::printValueInternal(*this);
+  std::string Value::asString() const {
+    return cling::valuePrinterInternal::printValueInternal(*this);
+  }
+
+  void Value::print(llvm::raw_ostream& Out) const {
+    const std::string valueStr = asString();
     // If valueStr is empty, something went wrong
     if (!valueStr.empty()) {
       // Print the type and the value:
-      Out << typeStr + " " + valueStr << "\n";
+      Out << typeString() + " " + valueStr << "\n";
     }
   }
 

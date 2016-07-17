@@ -11,6 +11,7 @@
 #define CLING_VALUE_H
 
 #include <stddef.h>
+#include <iosfwd>
 
 namespace llvm {
   class raw_ostream;
@@ -241,6 +242,12 @@ namespace cling {
     ///\endcode
     void print(llvm::raw_ostream& Out) const;
     void dump() const;
+
+    ///\brief Get the default type string representation
+    std::string typeString() const;
+
+    ///\brief Get the value string representation, by printValue() overloading
+    std::string asString() const;
   };
 } // end namespace cling
 
