@@ -131,6 +131,8 @@ namespace cling {
       }
     };
 
+    void copy(const Value&);
+
   public:
     /// \brief Default constructor, creates a value that IsInvalid().
     Value():

@@ -24,7 +24,6 @@
 namespace clang {
   class ASTContext;
   class Decl;
-  class FunctionDecl;
   class IdentifierInfo;
   class NamedDecl;
   class MacroDirective;
@@ -158,10 +157,6 @@ namespace cling {
     ///\brief The Executor to use m_ExeUnload on.
     ///
     IncrementalExecutor* m_Exe;
-
-    ///\brief The wrapper function produced by the intepreter if any.
-    ///
-    clang::FunctionDecl* m_WrapperFD;
 
     ///\brief Next transaction in if any.
     ///
@@ -468,8 +463,6 @@ namespace cling {
       m_Exe = Exe;
       m_ExeUnload = H;
     }
-
-    clang::FunctionDecl* getWrapperFD() const { return m_WrapperFD; }
 
     const Transaction* getNext() const { return m_Next; }
     void setNext(Transaction* T) { m_Next = T; }

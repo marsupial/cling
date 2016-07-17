@@ -983,8 +983,11 @@ namespace cling {
     // non-default C++ at the prompt:
     CO.IgnorePromptDiags = 1;
 
-    IncrementalParser::ParseResultTransaction PRT
-      = m_IncrParser->Compile(Wrapper, CO);
+    typedef IncrementalParser::ParseResultTransaction ParseResultTransaction;
+
+    clang::FunctionDecl* WrapperFD = nullptr;
+    ParseResultTransaction PRT = m_IncrParser->Compile(Wrapper, CO, &WrapperFD);
+
     Transaction* lastT = PRT.getPointer();
     if (lastT && lastT->getState() != Transaction::kCommitted) {
       assert((lastT->getState() == Transaction::kCommitted
@@ -1012,14 +1015,12 @@ namespace cling {
 
     const Transaction *prntT = m_PrintValueTransaction;
 
-    if (clang::FunctionDecl* Wrapper = lastT->getWrapperFD()) {
+    if (WrapperFD) {
       Value resultV;
-      if (!V)
-        V = &resultV;
-      else
-        V->setWrapperFD(Wrapper);
+      if (!V) V = &resultV;
+      V->setWrapperFD(WrapperFD);
 
-      ExecutionResult rslt = RunFunction(Wrapper, V);
+      ExecutionResult rslt = RunFunction(WrapperFD, V);
 
       // If m_PrintValueTransaction has changed value, then lastT is now
       // the transaction that holds the transaction(s) of loading up the

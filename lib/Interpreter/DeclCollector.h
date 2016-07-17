@@ -115,6 +115,9 @@ namespace cling {
       m_Consumer = Consumer;
     }
 
+    bool HandleTopLevelDeclAndWrapper(clang::DeclGroupRef DGR,
+                                      clang::FunctionDecl** FD = nullptr);
+
     /// \name PPCallbacks overrides
     /// Macro support
     void MacroDefined(const clang::Token &MacroNameTok,

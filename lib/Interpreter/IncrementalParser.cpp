@@ -26,6 +26,7 @@
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/InterpreterCallbacks.h"
 #include "cling/Interpreter/Transaction.h"
+#include "cling/Utils/AST.h"
 
 #include "clang/AST/Attr.h"
 #include "clang/AST/ASTContext.h"
@@ -734,9 +735,10 @@ namespace cling {
 
   IncrementalParser::ParseResultTransaction
   IncrementalParser::Compile(llvm::StringRef input,
-                             const CompilationOptions& Opts) {
+                             const CompilationOptions& Opts,
+                             clang::FunctionDecl** FD) {
     Transaction* CurT = beginTransaction(Opts);
-    EParseResult ParseRes = ParseInternal(input);
+    EParseResult ParseRes = ParseInternal(input, FD);
 
     if (ParseRes == kSuccessWithWarnings)
       CurT->setIssuedDiags(Transaction::kWarnings);
@@ -748,10 +750,11 @@ namespace cling {
 
     return PRT;
   }
-
+    
   // Add the input to the memory buffer, parse it, and add it to the AST.
   IncrementalParser::EParseResult
-  IncrementalParser::ParseInternal(llvm::StringRef input) {
+  IncrementalParser::ParseInternal(llvm::StringRef input,
+                                   clang::FunctionDecl** FD) {
     if (input.empty()) return IncrementalParser::kSuccess;
 
     Sema& S = getCI()->getSema();
@@ -864,7 +867,14 @@ namespace cling {
       if (Trap.hasErrorOccurred())
         m_Consumer->getTransaction()->setIssuedDiags(Transaction::kErrors);
       if (ADecl)
-        m_Consumer->HandleTopLevelDecl(ADecl.get());
+        m_Consumer->HandleTopLevelDeclAndWrapper(ADecl.get(), FD);
+      
+      // Debug mode asserts only one wrapper possible
+#ifdef NDEBUG
+      // Stop looking for it
+      if (FD && *FD)
+        FD = nullptr;
+#endif
     };
     // We could have never entered the while block, in which case there's a
     // good chance an error occured.
@@ -877,10 +887,6 @@ namespace cling {
              && "Completion point wrongly set!");
       assert(PP.isCodeCompletionReached()
              && "Code completion set but not reached!");
-
-      // Let's ignore this transaction:
-      m_Consumer->getTransaction()->setIssuedDiags(Transaction::kErrors);
-
       return kSuccess;
     }
 
