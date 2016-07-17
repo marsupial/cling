@@ -806,8 +806,34 @@ static std::string printFunctionValue(const Value &V, const void *ptr, clang::Qu
           cBegin = 0;
         }
       }
-      if (cBegin && cEnd && cEnd > cBegin && cEnd - cBegin < 16 * 1024) {
-        o << llvm::StringRef(cBegin, cEnd - cBegin + 1);
+      // Use getLexicalParent so functions defined like:
+      // namespace A {
+      //   int func();
+      // }
+      // A::func() { return 0; }
+      // Won't print the namespace hiearchy, as it's already part of the name.
+      
+      llvm::SmallVector<const clang::NamespaceDecl*, 8> ParentNS;
+      const clang::DeclContext* DC = FD->getLexicalParent();
+      while (DC) {
+        if (const clang::NamespaceDecl* NS =
+                                      clang::dyn_cast<clang::NamespaceDecl>(DC))
+          ParentNS.push_back(NS);
+        DC = DC->getLexicalParent();
+      }
+      unsigned nsIndent = 0;
+      for (const clang::NamespaceDecl* NS : llvm::reverse(ParentNS)) {
+        o << std::string(nsIndent++*2, ' ') << (NS->isInline() ? "inline " : "")
+          << "namespace " << NS->getNameAsString() << " {\n";
+      }
+      if (nsIndent)
+        o << '\n';
+
+      const bool printFromSource =
+          cBegin && cEnd && cEnd > cBegin && cEnd - cBegin < 16 * 1024;
+      if (printFromSource) {
+        o << std::string(nsIndent*2, ' ')
+          << llvm::StringRef(cBegin, cEnd - cBegin + 1) << '\n';
       } else {
         const clang::FunctionDecl *FDef;
         if (FD->hasBody(FDef))
