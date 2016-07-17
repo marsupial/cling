@@ -14,28 +14,19 @@
 #include "cling/Interpreter/Transaction.h"
 #include "cling/Interpreter/Value.h"
 #include "cling/MetaProcessor/MetaProcessor.h"
-#include "../lib/Interpreter/IncrementalParser.h"
 
-#include "clang/AST/ASTContext.h"
-#include "clang/Basic/SourceManager.h"
-#include "clang/Frontend/CompilerInstance.h"
-#include "clang/Sema/Sema.h"
-#include "clang/Serialization/ASTReader.h"
-#include "clang/Sema/SemaDiagnostic.h"
-#include "clang/Lex/LexDiagnostic.h"
-
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ExecutionEngine/GenericValue.h"
-#include "llvm/Support/Casting.h"
-#include "cling/Interpreter/ClangInternalState.h"
-
-
-#include "clang/Lex/Preprocessor.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/AST/Decl.h"
+#include "clang/Sema/SemaDiagnostic.h"
+#include "clang/Sema/Sema.h"
+#include "clang/Lex/LexDiagnostic.h"
+#include "clang/Frontend/CompilerInstance.h"
+#include "clang/Lex/MacroInfo.h"
 
-#include <cstdlib>
-#include <iostream>
+#include "clang/Basic/FileManager.h" // for DenseMap<FileEntry*>
+#include "llvm/ADT/DenseMap.h"
+
 
 #ifdef __APPLE__
  #include "llvm/Support/Process.h"
@@ -43,6 +34,20 @@
 
 using namespace cling;
 using namespace cling::meta;
+
+typedef llvm::DenseMap<const clang::FileEntry*, const Transaction*>
+    Watermarks;
+typedef llvm::DenseMap<const Transaction*, const clang::FileEntry*>
+    ReverseWatermarks;
+
+struct Actions::LoadPoints {
+  Watermarks first;
+  ReverseWatermarks second;
+};
+
+// For std::unique_ptr<LoadPoints>
+Actions::Actions(Processor& meta) : m_MetaProcessor(meta) {}
+Actions::~Actions() {}
 
 CommandResult Actions::actOnLCommand(llvm::StringRef file,
                                      Transaction** transaction /*= 0*/){
@@ -151,7 +156,7 @@ CommandResult Actions::actOnFCommand(llvm::StringRef file,
     }
 
     bool tryDirectory(std::string &frPath, FrameworkAction &action) const {
-      if (llvm::sys::fs::is_directory(frPath)) {
+      if (isDirectory(frPath)) {
         frPath.append("/");
         frPath.append(m_Name);
         frPath.append(m_Extension);
@@ -174,8 +179,7 @@ CommandResult Actions::actOnFCommand(llvm::StringRef file,
         m_DoHeader = prevLen > tmp.size() ? prevLen - tmp.size() : 0;
       }
 
-      if (/*file.endswith(m_Extension) &&*/ llvm::sys::fs::is_directory(
-          file)) {
+      if (/*file.endswith(m_Extension) &&*/ isDirectory(file)) {
         m_Name.assign(file.data(), file.size() - m_DoHeader);
         llvm::sys::path::filename(m_Name).str().swap(m_Name);
         m_IsAbsolute = true; // phase2(file.str());
@@ -543,7 +547,7 @@ CommandResult Actions::actOnxCommand(llvm::StringRef file,
 
 CommandResult Actions::doUCommand(const llvm::StringRef &file,
                                   const FileEntry &fe ) {
-  if (!m_Watermarks.get())
+  if (!m_Watermarks)
     return kCmdSuccess;
 
   // FIXME: unload, once implemented, must return success / failure
@@ -568,7 +572,8 @@ CommandResult Actions::doUCommand(const llvm::StringRef &file,
         }
       }
       if (!found) {
-        m_MetaProcessor.getOuts() << "!!!ERROR: Transaction for file: " << file << " has already been unloaded\n";
+        m_MetaProcessor.getOuts() << "!!!ERROR: Transaction for file: "
+                                  << file << " has already been unloaded\n";
       } else {
          //fprintf(stderr,"DEBUG: On Unload For %s unloadPoint is %p\n",file.str().c_str(),unloadPoint);
         while(getInterpreter().getLastTransaction() != unloadPoint) {
@@ -612,7 +617,7 @@ bool Actions::registerUnloadPoint(const Transaction* unloadPoint,
   }
   if (Entry) {
     if (!m_Watermarks.get()) {
-      m_Watermarks.reset(new std::pair<Watermarks, ReverseWatermarks>);
+      m_Watermarks.reset(new LoadPoints);
       if (!m_Watermarks.get()) {
         ::perror("Could not allocate watermarks");
         return false;
