@@ -325,7 +325,7 @@ namespace cling {
   Transaction* IncrementalParser::beginTransaction(const CompilationOptions&
                                                    Opts) {
     Transaction* OldCurT = m_Consumer->getTransaction();
-    Transaction* NewCurT = m_TransactionPool->takeTransaction(m_CI->getSema());
+    Transaction* NewCurT = m_TransactionPool->takeTransaction();
     NewCurT->setCompilationOpts(Opts);
     // If we are in the middle of transaction and we see another begin
     // transaction - it must be nested transaction.

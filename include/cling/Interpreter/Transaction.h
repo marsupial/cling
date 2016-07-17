@@ -167,10 +167,6 @@ namespace cling {
     ///
     const Transaction* m_Next;
 
-    ///\brief The Sema holding the ASTContext and the Preprocessor.
-    ///
-    clang::Sema& m_Sema;
-
     // Intentionally use struct instead of pair because we don't need default
     // init.
     // Add macro decls to be able to revert them for error recovery.
@@ -188,7 +184,7 @@ namespace cling {
     /// TransactionPool needs direct access to m_State as setState asserts
     friend class TransactionPool;
 
-    void Initialize(clang::Sema& S);
+    void Initialize();
 
   public:
     enum State {
@@ -206,8 +202,8 @@ namespace cling {
       kNone
     };
 
-    Transaction(clang::Sema& S);
-    Transaction(const CompilationOptions& Opts, clang::Sema& S);
+    Transaction();
+    Transaction(const CompilationOptions& Opts);
     ~Transaction();
 
     /// \{
@@ -495,16 +491,17 @@ namespace cling {
 
     ///\brief Prints out all the declarations in the transaction.
     ///
-    void dump() const;
+    void dump(const clang::Sema& S) const;
 
     ///\brief Pretty prints out all the declarations in the transaction.
     ///
-    void dumpPretty() const;
+    void dumpPretty(const clang::Sema& S) const;
 
     ///\brief Customizable printout of all the declarations in the transaction.
     ///
-    void print(llvm::raw_ostream& Out, const clang::PrintingPolicy& Policy,
-               unsigned Indent = 0, bool PrintInstantiation = false) const;
+    void print(const clang::Sema& S, llvm::raw_ostream& Out,
+               const clang::PrintingPolicy& Policy, unsigned Indent = 0,
+               bool PrintInstantiation = false) const;
 
     ///\brief Prints the transaction and all subtransactions recursivly
     /// without printing any decls.
