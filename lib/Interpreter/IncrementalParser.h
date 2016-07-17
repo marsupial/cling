@@ -31,6 +31,7 @@ namespace clang {
   class Decl;
   class FileID;
   class Parser;
+  class FunctionDecl;
 }
 
 namespace cling {
@@ -200,9 +201,12 @@ namespace cling {
     ///
     ///\param[in] input - The code to compile.
     ///\param[in] Opts - The compilation options to use.
+    ///\param[out] FD - The wrapper function if it was parsed.
     ///\returns the declarations that were compiled.
     ///
-    ParseResultTransaction Compile(llvm::StringRef input, const CompilationOptions& Opts);
+    ParseResultTransaction Compile(llvm::StringRef input,
+                                   const CompilationOptions& Opts,
+                                   clang::FunctionDecl** FD = nullptr);
 
     void printTransactionStructure() const;
 
@@ -243,8 +247,10 @@ namespace cling {
     ///\brief The work horse for parsing. It queries directly clang.
     ///
     ///\param[in] input - The incremental input that needs to be parsed.
+    ///\param[out] FD - The wrapper function if it was parsed.
     ///
-    EParseResult ParseInternal(llvm::StringRef input);
+    EParseResult ParseInternal(llvm::StringRef input,
+                               clang::FunctionDecl** FD = nullptr);
 
     ///\brief Return true if this decl (which comes from an AST file) should
     /// not be sent to CodeGen. The module is assumed to describe the contents

@@ -128,12 +128,31 @@ namespace cling {
     return true;
   }
 
-  bool DeclCollector::HandleTopLevelDecl(DeclGroupRef DGR) {
+  static bool checkForWrapper(clang::DeclGroupRef   DGR,
+                              clang::FunctionDecl** OutFD) {
+    if (!DGR.isNull() && DGR.isSingleDecl()) {
+      if (FunctionDecl* FD = dyn_cast<FunctionDecl>(DGR.getSingleDecl())){
+        if (utils::Analyze::IsWrapper(FD)) {
+          // We want to assert there is only one wrapper per transaction.
+          assert(*OutFD==nullptr && "Two wrappers in one parse?");
+          *OutFD = FD;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  bool DeclCollector::HandleTopLevelDeclAndWrapper(DeclGroupRef DGR,
+                                                   FunctionDecl** FD) {
     if (!Transform(DGR))
       return false;
 
     if (DGR.isNull())
       return true;
+
+    if (FD)
+      checkForWrapper(DGR, FD);
 
     assert(m_CurTransaction && "Missing transction");
     Transaction::DelayCallInfo DCI(DGR, Transaction::kCCIHandleTopLevelDecl);
@@ -171,6 +190,10 @@ namespace cling {
       m_Consumer->HandleTopLevelDecl(DGR);
     }
     return true;
+  }
+
+  bool DeclCollector::HandleTopLevelDecl(DeclGroupRef DGR) {
+    return HandleTopLevelDeclAndWrapper(DGR, nullptr);
   }
 
   void DeclCollector::HandleInterestingDecl(DeclGroupRef DGR) {

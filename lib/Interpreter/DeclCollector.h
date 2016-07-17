@@ -97,6 +97,9 @@ namespace cling {
         (new DeclCollectorPPAdapter(this));
     }
 
+    bool HandleTopLevelDeclAndWrapper(clang::DeclGroupRef DGR,
+                                      clang::FunctionDecl** FD = nullptr);
+
     void SetTransformers(std::vector<std::unique_ptr<ASTTransformer>>&& TT,
                          std::vector<std::unique_ptr<WrapperTransformer>>&& WT){
       m_TransactionTransformers.swap(TT);

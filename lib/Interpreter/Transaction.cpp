@@ -9,7 +9,6 @@
 
 #include "cling/Interpreter/Transaction.h"
 
-#include "cling/Utils/AST.h"
 #include "IncrementalExecutor.h"
 
 #include "clang/AST/ASTContext.h"
@@ -42,7 +41,6 @@ namespace cling {
     m_Opts = CompilationOptions();
     m_Module = 0;
     m_ExeUnload = {(void*)(size_t)-1};
-    m_WrapperFD = 0;
     m_Next = 0;
     m_BufferFID = FileID(); // sets it to invalid.
     m_Exe = 0;
@@ -128,8 +126,6 @@ namespace cling {
     assert((getState() == kCollecting || getState() == kCompleted)
            && "Must not be");
 
-    bool checkForWrapper = !m_WrapperFD;
-
 #ifndef NDEBUG
     // Check for duplicates
     for (size_t i = 0, e = m_DeclQueue.size(); i < e; ++i) {
@@ -155,19 +151,7 @@ namespace cling {
           && oldDCI.m_Call != kCCIHandleCXXImplicitFunctionInstantiation)
         assert(oldDCI != DCI && "Duplicates?!");
     }
-    // We want to assert there is only one wrapper per transaction.
-    checkForWrapper = true;
 #endif
-
-    // register the wrapper if any.
-    if (checkForWrapper && !DCI.m_DGR.isNull() && DCI.m_DGR.isSingleDecl()) {
-      if (FunctionDecl* FD = dyn_cast<FunctionDecl>(DCI.m_DGR.getSingleDecl())){
-        if (checkForWrapper && utils::Analyze::IsWrapper(FD)) {
-          assert(!m_WrapperFD && "Two wrappers in one transaction?");
-          m_WrapperFD = FD;
-        }
-      }
-    }
 
     if (comesFromASTReader(DCI.m_DGR))
       m_DeserializedDeclQueue.push_back(DCI);
@@ -209,8 +193,6 @@ namespace cling {
 
   void Transaction::erase(iterator pos) {
     assert(!empty() && "Erasing from an empty transaction.");
-    if (!pos->m_DGR.isNull() && m_WrapperFD == *pos->m_DGR.begin())
-      m_WrapperFD = 0;
     m_DeclQueue.erase(pos);
   }
 
@@ -337,7 +319,6 @@ namespace cling {
       llvm::errs() << "0";
 
     llvm::errs() << " nested transactions\n"
-                 << indent << " wrapper: " << m_WrapperFD
                  << ", parent: " << m_Parent
                  << ", next: " << m_Next << "\n";
   }
