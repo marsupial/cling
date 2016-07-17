@@ -13,16 +13,7 @@
 #include "cling/MetaProcessor/MetaProcessor.h"
 #include "cling/MetaProcessor/Commands.h"
 #include "cling/Interpreter/Transaction.h"
-
-#include "clang/Basic/FileManager.h" // for DenseMap<FileEntry*>
-
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/Optional.h"
-
-namespace llvm {
-  class StringRef;
-  class raw_ostream;
-}
+#include "cling/Utils/FileEntry.h"
 
 namespace cling {
   class Transaction;
@@ -32,14 +23,12 @@ namespace cling {
   namespace meta {
     class Processor;
 
-    ///\brief Semantic analysis for our home-grown language. All implementation
-    /// details of the commands should go here.
+    ///\brief Actions related to loading and executing of files and managing
+    ///
     class Actions {
-    private:
+      struct LoadPoints;
       Processor& m_MetaProcessor;
-      typedef llvm::DenseMap<const clang::FileEntry*, const Transaction*> Watermarks;
-      typedef llvm::DenseMap<const Transaction*, const clang::FileEntry*> ReverseWatermarks;
-      std::unique_ptr< std::pair<Watermarks, ReverseWatermarks> > m_Watermarks;
+      std::unique_ptr<LoadPoints> m_Watermarks;
 
       Interpreter& getInterpreter() const {
         return m_MetaProcessor.getInterpreter();
@@ -52,7 +41,8 @@ namespace cling {
 
     public:
 
-      Actions(MetaProcessor& meta) : m_MetaProcessor(meta) {}
+      Actions(Processor&);
+      ~Actions();
 
       ///\brief L command includes the given file or loads the given library.
       ///
@@ -65,7 +55,7 @@ namespace cling {
       ///\brief F command loads the given framework and optioanlly its root
       /// header (OS X only)
       ///
-      ///\param[in] file - The frameowrk to b eloaded
+      ///\param[in] file - The framework to be loaded
       ///\param[out] transaction - Transaction containing the loaded file.
       ///
       CommandResult actOnFCommand(llvm::StringRef file,
