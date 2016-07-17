@@ -19,7 +19,7 @@ namespace llvm {
 namespace clang {
   class ASTContext;
   class QualType;
-  class RecordDecl;
+  class FunctionDecl;
 }
 
 namespace cling {
@@ -72,6 +72,10 @@ namespace cling {
     ///\brief Interpreter that produced the value.
     ///
     Interpreter* m_Interpreter;
+
+    ///\brief The wrapper function that created this value (if any).
+    ///
+    clang::FunctionDecl* m_WrapperFD;
 
     /// \brief Retrieve the underlying, canonical, desugared, unqualified type.
     EStorageType getStorageType() const { return m_StorageType; }
@@ -131,13 +135,14 @@ namespace cling {
     /// \brief Default constructor, creates a value that IsInvalid().
     Value():
       m_StorageType(kUnsupportedType), m_Type(nullptr),
-      m_Interpreter(nullptr) {}
+      m_Interpreter(nullptr), m_WrapperFD(nullptr) {}
     /// \brief Copy a value.
     Value(const Value& other);
     /// \brief Move a value.
     Value(Value&& other):
       m_Storage(other.m_Storage), m_StorageType(other.m_StorageType),
-      m_Type(other.m_Type), m_Interpreter(other.m_Interpreter) {
+      m_Type(other.m_Type), m_Interpreter(other.m_Interpreter),
+      m_WrapperFD(other.m_WrapperFD) {
       // Invalidate other so it will not release.
       other.m_StorageType = kUnsupportedType;
     }
@@ -155,6 +160,9 @@ namespace cling {
     clang::QualType getType() const;
     clang::ASTContext& getASTContext() const;
     Interpreter* getInterpreter() const { return m_Interpreter; }
+
+    clang::FunctionDecl* getWrapperFD() const { return m_WrapperFD; }
+    void setWrapperFD(clang::FunctionDecl* F) { m_WrapperFD = F; }
 
     /// \brief Whether this type needs managed heap, i.e. the storage provided
     /// by the m_Storage member is insufficient, or a non-trivial destructor

@@ -11,7 +11,6 @@
 
 #include "cling/Interpreter/CValuePrinter.h"
 #include "cling/Interpreter/Interpreter.h"
-#include "cling/Interpreter/Transaction.h"
 #include "cling/Interpreter/Value.h"
 #include "cling/Utils/AST.h"
 #include "cling/Utils/Validation.h"
@@ -296,23 +295,14 @@ static std::string printEnumValue(const Value &V) {
 }
 
 static std::string printFunctionValue(const Value &V, const void *ptr,
-                                      clang::QualType Ty,
-                                      const Transaction *T) {
+                                      clang::QualType Ty) {
   std::string functionString;
   llvm::raw_string_ostream o(functionString);
   o << "Function @" << ptr;
 
-  // If a function is the first thing printed in a session,
-  // getLastTransaction() will point to the transaction that loaded the
-  // ValuePrinter, and won't have a wrapper FD (or the proper one).
-  // When this happens, printValueInternal stashes the Transaction
-  // that invoked it, and passes it on here.
-
-  Interpreter &Interp = *const_cast<Interpreter *>(V.getInterpreter());
-  if (!T) T = Interp.getLastTransaction();
-
-  if (clang::FunctionDecl *WrapperFD = T->getWrapperFD()) {
-    clang::ASTContext &C = V.getASTContext();
+  if (clang::FunctionDecl *WrapperFD = V.getWrapperFD()) {
+    Interpreter &Interp = *const_cast<Interpreter *>(V.getInterpreter());
+    clang::ASTContext &C = Interp.getCI()->getASTContext();
     const clang::FunctionDecl *FD = nullptr;
     // CE should be the setValueNoAlloc call expr.
     if (const clang::CallExpr *CallE
@@ -382,8 +372,7 @@ static std::string printFunctionValue(const Value &V, const void *ptr,
   return functionString;
 }
 
-static std::string printUnpackedClingValue(const Value &V,
-                                           const Transaction *T = nullptr) {
+static std::string printUnpackedClingValue(const Value &V) {
   std::stringstream strm;
 
   clang::ASTContext &C = V.getASTContext();
@@ -398,10 +387,10 @@ static std::string printUnpackedClingValue(const Value &V,
     strm << printEnumValue(V);
   } else if (Ty->isFunctionType()) {
     // special case function printing, using compiled information
-    strm << printFunctionValue(V, &V, Ty, T);
+    strm << printFunctionValue(V, &V, Ty);
   } else if ((Ty->isPointerType() || Ty->isMemberPointerType()) && Ty->getPointeeType()->isFunctionProtoType()) {
     // special case function printing, using compiled information
-    strm << printFunctionValue(V, V.getPtr(), Ty->getPointeeType(), T);
+    strm << printFunctionValue(V, V.getPtr(), Ty->getPointeeType());
   } else if (clang::CXXRecordDecl *CXXRD = Ty->getAsCXXRecordDecl()) {
     if (CXXRD->isLambda()) {
       strm << "@" << V.getPtr();
@@ -698,10 +687,8 @@ namespace cling {
 
       Interpreter* Interp = V.getInterpreter();
       Interpreter::TransactionMerge M(Interp, true);
-      const Transaction* OrigT = nullptr;
       const Transaction*& T = Interp->printValueTransaction();
       if (!T) {
-        OrigT = Interp->getLastTransaction();
         // DiagnosticErrorTrap Trap(Interp->getSema().getDiagnostics());
         Interp->declare("#include \"cling/Interpreter/RuntimePrintValue.h\"",
                         const_cast<Transaction**>(&T));
@@ -715,7 +702,7 @@ namespace cling {
           return "";
         }
       }
-      return printUnpackedClingValue(V, OrigT);
+      return printUnpackedClingValue(V);
     }
   } // end namespace valuePrinterInternal
 } // end namespace cling

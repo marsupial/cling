@@ -110,7 +110,8 @@ namespace cling {
 
   Value::Value(const Value& other):
     m_Storage(other.m_Storage), m_StorageType(other.m_StorageType),
-    m_Type(other.m_Type), m_Interpreter(other.m_Interpreter) {
+    m_Type(other.m_Type), m_Interpreter(other.m_Interpreter),
+    m_WrapperFD(other.m_WrapperFD) {
     if (other.needsManagedAllocation())
       AllocatedValue::getFromPayload(m_Storage.m_Ptr)->Retain();
   }
