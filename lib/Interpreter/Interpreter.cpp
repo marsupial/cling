@@ -1016,13 +1016,14 @@ namespace cling {
 
     const Transaction *prntT = m_PrintValueTransaction;
 
-    Value resultV;
-    if (!V)
-      V = &resultV;
-    if (!lastT->getWrapperFD()) // no wrapper to run
-      return Interpreter::kSuccess;
-    else {
-      ExecutionResult rslt = RunFunction(lastT->getWrapperFD(), V);
+    if (clang::FunctionDecl* Wrapper = lastT->getWrapperFD()) {
+      Value resultV;
+      if (!V)
+        V = &resultV;
+      else
+        V->setWrapperFD(Wrapper);
+
+      ExecutionResult rslt = RunFunction(Wrapper, V);
 
       // If m_PrintValueTransaction has changed value, then lastT is now
       // the transaction that holds the transaction(s) of loading up the
