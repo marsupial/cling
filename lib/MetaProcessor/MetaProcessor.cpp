@@ -13,6 +13,7 @@
 #include "InputValidator.h"
 #include "MetaParser.h"
 #include "MetaSema.h"
+#include "CommandTable.h"
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/Value.h"
 
@@ -130,11 +131,9 @@ namespace cling {
   Interpreter::CompilationResult
   MetaProcessor::doMetaCommand(llvm::StringRef cmd, Value* result) const {
     // Init the parser
-    MetaParser parser(cmd, *m_Actions);
-    MetaSema::ActionResult actionResult = MetaSema::AR_Failure;
-    if (parser.doMetaCommand(actionResult, result)) {
-      return actionResult == MetaSema::AR_Success ? Interpreter::kSuccess :
-                                                    Interpreter::kFailure;
+    if (meta::CommandTable* Cmds = meta::CommandTable::create()) {
+      if (const int Rval = Cmds->execute(cmd, this, result))
+        return Rval > 0 ? Interpreter::kSuccess : Interpreter::kFailure;
     }
     return Interpreter::kMoreInputExpected;
   }

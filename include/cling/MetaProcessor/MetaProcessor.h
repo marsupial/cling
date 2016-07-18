@@ -195,6 +195,8 @@ namespace cling {
     ///
     bool registerUnloadPoint(const Transaction* T, llvm::StringRef filename);
 
+    MetaSema& getActions() const { return *m_Actions; }
+
   private:
     ///\brief Set a stream to a file
     ///
