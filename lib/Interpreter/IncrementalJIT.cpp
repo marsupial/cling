@@ -211,16 +211,24 @@ IncrementalJIT::getInjectedSymbols(llvm::StringRef Name) const {
   return JITSymbol(nullptr);
 }
 
+#ifdef __linux__
+ const static llvm::StringRef kEntryMain("main");
+#else
+ const static llvm::StringRef kEntryMain("_main");
+#endif
+
 llvm::orc::JITSymbol
 IncrementalJIT::getSymbolAddressWithoutMangling(llvm::StringRef Name,
                                                 bool AlsoInProcess) {
-  if (auto Sym = getInjectedSymbols(Name))
-    return Sym;
+  if (!Name.equals(kEntryMain)) {
+    if (auto Sym = getInjectedSymbols(Name))
+      return Sym;
 
-  if (AlsoInProcess) {
-    if (RuntimeDyld::SymbolInfo SymInfo = m_ExeMM->findSymbol(Name))
-      return llvm::orc::JITSymbol(SymInfo.getAddress(),
-                                  llvm::JITSymbolFlags::Exported);
+    if (AlsoInProcess) {
+      if (RuntimeDyld::SymbolInfo SymInfo = m_ExeMM->findSymbol(Name))
+        return llvm::orc::JITSymbol(SymInfo.getAddress(),
+                                    llvm::JITSymbolFlags::Exported);
+    }
   }
 
   if (auto Sym = m_LazyEmitLayer.findSymbol(Name, false))
@@ -242,6 +250,9 @@ size_t IncrementalJIT::addModules(std::vector<llvm::Module*>&& modules) {
       if (auto Sym = getInjectedSymbols(S))
         return RuntimeDyld::SymbolInfo((uint64_t)Sym.getAddress(),
                                        Sym.getFlags());
+      if (kEntryMain.equals(S))
+        return RuntimeDyld::SymbolInfo(nullptr);
+
       return m_ExeMM->findSymbol(S);
     },
     [&](const std::string &Name) {
