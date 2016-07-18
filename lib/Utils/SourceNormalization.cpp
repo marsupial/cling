@@ -166,6 +166,17 @@ size_t cling::utils::getWrapPoint(std::string& source,
       // There is something else here that needs to be wrapped.
       return getFileOffset(Tok);
     }
+    else if (kind == tok::at && (LangOpts.ObjC2 || LangOpts.ObjC1)) {
+      Lex.Lex(Tok);
+      if (Tok.getKind() == tok::string_literal)
+          return getFileOffset(Tok);
+      if (Tok.getKind() == tok::raw_identifier) {
+        if (Tok.getRawIdentifier().equals("selector"))
+          return getFileOffset(Tok);
+      }
+
+      return std::string::npos;
+    }
 
     // FIXME: in the future, continue lexing to extract relevant PP directives;
     // return wrapPoint

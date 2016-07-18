@@ -50,9 +50,10 @@ namespace cling {
     ///\brief Checks whether the input contains balanced number of braces
     ///
     ///\param[in] line - Input line to validate.
+    ///\param[in] objC - Parse objective-c tokens.
     ///\returns Information about the outcome of the validation.
     ///
-    ValidationResult validate(llvm::StringRef line);
+    ValidationResult validate(llvm::StringRef line, bool objC);
 
     ///\brief Retrieves the number of spaces that the next input line should be
     /// indented.

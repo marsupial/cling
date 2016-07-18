@@ -851,6 +851,11 @@ namespace cling {
     return Interpreter::kFailure;
   }
 
+  bool Interpreter::isObjectiveC() const {
+    // Should this be cached?
+    const LangOptions& Opts = getCI()->getLangOpts();
+    return Opts.ObjC2 || Opts.ObjC1;
+  }
 
   void Interpreter::WrapInput(std::string& input, std::string& fname,
                               CompilationOptions &CO) {
