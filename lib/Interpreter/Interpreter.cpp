@@ -1094,6 +1094,12 @@ namespace cling {
     return Input;
   }
 
+  bool Interpreter::isObjectiveC() const {
+    // Should this be cached?
+    const LangOptions& Opts = getCI()->getLangOpts();
+    return Opts.ObjC2 || Opts.ObjC1;
+  }
+
   Interpreter::ExecutionResult
   Interpreter::RunFunction(const FunctionDecl* FD, Value* res /*=0*/) {
     if (getDiagnostics().hasErrorOccurred())

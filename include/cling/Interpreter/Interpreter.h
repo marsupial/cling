@@ -845,6 +845,9 @@ namespace cling {
     ///
     int verifyDiagnostics() const;
 
+    ///\brief Whether the language is an Objective-C variant or not.
+    bool isObjectiveC() const;
+
     void GenerateAutoloadingMap(llvm::StringRef inFile, llvm::StringRef outFile,
                                 bool enableMacros = false, bool enableLogs = true);
 

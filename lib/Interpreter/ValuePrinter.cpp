@@ -7,6 +7,7 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
+#include "ObjCSupport.h"
 #include "cling/Interpreter/Value.h"
 
 #include "cling/Interpreter/Interpreter.h"
@@ -1042,6 +1043,20 @@ static std::string printUnpackedClingValue(const Value &V) {
       return ValueStr;
   } else
     assert(!Ty->isIntegralOrEnumerationType() && "Bad Type.");
+
+#ifdef CLING_OBJC_SUPPORT
+  if (Ty->isObjCObjectPointerType()) {
+    if (!V.getPtr())
+      return "nil";
+
+    using namespace cling::objectivec;
+    if (ObjCSupport* ocSupport = ObjCSupport::instance()) {
+      std::string desc = ocSupport->description(V.getPtr());
+      if (!desc.empty())
+        return desc;
+    }
+  }
+#endif
 
   if (!V.getPtr())
     return kNullPtrStr;

@@ -72,6 +72,7 @@ add_cling_library(clingInterpreter OBJECT
   Value.cpp
   ValuePrinter.cpp
   ValuePrinterSynthesizer.cpp
+  ObjCSupport.cpp
 
   DEPENDS
   ClangDriverOptions

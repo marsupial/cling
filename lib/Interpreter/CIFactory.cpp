@@ -9,6 +9,7 @@
 
 #include "ClingUtils.h"
 #include "DeclCollector.h"
+#include "ObjCSupport.h"
 #include <cling-compiledata.h>
 
 #include "cling/Interpreter/CIFactory.h"
@@ -880,6 +881,12 @@ static void stringifyPreprocSetting(PreprocessorOptions& PPOpts,
                                    bool /*AllowCompatibleDifferences*/) override {
             *m_Invocation.getLangOpts() = LangOpts;
             m_ReadLang = true;
+            #ifdef CLING_OBJC_SUPPORT
+              // Better to do this later to share the loaded libraries with
+              // a DynamicLibraryManager instance, but not entirely sure
+              // no selectors can be emited via the PCH.
+              cling::objectivec::ObjCSupport::create(m_Invocation);
+            #endif
             return false;
           }
           bool ReadTargetOptions(const TargetOptions &TargetOpts,
