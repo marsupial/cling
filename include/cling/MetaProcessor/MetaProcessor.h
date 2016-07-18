@@ -163,6 +163,9 @@ namespace cling {
     ///\returns whether registration was successful or not
     ///
     bool registerUnloadPoint(const Transaction* T, llvm::StringRef filename);
+
+    ///\brief Return the MetaSema actions of the MetaProcessor
+    MetaSema& getActions() const { return *m_Actions; }
   };
 } // end namespace cling
 

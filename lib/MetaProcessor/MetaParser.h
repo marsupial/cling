@@ -23,11 +23,13 @@ namespace llvm {
 namespace cling {
   class MetaSema;
   class Value;
+  namespace meta {
+    class CommandArguments;
+  }
 
   class MetaParser {
   private:
     MetaLexer m_Lexer;
-    MetaSema& m_Actions;
     llvm::SmallVector<Token, 2> m_TokenCache;
 
     const Token& lookAhead(unsigned Num);
@@ -42,9 +44,9 @@ namespace cling {
     void consumeAnyStringToken(tok::TokenKind stopAt = tok::space);
 
   public:
-    class CommandParamters;
+    friend class meta::CommandArguments;
 
-    MetaParser(llvm::StringRef Line, MetaSema& Sema);
+    MetaParser(llvm::StringRef Line);
 
     ///\brief Drives the recursive decendent parsing.
     ///
