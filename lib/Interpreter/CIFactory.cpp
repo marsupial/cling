@@ -11,6 +11,7 @@
 #include "cling/Utils/Paths.h"
 #include "cling/Interpreter/InvocationOptions.h"
 #include "ClingUtils.h"
+#include "ObjCSupport.h"
 
 #include "DeclCollector.h"
 #include "cling-compiledata.h"
@@ -1343,6 +1344,13 @@ namespace {
                                    bool /*Complain*/,
                                  bool /*AllowCompatibleDifferences*/) override {
             *m_Invocation.getLangOpts() = LangOpts;
+            
+            #ifdef CLING_OBJC_SUPPORT
+              // We'd like to do this later to share the loaded libraries with
+              // a DynamicLibraryManager instance, but I'm not entirely sure
+              // no selectors can be emited via the PCH.
+              cling::objectivec::ObjCSupport::create(m_Invocation);
+            #endif
             return false;
           }
           bool ReadTargetOptions(const TargetOptions &TargetOpts,

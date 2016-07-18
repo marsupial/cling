@@ -14,6 +14,7 @@
 #include "cling/Interpreter/Value.h"
 #include "cling/Utils/AST.h"
 #include "cling/Utils/Validation.h"
+#include "ObjCSupport.h"
 
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
@@ -248,6 +249,15 @@ static std::string invokePrintValueOverload(const Value &V) {
     return executePrintValue<void *>(V, V.getPtr());
   }
   else if (Ty->isObjCObjectPointerType()) {
+#ifdef CLING_OBJC_SUPPORT
+    using namespace cling::objectivec;
+    if (ObjCSupport* ocSupport = ObjCSupport::instance()) {
+      std::string desc = ocSupport->description(V.getPtr());
+      if (!desc.empty())
+        return desc;
+    }
+    // Fallback to pointer printing
+#endif
     return executePrintValue<void *>(V, V.getPtr());
   }
   else {

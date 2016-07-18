@@ -760,6 +760,9 @@ namespace cling {
     const Transaction*& printValueTransaction() {
       return m_PrintValueTransaction;
     }
+
+    ///\brief Whether the language is an Objective-C variant or not.
+    bool isObjectiveC() const;
   };
 
   namespace internal {

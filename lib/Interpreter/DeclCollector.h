@@ -140,6 +140,9 @@ namespace cling {
     virtual void HandleTranslationUnit(clang::ASTContext& Ctx);
     virtual void HandleCXXImplicitFunctionInstantiation(clang::FunctionDecl *D);
     virtual void HandleCXXStaticMemberVarInstantiation(clang::VarDecl *D);
+#ifdef CLING_OBJC_SUPPORT
+    virtual void HandleTopLevelDeclInObjCContainer(clang::DeclGroupRef DGR);
+#endif
     /// \}
 
     /// \{

@@ -672,6 +672,32 @@ bool DeclUnloader::VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC)
     }
   }
 
+  bool DeclUnloader::VisitReturnValue(const QualType QT, Decl* Parent) {
+    // struct FirstDecl* function();
+    // In the example above, FirstDecl* will be declared as the function is
+    // parsed, and if FirstDecl* never gets a definiton, it's declaration
+    // will never be removed, so we have to check for that case.
+    const Type* T = QT.getTypePtrOrNull();
+    if (T && !T->isVoidType()) {
+      if (const TagType* TT = getTagPointedToo(T)) {
+        TagDecl* Tag = TT->getDecl();
+        // So we have a TagDecl, was it embedded, and is it still undefined?
+        if (Tag->isEmbeddedInDeclarator() && !Tag->isCompleteDefinition()) {
+          // Possibly overkill, but just to be safe
+          if (Tag->getFirstDecl() == Tag) {
+            // Only unload it the first time it appeared with a function
+            const SourceManager& SM = m_Sema->getSourceManager();
+            if (!SM.isBeforeInTranslationUnit(Tag->getLocStart(),
+                                              Parent->getLocStart())) {
+              return Visit(Tag);
+            }
+          }
+        }
+      }
+    }
+    return true;
+  }
+
   bool DeclUnloader::VisitFunctionDecl(FunctionDecl* FD) {
     // The Structors need to be handled differently.
     if (!isa<CXXConstructorDecl>(FD) && !isa<CXXDestructorDecl>(FD)) {
@@ -793,29 +819,7 @@ bool DeclUnloader::VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC)
       m_Specializations.insert(CTSD);
     }
 
-    // struct FirstDecl* function();
-    // In the example above, FirstDecl* will be declared as the function is
-    // parsed, and if FirstDecl* never gets a definiton, it's declaration
-    // will never be removed, so we have to check for that case.
-
-    const Type* type = FD->getReturnType().getTypePtrOrNull();
-    if (type && !type->isVoidType()) {
-      if (const TagType* TT = getTagPointedToo(type)) {
-        TagDecl* Tag = TT->getDecl();
-        // So we have a TagDecl, was it embedded, and is it still undefined?
-        if (Tag->isEmbeddedInDeclarator() && !Tag->isCompleteDefinition()) {
-          // Possibly overkill, but just to be safe
-          if (Tag->getFirstDecl() == Tag) {
-            // Only unload it the first time it appeared with a function
-            const SourceManager& SM = m_Sema->getSourceManager();
-            if (!SM.isBeforeInTranslationUnit(Tag->getLocStart(),
-                                              FD->getLocStart())) {
-              Visit(Tag);
-            }
-          }
-        }
-      }
-    }
+    Successful &= VisitReturnValue(FD->getReturnType(), FD);
 
     // Remove new and delete (all variants). These are 'anonymous' and not
     // removed in VisitNamedDecl. Built-in operator new & delete are still
@@ -1366,4 +1370,119 @@ bool DeclUnloader::VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC)
     
     return Success;
   }
+
+#ifdef CLING_OBJC_SUPPORT
+
+  bool DeclUnloader::VisitObjCMethodDecl(ObjCMethodDecl* MethD) {
+    // ObjCMethodDecl: NamedDecl, DeclContext
+    bool Successful = VisitDeclContext(MethD);
+    Successful &= VisitNamedDecl(MethD);
+    Successful &= VisitReturnValue(MethD->getReturnType(), MethD);
+    return Successful;
+  }
+
+  bool DeclUnloader::VisitObjCTypeParamDecl(ObjCTypeParamDecl* TypeD) {
+    // ObjCMethodDecl: TypedefNameDecl
+    bool Successful = VisitTypedefNameDecl(TypeD);
+    return Successful;
+  }
+
+  bool DeclUnloader::VisitObjCPropertyDecl(ObjCPropertyDecl* PropD) {
+    // ObjCPropertyDecl: NamedDecl
+    bool Successful = VisitNamedDecl(PropD);
+    return Successful;
+  }
+
+  bool DeclUnloader::VisitObjCIvarDecl(ObjCIvarDecl* IvarD) {
+    // ObjCIvarDecl: FieldDecl
+    bool Successful = VisitFieldDecl(IvarD);
+    return Successful;
+  }
+
+  bool DeclUnloader::VisitObjCAtDefsFieldDecl(ObjCAtDefsFieldDecl* CAtD) {
+    // ObjCAtDefsFieldDecl: FieldDecl
+    bool Successful = VisitFieldDecl(CAtD);
+    return Successful;
+  }
+
+  bool DeclUnloader::VisitObjCCategoryDecl(ObjCCategoryDecl* CatD) {
+    // ObjCMethodDecl: ObjCContainerDecl
+    bool Successful = VisitObjCContainerDecl(CatD);
+    ObjCInterfaceDecl* IDecl = CatD->getClassInterface();
+    if (ObjCCategoryDecl* Prev = IDecl->getCategoryListRaw()) {
+      if (Prev != CatD) {
+        ObjCCategoryDecl* Next = Prev->getNextClassCategory();
+        while (Next != CatD) {
+          Prev = Next;
+          Next = Prev->getNextClassCategory();
+        }
+        Prev->NextClassCategory = Next->getNextClassCategory();
+      }
+      else
+        IDecl->setCategoryListRaw(CatD->getNextClassCategory());
+    }
+    return Successful;
+  }
+
+  bool DeclUnloader::VisitObjCImplDecl(ObjCImplDecl* ImplD) {
+    // ObjCMethodDecl: NamedDecl, DeclContext
+    bool Successful = VisitDeclContext(ImplD);
+    Successful &= VisitNamedDecl(ImplD);
+    return Successful;
+  }
+
+  bool DeclUnloader::VisitObjCImplementationDecl(ObjCImplementationDecl* ImpD) {
+    // ObjCImplementationDecl: ObjCImplDecl
+    bool Successful = VisitObjCImplDecl(ImpD);
+    return Successful;
+  }
+
+  bool DeclUnloader::VisitObjCCompatibleAliasDecl(ObjCCompatibleAliasDecl* Cad) {
+    // ObjCCompatibleAliasDecl: NamedDecl
+    bool Successful = VisitNamedDecl(Cad);
+    return Successful;
+  }
+
+  bool DeclUnloader::VisitObjCPropertyImplDecl(ObjCPropertyImplDecl* PropD) {
+    // ObjCPropertyImplDecl: Decl
+    bool Successful = VisitDecl(PropD);
+    return Successful;
+  }
+
+  bool DeclUnloader::VisitObjCContainerDecl(ObjCContainerDecl* ContD) {
+    // ObjCContainerDecl: NamedDecl, DeclContext
+    bool Successful = VisitDeclContext(ContD);
+    Successful &= VisitNamedDecl(ContD);
+    return Successful;
+  }
+
+  bool DeclUnloader::VisitObjCInterfaceDecl(ObjCInterfaceDecl* Id) {
+    // ObjCInterfaceDecl: ObjCContainerDecl, Redeclarable<ObjCInterfaceDecl>
+    bool Successful = VisitRedeclarable(Id, Id->getDeclContext());
+    Successful &= VisitObjCContainerDecl(Id);
+    ObjCIvarDecl* IVar = Id->all_declared_ivar_begin();
+    while (IVar) {
+      Successful &= Visit(IVar);
+      assert(Successful && "Instance variable unload failure");
+      IVar = IVar->getNextIvar();
+    }
+    return Successful;
+  }
+
+  bool DeclUnloader::VisitObjCCategoryImplDecl(ObjCCategoryImplDecl* CatImpD) {
+    // ObjCCategoryImplDecl: ObjCContainerDecl, ObjCImplDecl
+    bool Successful = VisitObjCContainerDecl(CatImpD);
+    Successful &= VisitObjCImplDecl(CatImpD);
+    return Successful;
+  }
+
+  bool DeclUnloader::VisitObjCProtocolDecl(ObjCProtocolDecl* PD) {
+    // ObjCProtocolDecl: ObjCContainerDecl, Redeclarable<ObjCProtocolDecl>
+    bool Successful = VisitRedeclarable(PD, PD->getDeclContext());
+    Successful &= VisitObjCContainerDecl(PD);
+    return Successful;
+  }
+
+#endif // CLING_OBJC_SUPPORT
+
 } // end namespace cling
