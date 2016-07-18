@@ -13,36 +13,44 @@
 // CHECK: <cling::Transaction* 0x{{[0-9a-f]+}} isEmpty=0 isCommitted=1>
 // CHECK: `   <cling::Transaction* 0x{{[0-9a-f]+}} isEmpty=0 isCommitted=1>
 
-const char *message = "winkey";
+struct Test {};
 
-message
-// CHECK: (const char *) "winkey"
+Test message
+// CHECK: (Test &) @0x{{[0-9a-f]+}}
 
-.undo
-
-// Make sure we can still print
-message
-// CHECK: (const char *) "winkey"
-
-.undo
+.undo // undo declaration & print
 .stats undo
 // CHECK: <cling::Transaction* 0x{{[0-9a-f]+}} isEmpty=0 isCommitted=1>
 // CHECK: `   <cling::Transaction* 0x{{[0-9a-f]+}} isEmpty=0 isCommitted=1>
 // CHECK: <cling::Transaction* 0x{{[0-9a-f]+}} isEmpty=0 isCommitted=1>
 
+Test message;
+
+// Make sure we can still print
 message
-// CHECK: (const char *) "winkey"
+// CHECK: (Test &) @0x{{[0-9a-f]+}}
+
+.undo // undo print
+.stats undo
+// CHECK: <cling::Transaction* 0x{{[0-9a-f]+}} isEmpty=0 isCommitted=1>
+// CHECK: `   <cling::Transaction* 0x{{[0-9a-f]+}} isEmpty=0 isCommitted=1>
+// CHECK: <cling::Transaction* 0x{{[0-9a-f]+}} isEmpty=0 isCommitted=1>
+// CHECK: <cling::Transaction* 0x{{[0-9a-f]+}} isEmpty=0 isCommitted=1>
+
+message
+// CHECK: (Test &) @0x{{[0-9a-f]+}}
 
 .undo // print message
-.undo // decalre message
+.undo // declare message
+.undo // declare Test
 .stats undo
 // CHECK: <cling::Transaction* 0x{{[0-9a-f]+}} isEmpty=0 isCommitted=1>
 // CHECK: `   <cling::Transaction* 0x{{[0-9a-f]+}} isEmpty=0 isCommitted=1>
 
 #include "cling/Interpreter/Interpreter.h"
 
-gCling->echo("1;");
-// CHECK: (int) 1
+gCling->echo("std::string(\"TEST\")");
+// CHECK: (std::string) "TEST"
 
 .stats undo
 // CHECK: <cling::Transaction* 0x{{[0-9a-f]+}} isEmpty=0 isCommitted=1>
@@ -60,8 +68,8 @@ gCling->echo("1;");
 // CHECK: `   <cling::Transaction* 0x{{[0-9a-f]+}} isEmpty=0 isCommitted=1>
 // CHECK: <cling::Transaction* 0x{{[0-9a-f]+}} isEmpty=0 isCommitted=1>
 
-gCling->echo("1;");
-// CHECK: (int) 1
+gCling->echo("std::string(\"TEST2\")");
+// CHECK: (std::string) "TEST2"
 
 // expected-no-diagnostics
 .q
