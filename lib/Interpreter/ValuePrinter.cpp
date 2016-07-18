@@ -752,6 +752,53 @@ static std::string printStringType(const Value &V, const clang::Type* Type) {
   return "";
 }
 
+static std::string printBuiltinValue(const cling::Value& V,
+                                     const clang::BuiltinType *BT) {
+  switch (BT->getKind()) {
+    case clang::BuiltinType::NullPtr:
+      return kNullPtrStr;
+    case clang::BuiltinType::Bool:
+      return executePrintValue<bool>(V, V.getLL());
+
+    case clang::BuiltinType::Char_S:
+      return executePrintValue<signed char>(V, V.getLL());
+    case clang::BuiltinType::SChar:
+      return executePrintValue<signed char>(V, V.getLL());
+    case clang::BuiltinType::Short:
+      return executePrintValue<short>(V, V.getLL());
+    case clang::BuiltinType::Int:
+      return executePrintValue<int>(V, V.getLL());
+    case clang::BuiltinType::Long:
+      return executePrintValue<long>(V, V.getLL());
+    case clang::BuiltinType::LongLong:
+      return executePrintValue<long long>(V, V.getLL());
+
+    case clang::BuiltinType::Char_U:
+      return executePrintValue<unsigned char>(V, V.getULL());
+    case clang::BuiltinType::UChar:
+      return executePrintValue<unsigned char>(V, V.getULL());
+    case clang::BuiltinType::UShort:
+      return executePrintValue<unsigned short>(V, V.getULL());
+    case clang::BuiltinType::UInt:
+      return executePrintValue<unsigned int>(V, V.getULL());
+    case clang::BuiltinType::ULong:
+      return executePrintValue<unsigned long>(V, V.getULL());
+    case clang::BuiltinType::ULongLong:
+      return executePrintValue<unsigned long long>(V, V.getULL());
+
+    case clang::BuiltinType::Float:
+      return executePrintValue<float>(V, V.getFloat());
+    case clang::BuiltinType::Double:
+      return executePrintValue<double>(V, V.getDouble());
+    case clang::BuiltinType::LongDouble:
+      return executePrintValue<long double>(V, V.getLongDouble());
+
+    default:
+      break;
+  }
+  return "";
+}
+
 static std::string printUnpackedClingValue(const Value &V) {
   // Find the Type for `std::string`. We are guaranteed to have that declared
   // when this function is called; RuntimePrintValue.h #includes it.
@@ -780,42 +827,30 @@ static std::string printUnpackedClingValue(const Value &V) {
       return Str;
   } else if (const clang::BuiltinType *BT
       = llvm::dyn_cast<clang::BuiltinType>(Td.getCanonicalType().getTypePtr())) {
+    // FIXME: Use ranged comparison:
+    // if (BT->getKind() >= clang::BuiltinType::Bool &&
+    //     BT->getKind() <= clang::BuiltinType::NullPtr)
+    // Requires support for Int128, UInt128, Half, Float128 in printBuiltinValue
     switch (BT->getKind()) {
       case clang::BuiltinType::Bool:
-        return executePrintValue<bool>(V, V.getLL());
-
       case clang::BuiltinType::Char_S:
-        return executePrintValue<signed char>(V, V.getLL());
       case clang::BuiltinType::SChar:
-        return executePrintValue<signed char>(V, V.getLL());
       case clang::BuiltinType::Short:
-        return executePrintValue<short>(V, V.getLL());
       case clang::BuiltinType::Int:
-        return executePrintValue<int>(V, V.getLL());
       case clang::BuiltinType::Long:
-        return executePrintValue<long>(V, V.getLL());
       case clang::BuiltinType::LongLong:
-        return executePrintValue<long long>(V, V.getLL());
 
       case clang::BuiltinType::Char_U:
-        return executePrintValue<unsigned char>(V, V.getULL());
       case clang::BuiltinType::UChar:
-        return executePrintValue<unsigned char>(V, V.getULL());
       case clang::BuiltinType::UShort:
-        return executePrintValue<unsigned short>(V, V.getULL());
       case clang::BuiltinType::UInt:
-        return executePrintValue<unsigned int>(V, V.getULL());
       case clang::BuiltinType::ULong:
-        return executePrintValue<unsigned long>(V, V.getULL());
       case clang::BuiltinType::ULongLong:
-        return executePrintValue<unsigned long long>(V, V.getULL());
 
       case clang::BuiltinType::Float:
-        return executePrintValue<float>(V, V.getFloat());
       case clang::BuiltinType::Double:
-        return executePrintValue<double>(V, V.getDouble());
       case clang::BuiltinType::LongDouble:
-        return executePrintValue<long double>(V, V.getLongDouble());
+      return printBuiltinValue(V, BT);
 
       default:
         break;
@@ -863,6 +898,34 @@ namespace cling {
 
     std::string printValueInternal(const Value &V) {
       assert(V.getInterpreter() && "Invalid cling::Value");
+
+      using namespace llvm;
+      using namespace clang;
+
+      // Early out for builtin types, and pointers to them
+      clang::QualType Ty =
+          V.getType().getDesugaredType(V.getASTContext()).getCanonicalType();
+      if (const BuiltinType *BT = dyn_cast<BuiltinType>(Ty.getTypePtr())) {
+          std::string val = printBuiltinValue(V, BT);
+          if (!val.empty())
+            return val;
+      } else if (Ty->isPointerType() || Ty->isReferenceType()) {
+        // Check if the pointer resolves to a builtin-type
+        unsigned level = 0;
+        do {
+          Ty = Ty->getPointeeType();
+          ++level;
+        } while (Ty->isPointerType() || Ty->isReferenceType());
+
+        if (const BuiltinType *BT = dyn_cast<BuiltinType>(Ty.getTypePtr())) {
+          const void *ptr = V.getPtr();
+          // Is it a const char* string literal?
+          if (level == 1 && BT->getKind() == BuiltinType::Char_S) {
+            return printValue(reinterpret_cast<const char* const*>(&ptr));
+          }
+          return printValue(&ptr);
+        }
+      }
 
       // Include "RuntimePrintValue.h" only on the first printing.
       // This keeps the interpreter lightweight and reduces the startup time.
