@@ -29,8 +29,10 @@ using namespace clang;
 bool DeclUnloader::UnloadDecl(Decl* D) {
   DiagnosticErrorTrap Trap(m_Sema->getDiagnostics());
   const bool Successful = Visit(D);
+#ifndef NDEBUG
   if (Trap.hasErrorOccurred())
     m_Sema->getDiagnostics().Reset(true);
+#endif
   return Successful;
 }
 
@@ -387,6 +389,8 @@ bool DeclUnloader::VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC)
       m_FilesToUncache.insert(FID);
   }
 
+#ifndef NDEBUG
+
   static void reportContext(const DeclContext* DC, llvm::raw_ostream& Out) {
     Out << DC->getDeclKindName();
     if (const NamedDecl* Ctx = dyn_cast<NamedDecl>(DC))
@@ -422,6 +426,8 @@ bool DeclUnloader::VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC)
     Sema->Diags.Report(Loc, diag::err_expected) << Out.str();
   }
 
+#endif
+
   static SourceLocation getDeclLocation(Decl* D) {
     switch (D->getKind()) {
       case Decl::ClassTemplateSpecialization:
@@ -450,10 +456,14 @@ bool DeclUnloader::VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC)
 
     bool Successful = true;
     if (DC->containsDecl(D)) {
+#ifdef NDEBUG
+      DC->removeDecl(D);
+#else
       llvm::SmallVector<DeclContext*, 4> errors;
       DC->removeDecl(D, &errors);
       if (!errors.empty())
         reportErrors(m_Sema, D, Loc, errors);
+#endif
     }
 
     // With the bump allocator this is nop.

@@ -6,7 +6,7 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: cat %s | %cling -I %S -Xclang -verify 2>&1 | FileCheck -allow-empty %s
+// RUN: cat %s | %cling -I %S | FileCheck -allow-empty %s
 // Test friendUnload
 
 void bestFriend();
@@ -24,7 +24,6 @@ void bestFriend();
 
 #include "FriendRecursive.h"
 .undo
-// expected-error-re@FriendRecursive.h:6 {{expected success trying to remove 'TestB' from TranslationUnit (0x{{[0-9a-f]+}})}}
 .compareState "NF"
 //CHECK-NOT: Differences
 
