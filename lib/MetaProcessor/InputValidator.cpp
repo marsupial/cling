@@ -9,6 +9,7 @@
 
 #include "InputValidator.h"
 #include "MetaLexer.h"
+#include "clang/Basic/LangOptions.h"
 #include <algorithm>
 
 namespace cling {
@@ -66,11 +67,39 @@ namespace cling {
     queue.pop_back();
   }
 
+  static bool endIdentifier(Token& Tok, const char* curPos, llvm::StringRef end,
+                            const char** begin, std::deque<int>& m_ParenStack) {
+    MetaLexer Lex(curPos);
+    Lex.SkipWhitespace();
+    Lex.LexAnyString(Tok);
+    const llvm::StringRef iDent = Tok.getIdent();
+    // End token must start with end and terminate with space or comment
+    if (iDent.startswith(end) && (iDent.size() > end.size() ?
+                                 (iDent[5]=='/' || isspace(iDent[5])) : true)) {
+      if (m_ParenStack.empty() || m_ParenStack.back() != Tok.getKind())
+        return false;
+
+      m_ParenStack.pop_back();
+    }
+    else {
+      // Search the list of begining tokens for a match
+      for (unsigned i = 0; begin[i]; ++i) {
+        if (iDent.startswith(begin[i])) {
+          m_ParenStack.push_back(Tok.getKind());
+          break;
+        }
+      }
+    }
+    return true;
+  }
+
   InputValidator::ValidationResult
-  InputValidator::validate(llvm::StringRef line) {
+  InputValidator::validate(llvm::StringRef line,
+                           const clang::LangOptions* Opts) {
     ValidationResult Res = kComplete;
 
     Token Tok;
+    const bool objC = Opts && (Opts->ObjC2 || Opts->ObjC1);
     const char* curPos = line.data();
     bool multilineComment = inBlockComment();
     int commentTok = multilineComment ? tok::asterik : tok::slash;
@@ -173,20 +202,17 @@ namespace cling {
             m_ParenStack.push_back(kind);
         }
         else if (kind == tok::hash) {
-          MetaLexer Lex(curPos);
-          Lex.SkipWhitespace();
-          Lex.LexAnyString(Tok);
-          const llvm::StringRef PPtk = Tok.getIdent();
-          if (PPtk.startswith("endif")
-              && (PPtk.size() > 5 ? PPtk[5]=='/' || isspace(PPtk[5]) : true)) {
-            if (m_ParenStack.empty() || m_ParenStack.back() != tok::hash) {
-              Res = kMismatch;
-              break;
-            }
-            m_ParenStack.pop_back();
+          const char* begin[] = { "if", 0 };
+          if (!endIdentifier(Tok, curPos, "endif", begin, m_ParenStack)) {
+            Res = kMismatch;
+            break;
           }
-          else if (PPtk.startswith("if")) {
-            m_ParenStack.push_back(tok::hash);
+        }
+        else if (objC && kind == tok::at) {
+          const char* begin[] = { "interface", "implementation", "protocol", 0 };
+          if (!endIdentifier(Tok, curPos, "end", begin, m_ParenStack)) {
+            Res = kMismatch;
+            break;
           }
         }
         else if (kind == tok::semicolon) {

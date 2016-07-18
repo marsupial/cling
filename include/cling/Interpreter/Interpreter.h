@@ -833,6 +833,9 @@ namespace cling {
     ///
     void addModule(llvm::Module* module, int OptLevel, bool Emit = false);
 
+    ///\brief Whether the language is an Objective-C variant or not.
+    bool isObjectiveC() const;
+
     void GenerateAutoloadingMap(llvm::StringRef inFile, llvm::StringRef outFile,
                                 bool enableMacros = false, bool enableLogs = true);
 

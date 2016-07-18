@@ -310,4 +310,17 @@ namespace cling {
     m_Consumer->HandleCXXStaticMemberVarInstantiation(D);
   }
 
+#ifdef CLING_OBJC_SUPPORT
+
+  void DeclCollector::HandleTopLevelDeclInObjCContainer(DeclGroupRef DGR) {
+    //const LangOptions& Opts = m_IncrParser->getCI()->getLangOpts();
+    //assert((Opts.ObjC2 || Opts.ObjC1) && "Collecting in ObjCContainer not ObjC");
+    HandleTopLevelDecl(DGR);
+    if (m_Consumer
+        && (!comesFromASTReader(DGR) || !shouldIgnore(*DGR.begin())))
+      m_Consumer->HandleTopLevelDeclInObjCContainer(DGR);
+  }
+
+#endif
+
 } // namespace cling

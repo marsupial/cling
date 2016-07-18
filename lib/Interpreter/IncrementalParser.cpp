@@ -22,6 +22,7 @@
 #include "TransactionPool.h"
 #include "ValueExtractionSynthesizer.h"
 #include "ValuePrinterSynthesizer.h"
+#include "ObjCSupport.h"
 #include "cling/Interpreter/CIFactory.h"
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/InterpreterCallbacks.h"
@@ -199,6 +200,10 @@ namespace cling {
 
     DiagnosticsEngine& Diag = m_CI->getDiagnostics();
     if (m_CI->getFrontendOpts().ProgramAction != frontend::ParseSyntaxOnly) {
+#ifdef CLING_OBJC_SUPPORT
+        cling::objectivec::ObjCSupport::create(m_CI->getInvocation(),
+                                     m_Interpreter->getDynamicLibraryManager());
+#endif
       m_CodeGen.reset(CreateLLVMCodeGen(
           Diag, makeModuleName(), m_CI->getHeaderSearchOpts(),
           m_CI->getPreprocessorOpts(), m_CI->getCodeGenOpts(),

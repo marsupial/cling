@@ -239,6 +239,26 @@ namespace cling {
 
     ///@}
 
+#ifdef CLING_OBJC_SUPPORT
+    ///@name ObjectiveC
+    ///@{
+    bool VisitObjCMethodDecl(clang::ObjCMethodDecl* MD);
+    bool VisitObjCTypeParamDecl(clang::ObjCTypeParamDecl* TPD);
+    bool VisitObjCPropertyDecl(clang::ObjCPropertyDecl* PD);
+    bool VisitObjCContainerDecl(clang::ObjCContainerDecl* CD);
+    bool VisitObjCInterfaceDecl(clang::ObjCInterfaceDecl* ID);
+    bool VisitObjCIvarDecl(clang::ObjCIvarDecl* IVD);
+    bool VisitObjCAtDefsFieldDecl(clang::ObjCAtDefsFieldDecl* ADD);
+    bool VisitObjCCategoryDecl(clang::ObjCCategoryDecl* CD);
+    bool VisitObjCCategoryImplDecl(clang::ObjCCategoryImplDecl* CATD);
+    bool VisitObjCImplementationDecl(clang::ObjCImplementationDecl* IMPD);
+    bool VisitObjCCompatibleAliasDecl(clang::ObjCCompatibleAliasDecl* CAD);
+    bool VisitObjCPropertyImplDecl(clang::ObjCPropertyImplDecl* PID);
+    bool VisitObjCImplDecl(clang::ObjCImplDecl* IMPD);
+    bool VisitObjCProtocolDecl(clang::ObjCProtocolDecl* PD);
+    ///@}
+#endif
+
     void MaybeRemoveDeclFromModule(clang::GlobalDecl& GD) const;
 
     /// @name Helpers

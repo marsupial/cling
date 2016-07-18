@@ -49,10 +49,12 @@ namespace cling {
 
     ///\brief Checks whether the input contains balanced number of braces
     ///
-    ///\param[in] line - Input line to validate.
+    ///\param[in] Line - Input line to validate.
+    ///\param[in] Opts - Language options to validate against (default to C++)
     ///\returns Information about the outcome of the validation.
     ///
-    ValidationResult validate(llvm::StringRef line);
+    ValidationResult validate(llvm::StringRef Line,
+                              const clang::LangOptions* Opts = nullptr);
 
     ///\brief Retrieves the number of spaces that the next input line should be
     /// indented.
