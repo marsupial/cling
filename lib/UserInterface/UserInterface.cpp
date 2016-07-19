@@ -145,7 +145,7 @@ void UserInterface::runInteractively(bool nologo /* = false */) {
 
   // Inform text input about the code complete consumer
   // TextInput owns the TabCompletion.
-  TI.SetCompletion(new UITabCompletion(m_MetaProcessor->getInterpreter()));
+  // TI.SetCompletion(new UITabCompletion(m_MetaProcessor->getInterpreter()));
 
   TI.SetPrompt("[cling]$ ");
   std::string line;
