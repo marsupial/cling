@@ -10,10 +10,9 @@
 #include "ObjCSupport.h"
 #include "cling/Interpreter/DynamicLibraryManager.h"
 #include "clang/Frontend/CompilerInvocation.h"
+#include "IncrementalExecutor.h"
 
 #ifdef CLING_OBJC_SUPPORT
-
-#ifdef __APPLE__
 
 #include <dlfcn.h>
 
@@ -54,13 +53,27 @@ namespace {
   }
 }
 
+#ifndef __APPLE__
+static void* object_getClassGCC(const void *obj) {
+  struct objc_obj {
+    void* class_pointer;
+  };
+  return obj ? reinterpret_cast<const objc_obj*>(obj)->class_pointer : nullptr;
+}
+#endif
+
 bool ObjCSupport::ObjCLink::init(void* lib) {
-  if (!(objc_msgSend = dlsym<CallWithVarAndReturnAPtr>(lib, "objc_msgSend")))
-    return false;
+  msg.objc_msgSend = dlsym<CallWithVarAndReturnAPtr>(lib, "objc_msgSend");
+  if (!msg.objc_msgSend) {
+    // GCC libobjc doesn't have objc_msgSend, GNUstep does
+    haveMsgSend = false;
+    msg.objc_msg_lookup = dlsym<CallWith2AndReturnAPtr>(lib, "objc_msg_lookup");
+    if (!msg.objc_msg_lookup)
+      return false;
+  } else
+    haveMsgSend = true;
+
   if (!(sel_getUid = dlsym<CallWith1AndReturnAPtr>(lib, "sel_getUid")))
-    return false;
-  if (!(object_getClass =
-            dlsym<CallWith1AndReturnAPtr>(lib, "object_getClass")))
     return false;
   if (!(object_getClassName =
             dlsym<CallWith1AndReturnAPtr>(lib, "object_getClassName")))
@@ -68,17 +81,32 @@ bool ObjCSupport::ObjCLink::init(void* lib) {
   if (!(class_getSuperclass =
             dlsym<CallWith1AndReturnAPtr>(lib, "class_getSuperclass")))
     return false;
+   if (!(objc_lookUpClass =
+            dlsym<CallWith1AndReturnAPtr>(lib, "objc_lookUpClass")))
+    return false;
   if (!(class_getName = dlsym<CallWith1AndReturnAPtr>(lib, "class_getName")))
     return false;
   if (!(class_conformsToProtocol =
             dlsym<CallWith2AndReturnBOOL>(lib, "class_conformsToProtocol")))
     return false;
 
+  // On linux these are depepndent on GNUStep or gcc runtime
+  // On OS X they are required.
+
   if (CallWith1AndReturnAPtr objc_getProtocol =
           dlsym<CallWith1AndReturnAPtr>(lib, "objc_getProtocol")) {
-    if (!(NSObjectProtocol = objc_getProtocol("NSObject")))
-      return false;
+    NSObjectProtocol = objc_getProtocol("NSObject");
   }
+
+  if (!(object_getClass =
+            dlsym<CallWith1AndReturnAPtr>(lib, "object_getClass"))) {
+#ifdef __APPLE__
+    return false;
+#else
+    object_getClass = object_getClassGCC;
+#endif
+  }
+
   return true;
 }
 
@@ -100,18 +128,23 @@ bool ObjCSupport::init(int iLevel, DynamicLibraryManager* mgr,
   assert(iLevel >= 1);
   iLevel |= 0x01;
 
+
   if (void* lib = dlOpen(m_Libs, "", openFlags, nullptr)) {
     if (m_ObjCLink.init(lib)) {
       iLevel = iLevel & ~0x01;
+#ifdef __APPLE__
       if (iLevel & 0x02)
         testSymbol(lib, "__CFConstantStringClassReference", 0x02, iLevel);
       if (iLevel & 0x04)
         testSymbol(lib, "NSLog", 0x04, iLevel);
+#endif
     } else {
       ::dlclose(lib);
       m_Libs.pop_back();
     }
   }
+
+#ifdef __APPLE__
 
   // None of this really matters it seems OS X injects libobjc.dylib into
   // every process, so we will have already succeeded above.
@@ -139,6 +172,25 @@ bool ObjCSupport::init(int iLevel, DynamicLibraryManager* mgr,
       iLevel = iLevel & ~0x04;
   }
 
+#else // !__APPLE__
+
+  if (iLevel & 0x01) {
+    if (mgr) {
+      if (mgr->loadLibrary("objc", false) != DynamicLibraryManager::kLoadLibSuccess) {
+        if (mgr->loadLibrary("objc.so.4", false) != DynamicLibraryManager::kLoadLibSuccess) {
+          return false;
+        }
+      }
+      if (void* libobjc = dlOpen(m_Libs, "", openFlags, mgr)) {
+        if (m_ObjCLink.init(libobjc))
+          iLevel = iLevel & ~0x01;
+      }
+    }
+  }
+  iLevel = iLevel & ~(0x02|0x04);
+
+#endif
+
   // If we have a manager, release all of the dlopen(NULL) libraries, except for
   // the first which is where our ObjCLink methods have been loaded from
 
@@ -154,9 +206,22 @@ bool ObjCSupport::init(int iLevel, DynamicLibraryManager* mgr,
 void *ObjCSupport::getSelector(const char* name) {
   return m_ObjCLink.sel_getUid(name);
 }
+void *ObjCSupport::getClass(const char* name) {
+  return m_ObjCLink.objc_lookUpClass(name);
+}
 
-void *ObjCSupport::perform(const void* obj, const char* sel) {
-  return m_ObjCLink.objc_msgSend(obj, getSelector(sel));
+void *ObjCSupport::perform(const void* obj, const char* name) {
+  if (void *sel = getSelector(name)) {
+    if (m_ObjCLink.haveMsgSend) {
+      return m_ObjCLink.msg.objc_msgSend(obj, sel);
+    } else {
+      CallWithVarAndReturnAPtr msgProc =
+        (CallWithVarAndReturnAPtr) m_ObjCLink.msg.objc_msg_lookup(obj, sel);
+      if (msgProc)
+        return msgProc(obj, sel);
+    }
+  }
+  return nullptr;
 }
 
 const char *ObjCSupport::nsStringBytes(const void* strobj) {
@@ -168,13 +233,22 @@ std::string ObjCSupport::nsStringLiteral(const void* strobj) {
   return std::string("@\"") + (str ? str : "") + std::string("\"");
 }
 
+std::string ObjCSupport::nxStringLiteral(const void* obj) {
+  const char *cStr = static_cast<const char*>(perform(obj, "cString"));
+  return std::string("@\"") + (cStr ? cStr : "") + std::string("\"");
+}
+
+
 ObjCSupport::ObjectType ObjCSupport::objType(const void* obj) {
+  if (!obj || *((void*const*)obj) == IncrementalExecutor::getUnresolvedSymbol())
+    return ObjC_UnkownType;
+
   if (void *oClass = m_ObjCLink.object_getClass(obj)) {
 
     // Quick test for NSObject protocol
     const char* cName = (const char *)m_ObjCLink.object_getClassName(obj);
-    if (m_ObjCLink.class_conformsToProtocol(oClass,
-                                            m_ObjCLink.NSObjectProtocol)) {
+    if (m_ObjCLink.NSObjectProtocol && m_ObjCLink.class_conformsToProtocol(
+                                         oClass, m_ObjCLink.NSObjectProtocol)) {
       if (cName && strncmp(cName, "NSString", 8) == 0)
         return ObjC_NSStringType;
 
@@ -184,6 +258,10 @@ ObjCSupport::ObjectType ObjCSupport::objType(const void* obj) {
     // But might be a quicker out for constant strings
     else if (cName && strncmp(cName, "__NSCFConstantString", 20) == 0)
       return ObjC_NSStringType;
+#ifndef __APPLE__
+    else if (cName && strncmp(cName, "NXConstantString", 16) == 0)
+      return ObjC_NXConstantString;
+#endif
 
     // Search the hierarchy
     while ((oClass = m_ObjCLink.class_getSuperclass(oClass))) {
@@ -216,6 +294,8 @@ std::string ObjCSupport::description(const void* obj) {
       return nsObjectDescription(obj);
     case ObjCSupport::ObjC_NSStringType:
       return nsStringLiteral(obj);
+    case ObjC_NXConstantString:
+      return nxStringLiteral(obj);
     default:
       break;
   }
@@ -252,9 +332,5 @@ ObjCSupport* ObjCSupport::create(const clang::CompilerInvocation& invocation,
 ObjCSupport* ObjCSupport::instance() {
   return static_cast<ObjCSupport*>(cling::objectivec::gInstance);
 }
-
-#else // __APPLE__
-  #error "Objective C support not supported on this platform"
-#endif
 
 #endif // CLING_OBJC_SUPPORT
