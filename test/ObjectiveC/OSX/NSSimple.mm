@@ -9,7 +9,10 @@
 // RUN: cat %s | %cling -x objective-c++ -Xclang -verify 2>&1 | FileCheck %s
 // Test testNSObject
 
-#import <Foundation/NSObject.h>
+#import <Foundation/NSString.h>
+#import <stdio.h>
+
+.L /System/Library/Frameworks/Foundation.Framework/Foundation
 
 @interface Test : NSObject {
   @public
@@ -24,11 +27,18 @@
 
 @implementation Test
 
+- (void) write : (NSString*) str {
+  fflush(stdout);
+  [str writeToFile:@"/dev/stdout" atomically: NO
+                                  encoding: NSASCIIStringEncoding
+                                  error: nil];
+}
+
 - (void) testMeth {
-    NSLog(@"called testMeth\n");
+  [ self write: @"called testMeth\n" ];
 }
 -(void)dealloc {
-  NSLog(@"called dealloced\n");
+  [ self write: @"called dealloced\n" ];
   [super dealloc];
 }
 @end
