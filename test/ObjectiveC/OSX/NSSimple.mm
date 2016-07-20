@@ -11,6 +11,8 @@
 
 #import <Foundation/NSObject.h>
 
+.L /System/Library/Frameworks/Foundation.Framework/Foundation
+
 @interface Test : NSObject {
   @public
     id Public;

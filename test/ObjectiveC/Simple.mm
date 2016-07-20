@@ -6,47 +6,38 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: cat %s | %cling -x objective-c++ -Xclang -verify 2>&1 | FileCheck -allow-empty %s
-// -Wobjc-root-class doing nothing?
-// Test testSimple
+// RUN: cat %s | %cling -x objective-c++ -Xclang -verify 2>&1 | FileCheck %s
+// Test testGNUObjC
 
-#define NS_ENUM(_type, _name) enum _name : _type _name; enum _name : _type
-#define NS_OPTIONS(_type, _name) enum _name : _type _name; enum _name : _type
+extern "C" id class_createInstance(Class class_, unsigned extraBytes);
 
-.storeState "A"
-
-@interface Base
+@interface TestInst
+  + (id) alloc;
+  + (int) test;
+  - (int) testMeth : (id) me;
 @end
-
-@interface Test : Base {
-  union {
-    struct {
-      unsigned a;
-    } _singleRange;
-    struct {
-      unsigned b;
-    } _multipleRanges;
-  } _internal;
-}
-  - (void)testMeth;
-  typedef NS_ENUM(unsigned, TestEnum) { A = 0, B = 1, C = 2 };
-  struct Local {
-  };
+@implementation TestInst
+  + (id) alloc {
+    return (id) class_createInstance(self, 0);
+  }
+  + (int) test {
+    return 506;
+  }
+  - (int) testMeth: (id) me {
+    return self == me;
+  }
 @end
+// expected-warning {{class 'TestInst' defined without specifying a base class}}
+// expected-note {{add a super class to fix this problem}}
 
-@implementation Test
+[TestInst test]
+// CHECK: (int) 506
 
-- (void) testMeth {
-    return;
-}
-@end
+TestInst* t = [TestInst alloc];
+t
+// CHECK: (TestInst *) 0x{{.*}}
 
-.undo // @implementation
-.undo // @interface Test
-.undo // @interface Base
+[t testMeth: t]
+// CHECK: (int) 1
 
-.compareState "A"
-// CHECK-NOT: Differences
-
-// expected-no-diagnostics
 .q

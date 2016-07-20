@@ -52,7 +52,7 @@ matrix:
       addons:
         apt:
           sources: *sources
-          packages: g++-4.7
+          packages: ['g++-4.7', 'libobjc4']
       compiler: gcc-4.7
 
     - os: linux
@@ -60,7 +60,7 @@ matrix:
       addons:
         apt:
           sources: *sources
-          packages: g++-4.8
+          packages: ['g++-4.8', 'libobjc4']
       compiler: gcc-4.8
 
     - os: linux
@@ -68,7 +68,7 @@ matrix:
       addons:
         apt:
           sources: *sources
-          packages: g++-4.9
+          packages: ['g++-4.9', 'libobjc4']
       compiler: gcc-4.9
 
     - os: linux
@@ -76,7 +76,7 @@ matrix:
       addons:
         apt:
           sources: *sources
-          packages: g++-5
+          packages: ['g++-5', 'libobjc4']
       compiler: gcc-5
 
     - os: linux
@@ -84,7 +84,7 @@ matrix:
       addons:
         apt:
           sources: *sources
-          packages: g++-6
+          packages: ['g++-6', 'libobjc4']
       compiler: gcc-6
 
     - os: linux
@@ -94,7 +94,7 @@ matrix:
       addons:
         apt:
           sources: *sources
-          packages: g++-4.7
+          packages: ['g++-4.7', 'libobjc4']
       compiler: gcc-4.7
 
     - os: linux
@@ -104,7 +104,7 @@ matrix:
       addons:
         apt:
           sources: *sources
-          packages: g++-4.8
+          packages: ['g++-4.8', 'libobjc4']
       compiler: gcc-4.8
 
     - os: linux
@@ -114,7 +114,7 @@ matrix:
       addons:
         apt:
           sources: *sources
-          packages: g++-4.9
+          packages: ['g++-4.9', 'libobjc4']
       compiler: gcc-4.9
 
     - os: linux
@@ -124,7 +124,7 @@ matrix:
       addons:
         apt:
           sources: *sources
-          packages: g++-5
+          packages: ['g++-5', 'libobjc4']
       compiler: gcc-5
 
     - os: linux
@@ -134,7 +134,7 @@ matrix:
       addons:
         apt:
           sources: *sources
-          packages: g++-6
+          packages: ['g++-6', 'libobjc4']
       compiler: gcc-6
 
     - os: linux
