@@ -11,6 +11,8 @@
 
 #import <Foundation/NSAutoreleasePool.h>
 
+.L /System/Library/Frameworks/Foundation.Framework/Foundation
+
 @interface ARTest : NSObject
 @end
 

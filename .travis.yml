@@ -56,7 +56,7 @@ matrix:
       addons:
         apt:
           sources: *sources
-          packages: g++-4.8
+          packages: ['g++-4.8', 'libobjc4']
       compiler: gcc-4.8
 
     - os: linux
@@ -100,7 +100,7 @@ matrix:
       addons:
         apt:
           sources: *sources
-          packages: g++-4.8
+          packages: ['g++-4.8', 'libobjc4']
       compiler: gcc-4.8
 
     - os: linux
