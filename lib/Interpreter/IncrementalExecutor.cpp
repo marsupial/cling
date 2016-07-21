@@ -136,6 +136,10 @@ void unresolvedSymbol()
   // throw exception instead?
 }
 
+void* IncrementalExecutor::getUnresolvedSymbol() {
+  return (void*)reinterpret_cast<intptr_t>(&unresolvedSymbol);
+}
+
 void* IncrementalExecutor::HandleMissingFunction(const std::string& mangled_name)
 {
   // Not found in the map, add the symbol in the list of unresolved symbols
@@ -146,7 +150,7 @@ void* IncrementalExecutor::HandleMissingFunction(const std::string& mangled_name
 
   // Avoid "ISO C++ forbids casting between pointer-to-function and
   // pointer-to-object":
-  return (void*)reinterpret_cast<size_t>(unresolvedSymbol);
+  return getUnresolvedSymbol();
 }
 
 void* IncrementalExecutor::NotifyLazyFunctionCreators(const std::string& mangled_name)
