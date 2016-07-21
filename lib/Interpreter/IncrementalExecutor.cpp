@@ -138,6 +138,10 @@ void unresolvedSymbol()
   // throw exception instead?
 }
 
+void* IncrementalExecutor::getUnresolvedSymbol() {
+  return utils::FunctionToVoidPtr(&unresolvedSymbol);
+}
+
 void* IncrementalExecutor::HandleMissingFunction(const std::string& mangled_name)
 {
   // Not found in the map, add the symbol in the list of unresolved symbols
@@ -146,7 +150,7 @@ void* IncrementalExecutor::HandleMissingFunction(const std::string& mangled_name
     //             << mangled_name << "'!\n";
   }
 
-  return utils::FunctionToVoidPtr(&unresolvedSymbol);
+  return getUnresolvedSymbol();
 }
 
 void* IncrementalExecutor::NotifyLazyFunctionCreators(const std::string& mangled_name)
