@@ -25,6 +25,7 @@
 #include "clang/Driver/DriverDiagnostic.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/Frontend/VerifyDiagnosticConsumer.h"
+#include "clang/FrontendTool/Utils.h"
 #include "clang/Serialization/SerializationDiagnostic.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Lex/Preprocessor.h"
@@ -1035,6 +1036,70 @@ namespace {
     return Diags;
   }
 
+  static bool SetupCompiler(CompilerInstance* CI, bool full) {
+    // Set the language options, which cling needs.
+    // This may have already been done via a precompiled header
+    if (full)
+      SetClingCustomLangOpts(CI->getLangOpts());
+
+    PreprocessorOptions& PPOpts = CI->getInvocation().getPreprocessorOpts();
+    SetPreprocessorFromBinary(PPOpts);
+
+    PPOpts.addMacroDef("__CLING__");
+    if (CI->getLangOpts().CPlusPlus11 == 1) {
+      // http://llvm.org/bugs/show_bug.cgi?id=13530
+      PPOpts.addMacroDef("__CLING__CXX11");
+    }
+
+    if (CI->getDiagnostics().hasErrorOccurred()) {
+      llvm::errs() << "Compiler error to early in initialization.\n";
+      return false;
+    }
+
+    CI->setTarget(TargetInfo::CreateTargetInfo(CI->getDiagnostics(),
+                                               CI->getInvocation().TargetOpts));
+    if (!CI->hasTarget()) {
+      llvm::errs() << "Could not determine compiler target.\n";
+      return false;
+    }
+
+    CI->getTarget().adjust(CI->getLangOpts());
+
+    // This may have already been done via a precompiled header
+    if (full)
+      SetClingTargetLangOpts(CI->getLangOpts(), CI->getTarget());
+
+    SetPreprocessorFromTarget(PPOpts, CI->getTarget().getTriple());
+    return true;
+  }
+
+  class ActionScan {
+    std::set<const clang::driver::Action*> m_Visited;
+    const clang::driver::Action::ActionClass m_Kind;
+
+    bool find (const clang::driver::Action* A) {
+      if (A && !m_Visited.count(A)) {
+        if (A->getKind() == m_Kind)
+          return true;
+
+        m_Visited.insert(A);
+        return find(*A->input_begin());
+      }
+      return false;
+    }
+
+  public:
+    ActionScan(clang::driver::Action::ActionClass k) : m_Kind(k) {}
+
+    bool find (clang::driver::Compilation* C) {
+      for (clang::driver::Action* A : C->getActions()) {
+        if (find(A))
+          return true;
+      }
+      return false;
+    }
+  };
+  
   static CompilerInstance*
   createCIImpl(std::unique_ptr<llvm::MemoryBuffer> Buffer,
                const CompilerOptions& COpts, const char* LLVMDir,
@@ -1083,8 +1148,11 @@ namespace {
       }
 #endif
 
-    argvCompile.push_back("-c");
-    argvCompile.push_back("-");
+    const bool genOutput = COpts.HasOutput && !OnlyLex;
+    if (!genOutput) {
+      argvCompile.push_back("-c");
+      argvCompile.push_back("-");
+    }
 
     std::unique_ptr<clang::CompilerInvocation>
       InvocationPtr(new clang::CompilerInvocation);
@@ -1139,10 +1207,24 @@ namespace {
       return nullptr;
     }
 
+    if (genOutput) {
+      ActionScan scan(clang::driver::Action::PrecompileJobClass);
+      if (!scan.find(Compilation.get())) {
+        llvm::errs() << "Only output to precompiled header is supported.\n";
+        return nullptr;
+      }
+      if (!SetupCompiler(CI.get(), true))
+        return nullptr;
+
+      ProcessWarningOptions(*Diags, DiagOpts);
+      ExecuteCompilerInvocation(CI.get());
+      return CI.release();
+    }
+
     CI->createFileManager();
-    clang::CompilerInvocation& Invocation = CI->getInvocation();
+
     std::string& PCHFileName
-      = Invocation.getPreprocessorOpts().ImplicitPCHInclude;
+      = CI->getInvocation().getPreprocessorOpts().ImplicitPCHInclude;
     if (!PCHFileName.empty()) {
       assert(!Diags->hasErrorOccurred() && !Diags->hasFatalErrorOccurred() &&
              "Error has already occured");
@@ -1186,7 +1268,7 @@ namespace {
             return false;
           }
         };
-        PCHListener listener(Invocation, *Diags);
+        PCHListener listener(CI->getInvocation(), *Diags);
         if (ASTReader::readASTFileControlBlock(PCHFileName,
                                            CI->getFileManager(),
                                            CI->getPCHContainerReader(),
@@ -1211,7 +1293,7 @@ namespace {
       }
     }
 
-    Invocation.getFrontendOpts().DisableFree = true;
+    CI->getInvocation().getFrontendOpts().DisableFree = true;
     // Copied from CompilerInstance::createDiagnostics:
     // Chain in -verify checker, if requested.
     if (DiagOpts.VerifyDiagnostics)
@@ -1219,38 +1301,9 @@ namespace {
     // Configure our handling of diagnostics.
     ProcessWarningOptions(*Diags, DiagOpts);
 
-    if (PCHFileName.empty()) {
-      // Set the language options, which cling needs
-      SetClingCustomLangOpts(CI->getLangOpts());
-    }
-
-    PreprocessorOptions& PPOpts = CI->getInvocation().getPreprocessorOpts();
-    SetPreprocessorFromBinary(PPOpts);
-
-    PPOpts.addMacroDef("__CLING__");
-    if (CI->getLangOpts().CPlusPlus11 == 1) {
-      // http://llvm.org/bugs/show_bug.cgi?id=13530
-      PPOpts.addMacroDef("__CLING__CXX11");
-    }
-
-    if (CI->getDiagnostics().hasErrorOccurred()) {
-      llvm::errs() << "Compiler error to early in initialization.\n";
+    // Set up compiler language and target
+    if (!SetupCompiler(CI.get(), PCHFileName.empty()))
       return nullptr;
-    }
-
-    CI->setTarget(TargetInfo::CreateTargetInfo(CI->getDiagnostics(),
-                                               Invocation.TargetOpts));
-    if (!CI->hasTarget()) {
-      llvm::errs() << "Could not determine compiler target.\n";
-      return nullptr;
-    }
-
-    CI->getTarget().adjust(CI->getLangOpts());
-
-    if (PCHFileName.empty())
-      SetClingTargetLangOpts(CI->getLangOpts(), CI->getTarget());
-
-    SetPreprocessorFromTarget(PPOpts, CI->getTarget().getTriple());
 
     // Set up source managers
     SourceManager* SM = new SourceManager(CI->getDiagnostics(),

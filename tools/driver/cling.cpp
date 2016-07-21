@@ -27,6 +27,26 @@
 #include <crtdbg.h>
 #endif
 
+// If we are running with -verify a reported has to be returned as unsuccess.
+// This is relevant especially for the test suite.
+static int checkDiagErrors(clang::CompilerInstance* CI) {
+
+  bool Ret = CI->getDiagnostics().getClient()->getNumErrors();
+
+  if (CI->getDiagnosticOpts().VerifyDiagnostics) {
+    // If there was an error that came from the verifier we must return 1 as
+    // an exit code for the process. This will make the test fail as expected.
+    clang::DiagnosticConsumer* Client = CI->getDiagnostics().getClient();
+    Client->EndSourceFile();
+    Ret = Client->getNumErrors();
+
+    // The interpreter expects BeginSourceFile/EndSourceFiles to be balanced.
+    Client->BeginSourceFile(CI->getLangOpts(), &CI->getPreprocessor());
+  }
+
+  return Ret ? EXIT_FAILURE : EXIT_SUCCESS;
+}
+
 int main( int argc, char **argv ) {
 
   llvm::llvm_shutdown_obj shutdownTrigger;
@@ -54,6 +74,17 @@ int main( int argc, char **argv ) {
   cling::Interpreter interp(argc, argv);
 
   if (!interp.isValid()) {
+    if (interp.getOptions().Help || interp.getOptions().ShowVersion)
+      return EXIT_SUCCESS;
+
+    if (interp.getOptions().CompilerOpts.HasOutput) {
+      if (clang::CompilerInstance* CI = interp.getCIOrNull())
+        return checkDiagErrors(CI);
+
+      // If !CI then we can't output what was requested.
+      return EXIT_FAILURE;
+    }
+
     // FIXME: Diagnose what went wrong, until then we can't even be sure
     // llvm::errs is valid...
     ::perror("Could not create Interpreter instance");
@@ -63,7 +94,6 @@ int main( int argc, char **argv ) {
     return EXIT_SUCCESS;
 
 
-  clang::CompilerInstance* CI = interp.getCI();
   interp.AddIncludePath(".");
 
   for (size_t I = 0, N = interp.getOptions().LibsToLoad.size(); I < N; ++I) {
@@ -105,20 +135,5 @@ int main( int argc, char **argv ) {
     ui.runInteractively(interp.getOptions().NoLogo);
   }
 
-  bool ret = CI->getDiagnostics().getClient()->getNumErrors();
-
-  // if we are running with -verify a reported has to be returned as unsuccess.
-  // This is relevant especially for the test suite.
-  if (CI->getDiagnosticOpts().VerifyDiagnostics) {
-    // If there was an error that came from the verifier we must return 1 as
-    // an exit code for the process. This will make the test fail as expected.
-    clang::DiagnosticConsumer* client = CI->getDiagnostics().getClient();
-    client->EndSourceFile();
-    ret = client->getNumErrors();
-
-    // The interpreter expects BeginSourceFile/EndSourceFiles to be balanced.
-    client->BeginSourceFile(CI->getLangOpts(), &CI->getPreprocessor());
-  }
-
-  return ret ? EXIT_FAILURE : EXIT_SUCCESS;
+  return checkDiagErrors(interp.getCI());
 }

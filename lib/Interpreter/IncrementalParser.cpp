@@ -170,7 +170,8 @@ namespace cling {
     if (!m_CI) {
       llvm::errs() << "Compiler instance could not be created.\n";
       return;
-    }
+    } else if (m_Interpreter->getOptions().CompilerOpts.HasOutput)
+      return;
 
     m_Consumer = dyn_cast<DeclCollector>(&m_CI->getSema().getASTConsumer());
     if (!m_Consumer) {
