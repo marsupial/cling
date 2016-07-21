@@ -241,6 +241,9 @@ namespace cling {
     /// print an error message if that fails.
     void* NotifyLazyFunctionCreators(const std::string&);
 
+    ///\brief Return a reference to the symbol used when one cannot be reolved.
+    static void* getUnresolvedSymbol();
+
   private:
     ///\brief Report and empty m_unresolvedSymbols.
     ///\return true if m_unresolvedSymbols was non-empty.
