@@ -28,10 +28,16 @@ namespace cling {
   public:
     typedef std::unique_ptr<llvm::MemoryBuffer> MemBufPtr_t;
     // TODO: Add overload that takes file not MemoryBuffer
-    static clang::CompilerInstance* createCI(llvm::StringRef code,
-                                             int argc,
-                                             const char* const *argv,
-                                             const char* llvmdir);
+
+    ///\brief Creates a CompilerInstance
+    ///
+    ///\returns A pointer to the CompilerInstance, and a flag whether the
+    ///         CompilerInstance can be used in an Interpreter or false if
+    ///         it was already used (to output a precompiled header).
+    ///
+    static std::pair<clang::CompilerInstance *, bool>
+    createCI(llvm::StringRef code, int argc, const char *const *argv,
+             const char *llvmdir);
 
     static clang::CompilerInstance* createCI(MemBufPtr_t buffer,
                                              int argc,

@@ -25,6 +25,7 @@
 #include "clang/Frontend/VerifyDiagnosticConsumer.h"
 #include "clang/Serialization/SerializationDiagnostic.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
+#include "clang/FrontendTool/Utils.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaDiagnostic.h"
@@ -432,7 +433,8 @@ namespace {
   }
 
   struct CompilerOpts {
-    bool hasMinusX, noBuiltinInc, noCXXIncludes, haveRsrcPath, haveSysRoot;
+    bool hasMinusX, noBuiltinInc, noCXXIncludes,
+         haveRsrcPath, haveSysRoot, haveOutput;
 
     static bool strEqual(const char* a, const char* b, size_t n) {
       return !strncmp(a, b, n) && !a[n];
@@ -447,6 +449,8 @@ namespace {
         noCXXIncludes = true;
       else if (!haveRsrcPath && strEqual(arg, "-resource-dir", 13))
         haveRsrcPath = true;
+      else if (!haveOutput && strEqual(arg, "-o", 2))
+        haveOutput = true;
 #ifdef __APPLE__
       else if (!haveSysRoot && strEqual(arg, "-isysroot", 9))
         haveSysRoot = true;
@@ -455,10 +459,10 @@ namespace {
 
     CompilerOpts(const char* const* iarg, const char* const* earg) :
       hasMinusX(false), noBuiltinInc(false), noCXXIncludes(false),
-      haveRsrcPath(false), haveSysRoot(false) {
+      haveRsrcPath(false), haveSysRoot(false), haveOutput(false) {
 
       while (iarg < earg && (!hasMinusX || !noBuiltinInc || !noCXXIncludes ||
-                            !haveRsrcPath || !haveSysRoot)) {
+                            !haveRsrcPath || !haveSysRoot || !haveOutput)) {
         if (strEqual(*iarg, "-Xclang", 7)) {
           // goto next arg if there is one
           if (++iarg < earg)
@@ -826,12 +830,76 @@ namespace {
     return Diags;
   }
 
-  static CompilerInstance* createCIImpl(
-                                     std::unique_ptr<llvm::MemoryBuffer> buffer,
-                                        int argc,
-                                        const char* const *argv,
-                                        const char* llvmdir,
-                                        bool OnlyLex) {
+  static bool setupCompiler(CompilerInstance* CI, bool full) {
+    // Set the language options, which cling needs.
+    // This may have already been done via a precompiled header
+    if (full)
+      SetClingCustomLangOpts(CI->getLangOpts());
+
+    PreprocessorOptions& PPOpts = CI->getInvocation().getPreprocessorOpts();
+    SetPreprocessorFromBinary(PPOpts);
+
+    PPOpts.addMacroDef("__CLING__");
+    if (CI->getLangOpts().CPlusPlus11 == 1) {
+      // http://llvm.org/bugs/show_bug.cgi?id=13530
+      PPOpts.addMacroDef("__CLING__CXX11");
+    }
+
+    if (CI->getDiagnostics().hasErrorOccurred()) {
+      llvm::errs() << "Compiler error to early in initialization.\n";
+      return false;
+    }
+
+    CI->setTarget(TargetInfo::CreateTargetInfo(CI->getDiagnostics(),
+                                               CI->getInvocation().TargetOpts));
+    if (!CI->hasTarget()) {
+      llvm::errs() << "Could not determine compiler target.\n";
+      return false;
+    }
+
+    CI->getTarget().adjust(CI->getLangOpts());
+
+    // This may have already been done via a precompiled header
+    if (full)
+      SetClingTargetLangOpts(CI->getLangOpts(), CI->getTarget());
+
+    SetPreprocessorFromTarget(PPOpts, CI->getTarget().getTriple());
+    return true;
+  }
+
+  class ActionScan {
+    std::set<const clang::driver::Action*> m_Visited;
+    const clang::driver::Action::ActionClass m_Kind;
+
+    bool find (const clang::driver::Action* A) {
+      if (A && !m_Visited.count(A)) {
+        if (A->getKind() == m_Kind)
+          return true;
+
+        m_Visited.insert(A);
+        return find(*A->input_begin());
+      }
+      return false;
+    }
+
+  public:
+    ActionScan(clang::driver::Action::ActionClass k) : m_Kind(k) {}
+
+    bool find (clang::driver::Compilation* C) {
+      for (clang::driver::Action* A : C->getActions()) {
+        if (find(A))
+          return true;
+      }
+      return false;
+    }
+  };
+  
+  static std::pair<CompilerInstance*,bool>
+  createCIImpl(std::unique_ptr<llvm::MemoryBuffer> buffer,
+               int argc,
+               const char* const *argv,
+               const char* llvmdir,
+               bool OnlyLex) {
     // Create an instance builder, passing the llvmdir and arguments.
     //
 
@@ -857,13 +925,15 @@ namespace {
     // Add host specific includes, -resource-dir if necessary, and -isysroot
     AddHostArguments(argvCompile, llvmdir, copts);
 
-    argvCompile.push_back("-c");
-    argvCompile.push_back("-");
-    
+    if (!copts.haveOutput && !OnlyLex) {
+      argvCompile.push_back("-c");
+      argvCompile.push_back("-");
+    }
+
     std::unique_ptr<clang::CompilerInvocation>
       InvocationPtr(new clang::CompilerInvocation);
     if (!InvocationPtr)
-      return nullptr;
+      return std::make_pair(nullptr,false);
 
     using llvm::IntrusiveRefCntPtr;
     // The compiler invocation is the owner of the diagnostic options.
@@ -873,7 +943,7 @@ namespace {
     if (!Diags) {
       // If we can't even setup the diagnostic engine, lets not use llvm::errs
       ::perror("Could not setup diagnostic engine");
-      return nullptr;
+      return std::make_pair(nullptr,false);
     }
 
     clang::driver::Driver Driver(argv[0], llvm::sys::getDefaultTargetTriple(),
@@ -885,13 +955,13 @@ namespace {
       Compilation(Driver.BuildCompilation(RF));
     if (!Compilation) {
       ::perror("Couldn't create clang::driver::Compilation");
-      return nullptr;
+      return std::make_pair(nullptr,false);
     }
 
     const driver::ArgStringList* CC1Args = GetCC1Arguments(Diags.get(),
                                                            Compilation.get());
     if (!CC1Args)
-      return nullptr;
+      return std::make_pair(nullptr,false);
 
     clang::CompilerInvocation::CreateFromArgs(*InvocationPtr, CC1Args->data() + 1,
                                               CC1Args->data() + CC1Args->size(),
@@ -910,13 +980,27 @@ namespace {
     }
     else {
       ::perror("Could not allocate CompilerInstance");
-      return nullptr;
+      return std::make_pair(nullptr,false);
+    }
+
+    if (copts.haveOutput && !OnlyLex) {
+      ActionScan scan(clang::driver::Action::PrecompileJobClass);
+      if (!scan.find(Compilation.get())) {
+        llvm::errs() << "Only output to precompiled header is supported.\n";
+        return std::make_pair(nullptr,false);
+      }
+      if (!setupCompiler(CI.get(), true))
+        return std::make_pair(nullptr,false);
+
+      ProcessWarningOptions(*Diags, DiagOpts);
+      ExecuteCompilerInvocation(CI.get());
+      return std::make_pair(CI.release(), false);
     }
 
     CI->createFileManager();
-    clang::CompilerInvocation& Invocation = CI->getInvocation();
+
     std::string& PCHFileName
-      = Invocation.getPreprocessorOpts().ImplicitPCHInclude;
+      = CI->getInvocation().getPreprocessorOpts().ImplicitPCHInclude;
     if (!PCHFileName.empty()) {
       assert(!Diags->hasErrorOccurred() && !Diags->hasFatalErrorOccurred() &&
              "Error has already occured");
@@ -960,7 +1044,7 @@ namespace {
             return false;
           }
         };
-        PCHListener listener(Invocation, *Diags);
+        PCHListener listener(CI->getInvocation(), *Diags);
         if (ASTReader::readASTFileControlBlock(PCHFileName,
                                            CI->getFileManager(),
                                            CI->getPCHContainerReader(),
@@ -985,7 +1069,7 @@ namespace {
       }
     }
 
-    Invocation.getFrontendOpts().DisableFree = true;
+    CI->getInvocation().getFrontendOpts().DisableFree = true;
     // Copied from CompilerInstance::createDiagnostics:
     // Chain in -verify checker, if requested.
     if (DiagOpts.VerifyDiagnostics)
@@ -993,44 +1077,9 @@ namespace {
     // Configure our handling of diagnostics.
     ProcessWarningOptions(*Diags, DiagOpts);
 
-    PreprocessorOptions& PPOpts = Invocation.getPreprocessorOpts();
-
-    //
-    //  Buffer the error messages while we process
-    //  the compiler options.
-    //
-
-    if (PCHFileName.empty()) {
-      // Set the language options, which cling needs
-      SetClingCustomLangOpts(CI->getLangOpts());
-    }
-
-    SetPreprocessorFromBinary(PPOpts);
-
-    PPOpts.addMacroDef("__CLING__");
-    if (CI->getLangOpts().CPlusPlus11 == 1) {
-      // http://llvm.org/bugs/show_bug.cgi?id=13530
-      PPOpts.addMacroDef("__CLING__CXX11");
-    }
-
-    if (CI->getDiagnostics().hasErrorOccurred()) {
-      llvm::errs() << "Compiler error to early in initialization.\n";
-      return nullptr;
-    }
-
-    CI->setTarget(TargetInfo::CreateTargetInfo(CI->getDiagnostics(),
-                                               Invocation.TargetOpts));
-    if (!CI->hasTarget()) {
-      llvm::errs() << "Could not determine compiler target.\n";
-      return nullptr;
-    }
-
-    CI->getTarget().adjust(CI->getLangOpts());
-
-    if (PCHFileName.empty())
-      SetClingTargetLangOpts(CI->getLangOpts(), CI->getTarget());
-
-    SetPreprocessorFromTarget(PPOpts, CI->getTarget().getTriple());
+    // Set up compiler language and target
+    if (!setupCompiler(CI.get(), PCHFileName.empty()))
+      return std::make_pair(nullptr,false);
 
     // Set up source managers
     SourceManager* SM = new SourceManager(CI->getDiagnostics(),
@@ -1108,17 +1157,18 @@ namespace {
                                                  // the JIT to crash
     CI->getCodeGenOpts().VerifyModule = 0; // takes too long
 
-    return CI.release(); // Passes over the ownership to the caller.
+    // Passes over the ownership to the caller.
+    return std::make_pair(CI.release(), true);
   }
 
 } // unnamed namespace
 
 namespace cling {
-  CompilerInstance* CIFactory::createCI(llvm::StringRef code,
-                                        int argc,
-                                        const char* const *argv,
-                                        const char* llvmdir) {
-    return createCIImpl(llvm::MemoryBuffer::getMemBuffer(code), argc, argv, llvmdir, false /*OnlyLex*/);
+  std::pair<CompilerInstance*, bool>
+  CIFactory::createCI(llvm::StringRef code, int argc, const char* const *argv,
+                      const char* llvmdir) {
+    return createCIImpl(llvm::MemoryBuffer::getMemBuffer(code), argc, argv,
+                        llvmdir, false /*OnlyLex*/);
   }
 
   CompilerInstance* CIFactory::createCI(MemBufPtr_t buffer,
@@ -1126,7 +1176,7 @@ namespace cling {
                                         const char* const *argv,
                                         const char* llvmdir,
                                         bool OnlyLex) {
-    return createCIImpl(std::move(buffer), argc, argv, llvmdir, OnlyLex);
+    return createCIImpl(std::move(buffer), argc, argv, llvmdir, OnlyLex).first;
   }
 
 } // end namespace

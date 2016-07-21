@@ -1,6 +1,9 @@
 // RUN: rm -f CompGen.h.pch
 // RUN: clang -x c++-header -fexceptions -fcxx-exceptions -std=c++11 -pthread %S/Inputs/CompGen.h -o CompGen.h.pch
-// RUN: cat %s | %cling -I%p -Xclang -include-pch -Xclang CompGen.h.pch  2>&1 | FileCheck %s
+// RUN: cat %s | %cling -I%p -Xclang -include-pch -Xclang CompGen.h.pch  2>&1 | FileCheck --check-prefixes CHECK,WARN %s
+// RUN: cat %s | %cling -Wno-invalid-pch -I%p -Xclang -include-pch -Xclang CompGen.h.pch  2>&1 | FileCheck %s
+
+// WARN: warning: please rebuild precompiled header '{{.*}}' with with cling [-Winvalid-pch]
 
 //.storeState "a"
 .x TriggerCompGen.h

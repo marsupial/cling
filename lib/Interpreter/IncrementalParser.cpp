@@ -163,11 +163,15 @@ namespace cling {
   IncrementalParser::IncrementalParser(Interpreter* interp,
                                        int argc, const char* const *argv,
                                        const char* llvmdir):
-    m_Interpreter(interp), m_CI(CIFactory::createCI("", argc, argv, llvmdir)),
-    m_Consumer(nullptr), m_ModuleNo(0) {
+    m_Interpreter(interp), m_Consumer(nullptr), m_ModuleNo(0) {
 
+    auto ci = CIFactory::createCI("", argc, argv, llvmdir);
+    m_CI.reset(ci.first);
     if (!m_CI) {
       llvm::errs() << "Compiler instance could not be created.\n";
+      return;
+    } else if (!ci.second) {
+      interp->getOptions().HadOutput = true;
       return;
     }
 

@@ -34,7 +34,9 @@ int main( int argc, char **argv ) {
   cling::Interpreter interp(argc, argv);
 
   if (!interp.isValid()) {
-    if (interp.getOptions().Help || interp.getOptions().ShowVersion)
+    if (interp.getOptions().Help || interp.getOptions().HadOutput)
+      return EXIT_SUCCESS;
+    if (interp.getOptions().HadOutput)
       return EXIT_SUCCESS;
 
     // FIXME: Diagnose what went wrong, until then we can't even be sure
