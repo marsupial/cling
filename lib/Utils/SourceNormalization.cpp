@@ -118,6 +118,40 @@ cling::utils::isUnnamedMacro(llvm::StringRef source,
 }
 
 
+static bool isUnwrappableFunction(const std::string& input) {
+  // libstdc++ from g++ < 4.9  will throw on these regexps
+#if defined(__GLIBCXX__) && (__GLIBCXX__ < 20141104)
+  return false;
+#endif
+  // And gcc 4-9 is flakey...non alphanumeric must go at the end
+  #define VALID_IDENT "[A-Za-z_][A-Za-z0-9:_]"
+
+  // Defining a function?
+  std::regex re("^\\s*(?:static\\s+)?(?:inline\\s+)?"
+                VALID_IDENT "+\\s+(" VALID_IDENT "*)"
+                "\\s*\\([^]*\\)[^]*\\{");
+  std::smatch match;
+  if (std::regex_search(input, match, re,
+                        std::regex_constants::match_continuous)) {
+    if (match.size() == 2) {
+      return true;
+    }
+  }
+
+  // Defining a consructor or destructor?
+  re = std::regex("^\\s*(" VALID_IDENT "*)\\s*::\\s*"
+                  "~?(" VALID_IDENT "*)\\s*\\([^]*\\)[^]*\\{");
+  if (std::regex_search(input, match, re,
+                        std::regex_constants::match_continuous)) {
+    if (match.size() == 3) {
+      // Dont't wrap if match identifier on both sides of ::
+      return match[1].str() == match[2].str();
+    }
+  }
+  return false;
+  #undef VALID_IDENT
+}
+
 
 size_t cling::utils::getWrapPoint(std::string& source,
                                   const clang::LangOptions& LangOpts) {
@@ -163,31 +197,9 @@ size_t cling::utils::getWrapPoint(std::string& source,
         return std::string::npos;
       if (keyword.equals("template"))
         return std::string::npos;
-
-      // Defining a function?
-      std::regex re("^\\s*(?:static\\s+)?(?:inline\\s+)?"
-                    "[_A-Za-z][_A-Za-z0-9:]+\\s+([_A-Za-z][_A-Za-z0-9:]*)"
-                    "\\s*\\([^]*\\)[^]*\\{");
-      std::smatch match;
-      if (std::regex_search(source, match, re,
-                            std::regex_constants::match_continuous)) {
-        if (match.size() == 2) {
-          return std::string::npos;
-        }
-      }
-
-      // Defining a consructor or destructor?
-      re = std::regex("^\\s*([_A-Za-z][_A-Za-z0-9:]*)\\s*::\\s*"
-                      "~?([_A-Za-z][_A-Za-z0-9:]*)\\s*\\([^]*\\)[^]*\\{");
-       if (std::regex_search(source, match, re,
-                            std::regex_constants::match_continuous)) {
-        if (match.size() == 3) {
-          // Dont't wrap if match identifier on both sides of ::
-          if (match[1].str() == match[2].str())
-            return std::string::npos;
-        }
-      }
-
+      if (isUnwrappableFunction(source))
+        return std::string::npos;
+  
       // There is something else here that needs to be wrapped.
       return getFileOffset(Tok);
     }
