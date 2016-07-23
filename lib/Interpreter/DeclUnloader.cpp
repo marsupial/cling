@@ -596,8 +596,13 @@ bool DeclUnloader::VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC)
   bool DeclUnloader::VisitUsingDecl(UsingDecl* UD) {
     // UsingDecl: NamedDecl, Mergeable<UsingDecl>
     bool Success = true;
-    for (UsingShadowDecl *USD : UD->shadows())
+    llvm::SmallVector<UsingShadowDecl*, 12> Shadows(UD->shadow_begin(),
+                                                    UD->shadow_end());
+
+    for (UsingShadowDecl *USD : Shadows) {
       Success &= VisitUsingShadowDecl(USD);
+      assert(Success);
+    }
 
     Success &= VisitNamedDecl(UD);
     return Success;

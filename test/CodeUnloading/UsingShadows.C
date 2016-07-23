@@ -37,6 +37,13 @@ typedef long long_t;
 .compareState "TEST2"
 //CHECK-NOT: Differences
 
+#define TEST3
+.storeState "TEST3"
+#include "UsingShadows.h"
+.undo
+.compareState "TEST3"
+// CHECK-NOT: Differences
+
 long_t val = 9;
 val
 //CHECK: 9
