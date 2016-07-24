@@ -695,7 +695,11 @@ namespace cling {
           
           // It's redundant, but nicer to see the error at the bottom.
           // if (!Trap.hasErrorOccurred())
-          llvm::errs() << "RuntimePrintValue.h could not be loaded.\n";
+          clang::DiagnosticsEngine& Diag = Interp->getCI()->getDiagnostics();
+          const unsigned ID = Diag.getCustomDiagID(
+                                      DiagnosticsEngine::Level::Error,
+                                     "RuntimePrintValue.h could not be loaded");
+          Diag.Report(clang::SourceLocation(), ID);
           return "";
         }
       }
