@@ -14,7 +14,8 @@
 // CHECK:  Possible C++ standard library mismatch, compiled with {{.*$}}
 
 struct a {} TEST
-// CHECKA: RuntimePrintValue.h could not be loaded.
+// CHECKA: error: call to global function cling::executePrintValue() not configured
+// CHECKA: (struct a &) <unknown value>
 // CHECKB: {{.*}} 'string' file not found
 
 .q

@@ -167,13 +167,19 @@ namespace cling {
         Expr* SVRInit = SynthesizeSVRInit(lastExpr);
         // if we had return stmt update to execute the SVR init, even if the
         // wrapper returns void.
-        if (RS) {
-          if (ImplicitCastExpr* VoidCast
-              = dyn_cast<ImplicitCastExpr>(RS->getRetValue()))
-            VoidCast->setSubExpr(SVRInit);
+        if (SVRInit) {
+          if (RS) {
+            if (ImplicitCastExpr* VoidCast
+                = dyn_cast<ImplicitCastExpr>(RS->getRetValue()))
+              VoidCast->setSubExpr(SVRInit);
+          }
+          else
+            **I = SVRInit;
         }
-        else if (SVRInit)
-          **I = SVRInit;
+        else {
+          // FIXME: Is this leaking anything (lastExpr?)
+          return Result(D, false);
+        }
       }
     }
     return Result(D, true);
@@ -313,6 +319,8 @@ namespace {
         TypeSourceInfo* ETSI
           = m_Context->getTrivialTypeSourceInfo(ETy, noLoc);
 
+        assert(!Call.isInvalid() && "Invalid Call before building new");
+
         Call = m_Sema->BuildCXXNew(E->getSourceRange(),
                                    /*useGlobal ::*/true,
                                    /*placementLParen*/ noLoc,
@@ -326,6 +334,12 @@ namespace {
                                    /*initializer*/E,
                                    /*mayContainAuto*/false
                                    );
+        if (Call.isInvalid()) {
+          m_Sema->Diag(E->getLocStart(), diag::err_undeclared_var_use)
+            << "operator new";
+          return Call.get();
+        }
+
         // Handle possible cleanups:
         Call = m_Sema->ActOnFinishFullExpr(Call.get());
       }
@@ -386,11 +400,10 @@ namespace {
       }
     }
 
-
     assert(!Call.isInvalid() && "Invalid Call");
 
     // Extend the scope of the temporary cleaner if applicable.
-    if (Cleanups) {
+    if (Cleanups && !Call.isInvalid()) {
       Cleanups->setSubExpr(Call.get());
       Cleanups->setValueKind(Call.get()->getValueKind());
       Cleanups->setType(Call.get()->getType());
