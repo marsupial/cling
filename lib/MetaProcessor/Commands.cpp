@@ -408,6 +408,27 @@ CommandResult doStatsCommand(CommandArguments& Params, llvm::StringRef Name) {
   return kCmdInvalidSyntax;
 }
 
+void printLocation(clang::SourceLocation Loc, clang::Sema& Sema,
+                   llvm::raw_ostream& Out = llvm::outs()) {
+  clang::PresumedLoc PLoc = Sema.getSourceManager().getPresumedLoc(Loc, true);
+  if (PLoc.isValid()) {
+    Out << PLoc.getFilename() << ", line: " << PLoc.getLine()
+                              << ", col: " << PLoc.getColumn() << "\n";
+  }
+}
+
+CommandResult doDumpDeclCommand(CommandArguments& Params, llvm::StringRef Adr) {
+  uintptr_t ptr;
+  if (!Adr.getAsInteger(0, ptr)) {
+    clang::Decl* D = reinterpret_cast<clang::Decl*>(ptr);
+    printLocation(D->getLocation(), Params.Interpreter.getSema(), Params.Output);
+    D->dump(Params.Output);
+    return kCmdSuccess;
+  }
+  return kCmdInvalidSyntax;
+}
+
+
 CommandResult doUndoCommand(CommandArguments& Params) {
   const llvm::Optional<int> arg = Params.optionalInt();
   Params.Interpreter.unload(arg.hasValue() ? arg.getValue() : 1);
@@ -1004,6 +1025,9 @@ Commands& Commands::get(bool Populate) {
 
     sCommands.add("namespace", doNamespaceCommand, nullptr, nullptr, Debug);
     sCommands.add("typedef", doTypedefCommand, nullptr, nullptr, Debug);
+
+    sCommands.add("ddump", doDumpDeclCommand, "<address>",
+                  "reinterpret_cast<Clang::Decl*>(address)->dump()", Debug);
   
     sCommands.builtins() = true;
   }
