@@ -13,6 +13,7 @@ add_cling_library(clingUtils OBJECT
   AST.cpp
   SourceNormalization.cpp
   Validation.cpp
+  Utils.cpp
 
   LINK_LIBS
   clangSema
