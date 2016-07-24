@@ -441,9 +441,11 @@ namespace {
       kHasSysRoot     = 16,
       kHasOuptut      = 32,
       kHasCXXVersion  = 64,
+      kHasCXXLibrary  = 128,
       
       kAllFlags = kHasMinusX|kHasNoBultinInc|kHasNoCXXInc|
-                  kHasResourceDir|kHasSysRoot|kHasOuptut|kHasCXXVersion,
+                  kHasResourceDir|kHasSysRoot|kHasOuptut|kHasCXXVersion|
+                  kHasCXXLibrary,
     };
     unsigned m_Flags;
 
@@ -454,6 +456,13 @@ namespace {
     void parse(const char* arg) {
       if (!hasMinusX() && !strncmp(arg, "-x", 2))
         m_Flags |= kHasMinusX;
+      else if (!hasCXXVersion() && !hasCXXLib() && !strncmp(arg, "-std",4)) {
+        arg += 4;
+        if (!hasCXXVersion() && !strncmp(arg, "=c++", 4))
+          m_Flags |= kHasCXXVersion;
+        else if (!hasCXXLib() && !strncmp(arg, "lib=", 4))
+          m_Flags |= kHasCXXLibrary;
+      }
       else if (!hasCXXVersion() && !strncmp(arg, "-std=c++", 8))
         m_Flags |= kHasCXXVersion;
       else if (!noBuiltinInc() && strEqual(arg, "-nobuiltininc", 13))
@@ -478,6 +487,7 @@ namespace {
     bool hasCXXVersion() const { return m_Flags & kHasCXXVersion; }
     bool noBuiltinInc() const { return m_Flags & kHasNoBultinInc; }
     bool noCXXIncludes() const { return m_Flags & kHasNoCXXInc; }
+    bool hasCXXLib() const { return m_Flags & kHasCXXLibrary; }
 
     CompilerOpts(const char* const* iarg, const char* const* earg)
       : m_Flags(0) {
@@ -546,7 +556,9 @@ namespace {
           }
         }
       }
-#else // _MSC_VER
+
+#else
+
       // Skip LLVM_CXX execution if -nostdinc++ was provided.
       if (!opts.noCXXIncludes()) {
         // Try to use a version of clang that is located next to cling
@@ -560,10 +572,18 @@ namespace {
         clang.assign(&buffer[0], buffer.size());
       
         std::string CppInclQuery("echo | LC_ALL=C ");
-        if (llvm::sys::fs::is_regular_file(clang))
+        if (llvm::sys::fs::is_regular_file(clang)) {
           CppInclQuery.append(clang);
-        else
+          if (!opts.hasCXXLib()) {
+#ifdef _LIBCPP_VERSION
+            CppInclQuery.append(" -stdlib=libc++");
+#else
+            CppInclQuery.append(" -stdlib=libstdc++");
+#endif
+          }
+        } else
           CppInclQuery.append(LLVM_CXX);
+
         CppInclQuery.append(" -xc++ -E -v /dev/null 2>&1 "
           "| awk '/^#include </,/^End of search"
           "/{if (!/^#include </ && !/^End of search/){ print }}' "
@@ -596,7 +616,6 @@ namespace {
           llvm::errs() << "with exit code " << ExitCode << "\n";
         }
 
-        args.push_back("-nostdinc++");
       }
 
 #ifdef __APPLE__
@@ -607,7 +626,7 @@ namespace {
       }
 #endif
 
-#endif // _MSC_VER
+#endif // !_MSC_VER
 
       if (!opts.hasRsrcPath() && !opts.noBuiltinInc()) {
         std::string resourcePath;
@@ -946,6 +965,14 @@ namespace {
     }
     // argv[0] already inserted, get the rest
     argvCompile.insert(argvCompile.end(), argv+1, argv + argc);
+
+    if (!copts.hasCXXLib()) {
+#ifdef _LIBCPP_VERSION
+      argvCompile.push_back("-stdlib=libc++");
+#else
+      argvCompile.push_back("-stdlib=libstdc++");
+#endif
+    }
 
     // Add host specific includes, -resource-dir if necessary, and -isysroot
     AddHostArguments(argvCompile, llvmdir, copts);
