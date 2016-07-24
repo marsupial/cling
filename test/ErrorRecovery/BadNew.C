@@ -6,7 +6,8 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: cat %s | %cling -nostdinc++ -I%S/BadNew/A 2>&1 | FileCheck -check-prefix=CHECK -check-prefix=CHECKA %s
+// RUN: clang -E -C %s | sed -e '/^#/d' > %t
+// RUN: cat %t | %cling -nostdinc++ -I%S/BadNew/A 2>&1 | FileCheck -check-prefix=CHECK -check-prefix=CHECKA %t
 // RUN: cat %s | %cling -nostdinc++ -I%S/BadNew/B 2>&1 | FileCheck -check-prefix=CHECK -check-prefix=CHECKB %s
 // testBadNewInclude
 
@@ -14,8 +15,14 @@
 // CHECK:  Possible C++ standard library mismatch, compiled with {{.*$}}
 
 struct a {} TEST
-// CHECKA: error: call to global function cling::executePrintValue() not configured
-// CHECKA: (struct a &) <unknown value>
-// CHECKB: {{.*}} 'string' file not found
+#if defined(__GLIBCXX__) && defined(__APPLE__)
+  // CHECKA: error: call to global function cling::executePrintValue() not configured
+  // CHECKA: (struct a &) <unknown value>
+#else
+  // CHECKA: error: 'string' file not found
+  // CHECKA: error: RuntimePrintValue.h could not be loaded
+#endif
+
+// CHECKB: error: RuntimePrintValue.h could not be loaded
 
 .q

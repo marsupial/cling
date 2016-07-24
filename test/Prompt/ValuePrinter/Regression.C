@@ -6,7 +6,7 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: cat %s | %cling | FileCheck %s
+// RUN: cat %s | %cling 2>&1 | FileCheck %s
 
 // This file should be used as regression test for the value printing subsystem
 // Reproducers of fixed bugs should be put here
@@ -71,11 +71,14 @@ enum H {  h = (unsigned long long )-1 };
 h // CHECK: (H) (H::h) : (unsigned long{{( long)?}}) 18446744073709551615
 
 // ROOT-7837
-auto bla=[](double *x, double *par, int blub){return x[0]*blub;} // CHECK: ((lambda) &) @0x
+auto bla=[](double *x, double *par, int blub){return x[0]*blub;}
+// CHECK: ((lambda) &) @0x
 
 #include <functional>
 using namespace std::placeholders;
-auto fn_moo = std::bind (bla, _1,_2,10) // CHECK: ERROR in cling::executePrintValue(): missing value string.
+auto fn_moo = std::bind (bla, _1,_2,10)
+// CHECK: error: call to global function cling::executePrintValue() not configured
+
 // Make sure cling survives
 12 // CHECK: (int) 12
 
