@@ -20,6 +20,7 @@
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/Type.h"
+#include "clang/Sema/SemaDiagnostic.h"
 #include "clang/Frontend/CompilerInstance.h"
 
 #include "llvm/Support/raw_ostream.h"
@@ -206,16 +207,12 @@ static std::string executePrintValue(const Value &V, const T &val) {
   }
 
   if (!printValueV.isValid() || printValueV.getPtr() == nullptr) {
-    // That didn't work. We probably diagnosed the issue as part of evaluate().
-    llvm::errs() << "ERROR in cling::executePrintValue(): cannot pass value!\n";
+    // Hopefully probably diagnosed the issue as part of evaluate(), but make
+    // to mark the Sema with an error if not
+    Interp->getCI()->getDiagnostics().Report(clang::SourceLocation(),
+       clang::diag::err_global_call_not_config) << "cling::executePrintValue()";
 
-    // Check that the issue comes from an unparsable type name: lambdas, unnamed
-    // namespaces, types declared inside functions etc. Assert on everything
-    // else.
-    assert(!canParseTypeName(*Interp, getTypeString(V))
-           && "printValue failed on a valid type name.");
-
-    return "ERROR in cling::executePrintValue(): missing value string.";
+    return "<unknown value>";
   }
 
   return *(std::string *) printValueV.getPtr();
