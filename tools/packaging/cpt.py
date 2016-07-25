@@ -46,7 +46,6 @@ import zipfile
 from email.utils import formatdate
 from datetime import tzinfo
 import time
-import pip
 import multiprocessing
 import fileinput
 import stat
@@ -103,6 +102,7 @@ def exec_subprocess_call(cmd, cwd):
 
 def exec_subprocess_check_output(cmd, cwd):
     cmd = _convert_subprocess_cmd(cmd)
+    out = ''
     try:
         out = subprocess.check_output(cmd, cwd=cwd, shell=False,
                                       stdin=subprocess.PIPE, stderr=subprocess.STDOUT).decode('utf-8')
@@ -147,6 +147,7 @@ def box_draw(msg):
 +-----------------------------------------------------------------------------+''' % (msg, spacer))
 
 def pip_install(package):
+    import pip
     pip.main(['install', '--ignore-installed', '--prefix', os.path.join(workdir, 'pip'), '--upgrade', package])
 
 
@@ -495,8 +496,14 @@ def tarball():
     tar.add(prefix, arcname=os.path.basename(prefix))
     tar.close()
 
-
+gInCleanup = False
 def cleanup():
+    global gInCleanup
+    if gInCleanup:
+        print('Failure in cleanup lead to recursion\n')
+        return 
+
+    gInCleanup = True
     print('\n')
     box_draw("Clean up")
     if os.path.isdir(os.path.join(workdir, 'builddir')):
@@ -541,6 +548,7 @@ def cleanup():
         if os.path.isdir(os.path.join(workdir, 'Install')):
             print('Remove directory: ' + os.path.join(workdir, 'Install'))
             shutil.rmtree(os.path.join(workdir, 'Install'))
+    gInCleanup = False
 
 
 ###############################################################################
