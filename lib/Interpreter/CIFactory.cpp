@@ -881,9 +881,34 @@ namespace {
     // of the two is the underlying compiler.
 
 #ifdef __clang__
-    PPOpts.addMacroDef("__CLING__clang__=" ClingStringify(__clang__));
+  #if defined(__apple_build_version__)
+     #if __apple_build_version__ >= 7000000
+      #define __CLING__clang__ 370
+     #elif __apple_build_version__ >= 6020037
+      #define __CLING__clang__ 360
+     #elif __apple_build_version__ >= 6000051
+      #define __CLING__clang__ 350
+     #elif __apple_build_version__ >= 5030038
+      #define __CLING__clang__ 340
+     #elif __apple_build_version__ >= 5000275
+      #define __CLING__clang__ 330
+     #elif __apple_build_version__ >= 4250024
+      #define __CLING__clang__ 320
+     #elif __apple_build_version__ >= 3180045
+      #define __CLING__clang__ 310
+     #elif __apple_build_version__ >= 2111001
+      #define __CLING__clang__ 300
+     #endif
+  #endif
+  #ifndef __CLING__clang__
+    #define __CLING__clang__ (((__clang_major__*10) + __clang_minor__) * 10) \
+                                                          + __clang_patchlevel__
+  #endif
+    PPOpts.addMacroDef("__CLING__clang__=" ClingStringify(__CLING__clang__));
+  #undef __CLING__clang__
 #elif defined(__GNUC__)
     PPOpts.addMacroDef("__CLING__GNUC__=" ClingStringify(__GNUC__));
+    PPOpts.addMacroDef("__CLING__GNUC_MINOR__=" ClingStringify(__GNUC_MINOR__));
 #endif
 
 // https://gcc.gnu.org/onlinedocs/libstdc++/manual/using_dual_abi.html
