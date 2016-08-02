@@ -321,17 +321,15 @@ static bool getISysRootVersion(const std::string& SDKs, int major,
   return false;
 }
 
-static bool getISysRoot(std::string& sysRoot) {
-  using namespace llvm::sys;
+static int getXCodeRoot(std::string& xcodeDir) {
 
   // Some versions of OS X and Server have headers installed
-  if (fs::is_regular_file("/usr/include/stdlib.h"))
-    return false;
+  int result = llvm::sys::fs::is_regular_file("/usr/include/stdlib.h");
 
   std::string SDKs("/Applications/Xcode.app/Contents/Developer");
 
   // Is XCode installed where it usually is?
-  if (!fs::is_directory(SDKs)) {
+  if (!llvm::sys::fs::is_directory(SDKs)) {
     // Nope, use xcode-select -p to get the path
     if (FILE *pf = ::popen("xcode-select -p", "r")) {
       SDKs.clear();
@@ -344,13 +342,22 @@ static bool getISysRoot(std::string& sysRoot) {
         SDKs.resize(SDKs.size() - 1);
       ::pclose(pf);
     } else // Nothing more we can do
-      return false;
+      return result;
   }
 
-  SDKs.append("/Platforms/MacOSX.platform/Developer/SDKs/");
-  if (!fs::is_directory(SDKs))
+  xcodeDir = SDKs;
+  return 2;
+}
+
+static bool getISysRoot(std::string& sysRoot, std::string& xcodeDir) {
+  using namespace llvm::sys;
+
+  if (getXCodeRoot(xcodeDir) < 2)
     return false;
 
+  std::string SDKs = xcodeDir + "/Platforms/MacOSX.platform/Developer/SDKs/";
+  if (!fs::is_directory(SDKs))
+    return false;
 
   // Seems to make more sense to get the currently running SDK so any loaded
   // libraries won't casue conflicts
@@ -419,6 +426,36 @@ static bool getISysRoot(std::string& sysRoot) {
 
   return false;
 }
+
+// This is a bit fragile and depenends on Apple's libc++ version being lower
+// than than a version compiled with cling (Apple XCode 8 is at 3700)
+#if defined(_LIBCPP_VERSION) && _LIBCPP_VERSION < 3800
+  #define CLING_APPLE_LIBCPP 1
+#endif
+
+#ifdef CLING_APPLE_LIBCPP
+
+  static bool getCXXHeaders(const std::string& root, std::string& cxxHeaders) {
+
+    // Xcode < 6, c++ headers stored in <toolchain>/lib/c++/v1
+  #if __apple_build_version__ < 6000000
+    llvm::Twine tmp5(root, "/lib/c++/v1");
+    if (llvm::sys::fs::is_directory(tmp5)) {
+      cxxHeaders = tmp5.str();
+      return true;
+    }
+  #endif
+
+    llvm::Twine tmp(root, "/include/c++/v1");
+    if (llvm::sys::fs::is_directory(tmp)) {
+      cxxHeaders = tmp.str();
+      return true;
+    }
+
+    return false;
+  }
+
+#endif // CLING_APPLE_LIBCPP
 
 #endif // __APPLE__, _MSC_VER
 
@@ -559,8 +596,42 @@ namespace {
 
 #else
 
+      bool noCXXIncludes = opts.noCXXIncludes();
+
+#ifdef __APPLE__
+
+      std::string toolchain;
+      if (!opts.noBuiltinInc() && !opts.hasSysRoot()) {
+        std::string sysRoot;
+        if (getISysRoot(sysRoot, toolchain))
+          sArguments.addArgument("-isysroot", std::move(sysRoot));
+      } else if (!noCXXIncludes && !getXCodeRoot(toolchain))
+        noCXXIncludes = false;
+
+#ifdef CLING_APPLE_LIBCPP
+      if (!noCXXIncludes) {
+        // XCode may be installed, or CommandLineTools only, or neither
+        toolchain.append(!toolchain.empty() ?
+                        "/Toolchains/XcodeDefault.xctoolchain/usr" :
+                        "/Library/Developer/CommandLineTools/usr");
+
+        // If we can't determine anything, fallback to launching clang
+        if (!llvm::sys::fs::is_directory(toolchain))
+          toolchain.clear();
+
+        if (!toolchain.empty()) {
+          std::string cxxHeaders;
+          noCXXIncludes = getCXXHeaders(toolchain, cxxHeaders);
+          if (noCXXIncludes)
+            sArguments.addArgument("-I", std::move(cxxHeaders));
+        }
+      }
+#endif // CLING_APPLE_LIBCPP
+
+#endif // __APPLE__
+
       // Skip LLVM_CXX execution if -nostdinc++ was provided.
-      if (!opts.noCXXIncludes()) {
+      if (!noCXXIncludes) {
         // Try to use a version of clang that is located next to cling
         SmallString<2048> buffer;
         std::string clang = llvm::sys::fs::getMainExecutable("cling",
@@ -570,7 +641,7 @@ namespace {
         buffer.assign(clang);
         llvm::sys::path::append(buffer, "clang");
         clang.assign(&buffer[0], buffer.size());
-      
+
         std::string CppInclQuery("echo | LC_ALL=C ");
         if (llvm::sys::fs::is_regular_file(clang)) {
           CppInclQuery.append(clang);
@@ -617,14 +688,6 @@ namespace {
         }
 
       }
-
-#ifdef __APPLE__
-      if (!opts.noBuiltinInc() && !opts.hasSysRoot()) {
-        std::string sysRoot;
-        if (getISysRoot(sysRoot))
-          sArguments.addArgument("-isysroot", std::move(sysRoot));
-      }
-#endif
 
 #endif // !_MSC_VER
 
