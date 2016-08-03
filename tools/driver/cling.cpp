@@ -27,8 +27,8 @@ int main( int argc, char **argv ) {
 
   llvm::llvm_shutdown_obj shutdownTrigger;
 
-  //llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
-  //llvm::PrettyStackTraceProgram X(argc, argv);
+  llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
+  llvm::PrettyStackTraceProgram X(argc, argv);
 
   // Set up the interpreter
   cling::Interpreter interp(argc, argv);

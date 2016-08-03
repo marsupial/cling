@@ -92,6 +92,7 @@ def _perror(e):
 
 
 def exec_subprocess_call(cmd, cwd):
+    print(cmd)
     cmd = _convert_subprocess_cmd(cmd)
     try:
         subprocess.check_call(cmd, cwd=cwd, shell=False,
