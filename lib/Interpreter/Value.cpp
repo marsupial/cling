@@ -108,6 +108,22 @@ namespace {
 
 namespace cling {
 
+  void Value::copy(const Value& other) {
+    // Release old value.
+    if (needsManagedAllocation())
+      AllocatedValue::getFromPayload(m_Storage.m_Ptr)->Release();
+
+    // Retain new one.
+    m_Type = other.m_Type;
+    m_Storage = other.m_Storage;
+    m_StorageType = other.m_StorageType;
+    m_Interpreter = other.m_Interpreter;
+    // m_WrapperFD is just piggy-backing on this structure and
+    // should be preserved to support *value = Value() as a way to reset
+    if (other.m_WrapperFD)
+      m_WrapperFD = other.m_WrapperFD;
+  }
+
   Value::Value(const Value& other):
     m_Storage(other.m_Storage), m_StorageType(other.m_StorageType),
     m_Type(other.m_Type), m_Interpreter(other.m_Interpreter),
@@ -118,40 +134,23 @@ namespace cling {
 
   Value::Value(clang::QualType clangTy, Interpreter& Interp):
     m_StorageType(determineStorageType(clangTy)),
-    m_Type(clangTy.getAsOpaquePtr()),
-    m_Interpreter(&Interp) {
+    m_Type(clangTy.getAsOpaquePtr()), m_Interpreter(&Interp),
+    m_WrapperFD(nullptr) {
     if (needsManagedAllocation())
       ManagedAllocate();
   }
 
   Value& Value::operator =(const Value& other) {
-    // Release old value.
-    if (needsManagedAllocation())
-      AllocatedValue::getFromPayload(m_Storage.m_Ptr)->Release();
-
-    // Retain new one.
-    m_Type = other.m_Type;
-    m_Storage = other.m_Storage;
-    m_StorageType = other.m_StorageType;
-    m_Interpreter = other.m_Interpreter;
+    copy(other);
     if (needsManagedAllocation())
       AllocatedValue::getFromPayload(m_Storage.m_Ptr)->Retain();
     return *this;
   }
 
   Value& Value::operator =(Value&& other) {
-    // Release old value.
-    if (needsManagedAllocation())
-      AllocatedValue::getFromPayload(m_Storage.m_Ptr)->Release();
-
-    // Move new one.
-    m_Type = other.m_Type;
-    m_Storage = other.m_Storage;
-    m_StorageType = other.m_StorageType;
-    m_Interpreter = other.m_Interpreter;
+    copy(other);
     // Invalidate other so it will not release.
     other.m_StorageType = kUnsupportedType;
-
     return *this;
   }
 
