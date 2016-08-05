@@ -98,6 +98,7 @@ def exec_subprocess_call(cmd, cwd):
         subprocess.check_call(cmd, cwd=cwd, shell=False,
                               stdin=subprocess.PIPE, stdout=None, stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as e:
+        pass #_perror(e)
         _perror(e)
 
 
