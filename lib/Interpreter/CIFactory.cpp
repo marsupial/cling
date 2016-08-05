@@ -445,7 +445,7 @@ namespace {
       }
 
       static const char *CppInclQuery =
-        "echo | LC_ALL=C " LLVM_CXX " -xc++ -E -v - 2>&1 >/dev/null "
+        "echo | LC_ALL=C " LLVM_CXX " -xc++ -E -v /dev/null 2>&1 "
         "| awk '/^#include </,/^End of search"
         "/{if (!/^#include </ && !/^End of search/){ print }}' "
         "| GREP_OPTIONS= grep -E \"(c|g)\\+\\+\"";
