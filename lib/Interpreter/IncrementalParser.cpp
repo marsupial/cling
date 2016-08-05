@@ -126,13 +126,14 @@ namespace {
     const char* CLING_CXXABIS = "_LIBCPP_VERSION";
   #endif
 
+    llvm::StringRef tokStr;
     if (const clang::Token* Tok = getMacroToken(PP, CLING_CXXABIS)) {
       if (Tok->isLiteral() && Tok->getLength() && Tok->getLiteralData()) {
         std::string cxxabivStr;
         llvm::raw_string_ostream cxxabivStrStrm(cxxabivStr);
         cxxabivStrStrm << CLING_CXXABIV;
         
-        llvm::StringRef tokStr(Tok->getLiteralData(), Tok->getLength());
+        tokStr = llvm::StringRef(Tok->getLiteralData(), Tok->getLength());
         if (tokStr.equals(cxxabivStrStrm.str()))
           return true;
       }
@@ -141,8 +142,12 @@ namespace {
     llvm::errs() <<
       "Warning in cling::IncrementalParser::CheckABICompatibility():\n"
       "  Possible C++ standard library mismatch, compiled with "
-      << CLING_CXXABIS << " v" << CLING_CXXABIV
-      << " but extraction of runtime standard library version failed.\n";
+      << CLING_CXXABIS << " '" << CLING_CXXABIV
+      << "' but extraction of runtime standard library version ";
+    if (!tokStr.empty())
+      llvm::errs() << "was: '" << tokStr << "'.\n";
+    else
+      llvm::errs() << "failed.\n";
 
 #elif defined(_MSC_VER)
 
