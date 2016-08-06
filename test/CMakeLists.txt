@@ -119,7 +119,8 @@ add_custom_target(cling-headers DEPENDS cling-headers.stamp)
 #                     )
 #  endif()
 
-  add_dependencies(cling-test cling-test.deps)
   add_dependencies(cling-test.deps
-                   cling clang FileCheck c-index-test diagtool arcmt-test c-arcmt-test)
+                   cling clang llvm-config FileCheck clang c-index-test
+                   clang-check clang-format opt count not)
+  add_dependencies(cling-test cling-test.deps)
 endif()
