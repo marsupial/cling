@@ -37,15 +37,14 @@ matrix:
 
   include:
 
-    - os: osx
-      env: COMPILER=clang++ CCOMPILER=clang
-      osx_image: xcode6.4
-      compiler: clang
+    - os: linux
+      env: CXXLIB=libc++ COMPILER=clang++-3.5 CCOMPILER=clang-3.5
+      addons:
+        apt:
+          sources: ['ubuntu-toolchain-r-test', 'llvm-toolchain-precise-3.5']
+          packages: ['clang-3.5', 'libstdc++-6-dev']
+      compiler: clang-3.5
 
-    - os: osx
-      env: CXXLIB=libc++ COMPILER=clang++ CCOMPILER=clang
-      osx_image: xcode8
-      compiler: clang
 
 # If cmake is not in the cache, download it.
 install:
