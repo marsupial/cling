@@ -22,6 +22,8 @@ env:
 branches:
   except:
     - /^__internal.*$/
+  only:
+    - cling
 
 matrix:
   # Abort all builds on a single failing matrix entry.
@@ -232,10 +234,24 @@ script:
 - $CXX --version
 #- $CXX -E -x c++ - -v < /dev/null # Debug header search path
 - |
-  if [ -z $TRAVIS_TAG ]; then
-    timeout $TIMEOUT tools/packaging/cpt.py --current-dev=tar --with-cling-url=https://github.com/$TRAVIS_REPO_SLUG --verbose --debug-on-error
+  function githubRepoExists() {
+    curl --fail "https://api.github.com/repos/$1/$2" > /dev/null 2>&1
+    if [ $? -eq 0 ]; then
+      echo 1
+    else
+      echo 0
+    fi
+  }
+  REPO=`basename "$TRAVIS_REPO_SLUG"`
+  USER=`dirname "$TRAVIS_REPO_SLUG"`
+  if [ "$USER" != "marsupial" ]; then
+    if [ -z $TRAVIS_TAG ]; then
+      timeout $TIMEOUT tools/packaging/cpt.py --current-dev=tar --with-cling-url=https://github.com/$TRAVIS_REPO_SLUG --verbose --debug-on-error
+    else
+      tools/packaging/cpt.py --last-stable=tar --with-cling-url=https://github.com/$TRAVIS_REPO_SLUG
+    fi
   else
-    tools/packaging/cpt.py --last-stable=tar --with-cling-url=https://github.com/$TRAVIS_REPO_SLUG
+    timeout $TIMEOUT tools/packaging/cpt.py --current-dev=branch:cling --with-llvm-url="https://github.com/$USER/llvm.git" --with-clang-url="https://github.com/$USER/clang.git" --with-cling-url="https://github.com/$USER/$REPO.git" --configure="-DBUILD_SHARED_LIBS=ON -DCLING_CLANG_RUNTIME_PATCH=ON -DCLING_OBJC_SUPPORT=ON" --compiler="$COMPILER" --stdlib="$CXXLIB"
   fi
 
   # Convert the timeout exit code to 0.
@@ -245,7 +261,7 @@ script:
 
 notifications:
   recipients:
-    - cling-dev@cern.ch
+  - machtyrtle@gmail.com
   email:
     on_success: change
     on_failure: always

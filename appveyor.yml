@@ -7,6 +7,8 @@ configuration:
   - Release
 
 environment:
+  USER: marsupial
+  REPO: cling
   CMAKE: cmake.exe
   
   matrix:
@@ -34,7 +36,7 @@ install:
   - C:\"Program Files (x86)"\"Microsoft Visual Studio 14.0"\VC\vcvarsall.bat
 
 build_script:
-- tools\packaging\cpt.py --current-dev=tar --with-cling-url=https://github.com/vgvassilev/cling --verbose
+- tools\packaging\cpt.py --current-dev=branch:cling --with-llvm-url="https://github.com/%USER%/llvm.git" --with-clang-url="https://github.com/%USER%/clang.git" --with-cling-url="https://github.com/%USER%/%REPO%.git" --configure="-DBUILD_SHARED_LIBS=ON -DCLING_CLANG_RUNTIME_PATCH=ON -DCLING_OBJC_SUPPORT=OFF" --stdlib="%CXXLIB%"
 
 init:
 - ps: iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))
