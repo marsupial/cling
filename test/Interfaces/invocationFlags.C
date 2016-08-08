@@ -29,7 +29,7 @@ const int argc = sizeof(argv)/sizeof(argv[0]);
 cling::CompilerOptions COpts(argc, argv);
 
 COpts.Language
-// CHECK: (bool) true
+// CHECK: (unsigned int) 1
 COpts.SysRoot
 // CHECK: (bool) true
 COpts.NoBuiltinInc
@@ -53,7 +53,7 @@ IOpts.LibsToLoad
 // CHECK: {{.*}} { "Test" }
 
 IOpts.CompilerOpts.Language
-// CHECK: (bool) true
+// CHECK: (unsigned int) 1
 IOpts.CompilerOpts.SysRoot
 // CHECK: (bool) true
 IOpts.CompilerOpts.NoBuiltinInc

@@ -1222,11 +1222,21 @@ namespace {
     std::vector<const char*> argvCompile(argv, argv+1);
     argvCompile.reserve(argc+5);
 
-    if (!COpts.Language) {
-      // We do C++ by default; append right after argv[0] if no "-x" given
-      argvCompile.push_back("-x");
-      argvCompile.push_back( "c++");
+    // We do C++ by default; append right after argv[0] if no "-x" given
+    switch (COpts.Language) {
+      case CompilerOptions::kLanguageSet:
+        break;
+      case CompilerOptions::kLanguageObjC:
+        argvCompile.push_back("-xobjective-c");
+        break;
+      case CompilerOptions::kLanguageObjCXX:
+        argvCompile.push_back("-xobjective-c++");
+        break;
+      default:
+        argvCompile.push_back("-xc++");
+        break;
     }
+
     // argv[0] already inserted, get the rest
     argvCompile.insert(argvCompile.end(), argv+1, argv + argc);
 
