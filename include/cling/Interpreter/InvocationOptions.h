@@ -24,6 +24,12 @@ namespace cling {
   ///
   class CompilerOptions {
   public:
+    enum {
+      kLanguageSet     = 1,  ///< Use provided -x flag
+      kLanguageObjC    = 2,  ///< Input file is '.m'
+      kLanguageObjCXX  = 3,  ///< Input file is '.mm'
+    };
+    
     /// \brief Construct CompilerOptions from given arguments. When argc & argv
     /// are 0, all arguments are saved into Remaining to pass to clang. If argc
     /// or argv is 0, caller is must fill in Remaining with any arguments that
@@ -48,7 +54,7 @@ namespace cling {
     ///
     bool DefaultLanguage(const clang::LangOptions* = nullptr) const;
 
-    unsigned Language : 1;
+    unsigned Language : 2;
     unsigned ResourceDir : 1;
     unsigned SysRoot : 1;
     unsigned NoBuiltinInc : 1;
