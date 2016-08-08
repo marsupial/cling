@@ -13,6 +13,7 @@
 
 #include "clang/Basic/LangOptions.h"
 #include "clang/Frontend/CompilerInstance.h"
+#include "clang/FrontendTool/Utils.h"
 
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/PrettyStackTrace.h"
@@ -78,8 +79,12 @@ int main( int argc, char **argv ) {
       return EXIT_SUCCESS;
 
     if (interp.getOptions().CompilerOpts.HasOutput) {
-      if (clang::CompilerInstance* CI = interp.getCIOrNull())
-        return checkDiagErrors(CI);
+      if (clang::CompilerInstance* CI = interp.getCIOrNull()) {
+        if (ExecuteCompilerInvocation(CI))
+          return checkDiagErrors(CI);
+        
+        checkDiagErrors(CI);
+      }
 
       // If !CI then we can't output what was requested.
       return EXIT_FAILURE;
