@@ -18,6 +18,7 @@
 #include "llvm/Option/ArgList.h"
 #include "llvm/Option/Option.h"
 #include "llvm/Option/OptTable.h"
+#include "llvm/Support/Path.h"
 
 #include <memory>
 // strncasecmp
@@ -139,7 +140,7 @@ static const char kNoStdInc[] = "-nostdinc";
 }
 
 CompilerOptions::CompilerOptions(int argc, const char* const* argv) :
-  Language(false), ResourceDir(false), SysRoot(false), NoBuiltinInc(false),
+  Language(0), ResourceDir(false), SysRoot(false), NoBuiltinInc(false),
   NoCXXInc(false), StdVersion(false), StdLib(false), HasOutput(false),
   Verbose(false), JITFormat(0) {
   if (argc && argv) {
@@ -167,7 +168,7 @@ void CompilerOptions::Parse(int argc, const char* const argv[],
       // case options::OPT_d_Flag:
       case options::OPT_E:
       case options::OPT_o: HasOutput = true; break;
-      case options::OPT_x: Language = true; break;
+      case options::OPT_x: Language = kLanguageSet; break;
       case options::OPT_resource_dir: ResourceDir = true; break;
       case options::OPT_isysroot: SysRoot = true; break;
       case options::OPT_std_EQ: StdVersion = true; break;
@@ -179,8 +180,22 @@ void CompilerOptions::Parse(int argc, const char* const argv[],
       case options::OPT_v: Verbose = true; break;
 
       default:
-        if (Inputs && arg->getOption().getKind() == Option::InputClass)
+        if (Inputs && arg->getOption().getKind() == Option::InputClass) {
           Inputs->push_back(arg->getValue());
+#ifdef CLING_OBJC_SUPPORT
+          if (!Language) {
+            const llvm::StringRef ext = llvm::sys::path::extension(Inputs->back());
+            if (ext.equals(".m"))
+              Language = kLanguageObjC;
+            else if (ext.equals(".mm"))
+              Language = kLanguageObjCXX;
+            else if (ext.startswith(".m("))
+              Language = kLanguageObjC;
+            else if (ext.startswith(".mm("))
+              Language = kLanguageObjCXX;
+          }
+#endif
+        }
         break;
     }
   }
