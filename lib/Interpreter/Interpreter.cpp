@@ -35,6 +35,7 @@
 #include "clang/AST/GlobalDecl.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/Basic/Version.h"
 #include "clang/CodeGen/ModuleBuilder.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/Utils.h"
@@ -169,7 +170,8 @@ namespace cling {
 
   static bool handleSimpleOptions(const InvocationOptions& Opts) {
     if (Opts.ShowVersion) {
-      llvm::errs() << Interpreter::getVersion() << '\n';
+      llvm::outs() << Interpreter::getVersion()
+        << " " << clang::getClangFullCPPVersion() << "\n";
     }
     if (Opts.Help) {
       Opts.PrintHelp();
