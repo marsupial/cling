@@ -15,6 +15,7 @@
 #include "cling/Interpreter/Value.h"
 #include "cling/MetaProcessor/MetaProcessor.h"
 #include "cling/MetaProcessor/Commands.h"
+#include "cling/Utils/Paths.h"
 #include "../lib/Interpreter/IncrementalParser.h"
 
 #include "llvm/ADT/StringMap.h"
@@ -295,11 +296,45 @@ CommandResult doAtCommand(CommandArguments& Params) {
   return kCmdSuccess;
 }
 
-CommandResult doICommand(CommandArguments& Params, llvm::StringRef Argument) {
-  if (Argument.empty())
-    Params.Interpreter.DumpIncludePath(&Params.Output);
+CommandResult doICommand(CommandArguments& Params) {
+  llvm::StringRef PathArg = Params.nextString();
+  if (!PathArg.empty()) {
+    do {
+      std::string Path = PathArg.str();
+      char Delim[2] = {0,0};
+
+      // Get the delimitor, can be specified as '?' or one of our tokens
+      const Argument& Arg = Params.nextArg();
+      size_t offset = 0;
+      switch (Arg.getKind()) {
+        case tok::charlit:
+          offset = 1;
+        default:
+          Delim[0] = *(Arg.getBufStart()+offset);
+          PathArg = Params.nextString();
+          break;
+        case tok::slash:
+          // So .I /  has the same semantics as .I /Dir/Path
+          PathArg = llvm::StringRef("/");
+          break;
+        case tok::space:
+        case tok::stringlit:
+        case tok::constant:
+        case tok::ident:
+        case tok::raw_ident:
+        case tok::eof:
+          PathArg = argumentAsString(Arg);
+          break;
+      }
+      // PathArg now holds next argument (if any)
+
+      cling::utils::ExpandEnvVars(Path);
+      Params.Interpreter.AddIncludePaths(Path, Delim);
+
+    } while(!PathArg.empty());
+  }
   else
-    Params.Interpreter.AddIncludePath(Argument.str());
+    Params.Interpreter.DumpIncludePath(&Params.Output);
   return kCmdSuccess;
 }
 

@@ -11,6 +11,7 @@
 
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/MetaProcessor/Commands.h"
+#include "cling/Utils/Paths.h"
 
 #include "clang/AST/ASTContext.h"
 #include "clang/Basic/TokenKinds.h"
@@ -25,26 +26,64 @@ using namespace cling;
 using namespace clang;
 
 namespace {
-  static void replaceEnvVars(std::string& Path) {
-    std::size_t bpos = Path.find("$");
-    while (bpos != std::string::npos) {
-      std::size_t spos = Path.find("/", bpos + 1);
-      std::size_t length = Path.length();
+  enum PragmaCmd {
+    kPragmaLoad    = 0,
+    kPragmaAddLib  ,
+    kPragmaAddInc  ,
 
-      if (spos != std::string::npos) // if we found a "/"
-        length = spos - bpos;
+    kPragmaUnknown = -1
+  };
+  
+  static PragmaCmd GetCommand(const StringRef CommandStr) {
+    if (CommandStr == "load")
+      return kPragmaLoad;
+    else if (CommandStr == "add_library_path")
+      return kPragmaAddLib;
+    else if (CommandStr == "add_include_path")
+      return kPragmaAddInc;
+    return kPragmaUnknown;
+  }
 
-      std::string envVar = Path.substr(bpos + 1, length -1); //"HOME"
-      const char* c_Path = getenv(envVar.c_str());
-      std::string fullPath;
-      if (c_Path != NULL) {
-        fullPath = std::string(c_Path);
-      } else {
-        fullPath = std::string("");
-      }
-      Path.replace(bpos, length, fullPath);
-      bpos = Path.find("$", bpos + 1); //search for next env variable
+  static bool LitToString(Preprocessor& PP, Token& Tok, std::string& Literal) {
+    assert(Tok.isLiteral() && "Token is not a literal");
+    SmallVector<Token, 1> StrToks(1, Tok);
+    StringLiteralParser LitParse(StrToks, PP);
+    if (LitParse.hadError)
+      return false;
+    Literal = LitParse.GetString();
+    return true;
+  }
+  
+  static bool GetNextLiteral(Preprocessor& PP, Token& Tok, std::string& Literal,
+                             const char* firstTime = nullptr) {
+    Literal.clear();
+    PP.Lex(Tok);
+    if (Tok.isLiteral()) {
+      LitToString(PP, Tok, Literal);
     }
+    else if (Tok.is(tok::comma))
+      return GetNextLiteral(PP, Tok, Literal);
+    else if (firstTime) {
+      if (Tok.is(tok::l_paren)) {
+        if (!PP.LexStringLiteral(Tok, Literal, firstTime,
+                                 false /*allowMacroExpansion*/)) {
+          // already diagnosed.
+          return false;
+        }
+      }
+    }
+
+    if (Literal.empty())
+      return false;
+
+    cling::utils::ExpandEnvVars(Literal);
+    return true;
+  }
+
+  static void ReportCommandErr(
+      Preprocessor& PP, const Token& Tok,
+      const char* Msg = "load, add_library_path, or add_include_path") {
+    PP.Diag(Tok.getLocation(), diag::err_expected) << Msg;
   }
 
   struct SkipToEOD {
@@ -60,52 +99,6 @@ namespace {
         m_PP.LexUnexpandedToken(m_Tok);
     }
   };
-}
-
-bool ClingPragmaHandler::GetNextLiteral(Preprocessor& PP, Token& Tok,
-                                        std::string& Literal,
-                                        const char* firstTime) const {
-  Literal.clear();
-  PP.Lex(Tok);
-  if (Tok.isLiteral()) {
-    SmallVector<Token, 1> StrToks(1, Tok);
-    StringLiteralParser LitParse(StrToks, PP);
-    if (!LitParse.hadError)
-      Literal = LitParse.GetString();
-  }
-  else if (Tok.is(tok::comma))
-    return GetNextLiteral(PP, Tok, Literal);
-  else if (firstTime) {
-    if (Tok.is(tok::l_paren)) {
-      if (!PP.LexStringLiteral(Tok, Literal, firstTime,
-                               false /*allowMacroExpansion*/)) {
-        // already diagnosed.
-        return false;
-      }
-    }
-  }
-
-  if (Literal.empty())
-    return false;
-
-  replaceEnvVars(Literal);
-  return true;
-}
-
-void ClingPragmaHandler::ReportCommandErr(Preprocessor& PP, const Token& Tok) {
-  PP.Diag(Tok.getLocation(), diag::err_expected)
-    << "load, add_library_path, or add_include_path";
-}
-
-int ClingPragmaHandler::GetCommand(const StringRef CommandStr) const {
-  if (CommandStr == "load")
-    return 0;
-  else if (CommandStr == "add_library_path")
-    return 1;
-  else if (CommandStr == "add_include_path")
-    return 2;
-
-  return -1;
 }
 
 void ClingPragmaHandler::LoadCommand(Preprocessor& PP, Token& Tok,
@@ -172,7 +165,8 @@ void ClingPragmaHandler::HandlePragma(Preprocessor& PP,
   SkipToEOD OnExit(PP, Tok);
 
   // #pragma cling(load, "A")
-  if (Tok.is(tok::l_paren))
+  const bool FuncStyle = Tok.is(tok::l_paren);
+  if (FuncStyle)
     PP.Lex(Tok);
 
   if (Tok.isNot(tok::identifier)) {
@@ -185,8 +179,9 @@ void ClingPragmaHandler::HandlePragma(Preprocessor& PP,
   }
 
   const StringRef CommandStr = Tok.getIdentifierInfo()->getName();
-  const int Command = GetCommand(CommandStr);
-  if (Command < 0) {
+  const PragmaCmd Command = GetCommand(CommandStr);
+  if (Command == kPragmaUnknown) {
+    // Pass it off to the MetaProcessor
     if (!RunCommand(static_cast<Lexer*>(PP.getCurrentLexer()), CommandStr))
       ReportCommandErr(PP, Tok);
     return;
@@ -199,15 +194,49 @@ void ClingPragmaHandler::HandlePragma(Preprocessor& PP,
     return;
   }
 
-  if (Command == 0)
+  if (Command == kPragmaLoad)
     return LoadCommand(PP, Tok, std::move(Literal));
 
   do{
-    if (Command == 1)
-      m_Interp.getOptions().LibSearchPath.push_back(std::move(Literal));
-    else if (Command == 2)
+    if (Command == kPragmaAddInc) {
+      // Because the pragma can be invoked function or bash style
+      PP.Lex(Tok);
+      // add_include_path "PATHA" "PATHB"
+      if (!Tok.isLiteral() && !Tok.isOneOf(tok::eod, tok::eof)) {
+        // add_include_path "PATHA,PATHB,PATHC" ,
+        // add_include_path("$ENV",:)
+        bool Invalid = false;
+        if (FuncStyle) {
+          if (Tok.is(tok::comma)) {
+            PP.Lex(Tok);
+            Invalid = Tok.isLiteral();
+          }
+          else
+            Invalid = Tok.is(tok::r_paren);
+        }
+        if (!Invalid) {
+          std::string Delim = PP.getSpelling(Tok, &Invalid);
+          if (!Invalid && Delim.size() == 1)
+            m_Interp.AddIncludePaths(Literal, Delim.c_str());
+          else
+            ReportCommandErr(PP, Tok, "string literal or single character");
+        
+          continue;
+        }
+      }
       m_Interp.AddIncludePath(Literal);
-  } while (GetNextLiteral(PP, Tok, Literal));
+      if (Tok.isLiteral()) {
+        if (LitToString(PP, Tok, Literal)) {
+          cling::utils::ExpandEnvVars(Literal);
+          m_Interp.AddIncludePath(Literal);
+        } else
+          ReportCommandErr(PP, Tok, "string literal conversion");
+      }
+    }
+    else if (Command == kPragmaAddLib)
+      m_Interp.getOptions().LibSearchPath.push_back(std::move(Literal));
+
+  } while (!Tok.isOneOf(tok::eod, tok::eof) && GetNextLiteral(PP, Tok, Literal));
 }
 
 ClingPragmaHandler* ClingPragmaHandler::install(Interpreter& interp) {

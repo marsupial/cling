@@ -26,6 +26,7 @@ add_cling_library(clingMetaProcessor OBJECT
   clangBasic
 
   clingInterpreter
+  clingUtils
 )
 
 if ( MSVC )

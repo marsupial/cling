@@ -58,7 +58,7 @@ void Lexer::Lex(Token& Tok) {
     return LexQuotedStringAndAdvance(curPos, Tok);
   case '[': case ']': case '(': case ')': case '{': case '}':
   case '\\': case ',': case '.': case '!': case '?': case '>':
-  case '&': case '#': case '@': case '*': case ';':
+  case '&': case '#': case '@': case '*': case ';': case ':':
     // INTENTIONAL FALL THROUGHs
     return LexPunctuator(curPos - 1, Tok);
 
@@ -129,6 +129,7 @@ void Lexer::LexPunctuator(const char* C, Token& Tok) {
   case '&'  : Tok.setKind(tok::ampersand); break;
   case '#'  : Tok.setKind(tok::hash); break;
   case '*'  : Tok.setKind(tok::asterik); break;
+  case ':'  : Tok.setKind(tok::colon); break;
   case ';'  : Tok.setKind(tok::semicolon); break;
   case '\0' : Tok.setKind(tok::eof); Tok.setLength(0); break;// if static call
   default: Tok.setLength(0); break;

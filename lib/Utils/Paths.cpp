@@ -284,6 +284,28 @@ void AddIncludePaths(llvm::StringRef PathStr, clang::HeaderSearchOptions& HOpts,
       llvm::errs() << "  " << Path << "\n";
   }
 }
+
+void ExpandEnvVars(std::string& Path) {
+  std::size_t bpos = Path.find("$");
+  while (bpos != std::string::npos) {
+    std::size_t spos = Path.find("/", bpos + 1);
+    std::size_t length = Path.length();
+
+    if (spos != std::string::npos) // if we found a "/"
+      length = spos - bpos;
+
+    std::string envVar = Path.substr(bpos + 1, length -1); //"HOME"
+    const char* c_Path = getenv(envVar.c_str());
+    std::string fullPath;
+    if (c_Path != NULL) {
+      fullPath = std::string(c_Path);
+    } else {
+      fullPath = std::string("");
+    }
+    Path.replace(bpos, length, fullPath);
+    bpos = Path.find("$", bpos + 1); //search for next env variable
+  }
+}
   
 } // namespace utils
 } // namespace cling

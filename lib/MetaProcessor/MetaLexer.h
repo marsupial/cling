@@ -41,9 +41,10 @@ namespace cling {
         constant   = 1 << 21,  // {0-9}
         at         = 1 << 22,  // @
         asterik    = 1 << 23,  // *
-        semicolon  = 1 << 24,  // ;
-        eof        = 1 << 25,  // 0
-        unknown    = 1 << 26,
+        colon      = 1 << 24,  // :
+        semicolon  = 1 << 25,  // ;
+        eof        = 1 << 26,  // 0
+        unknown    = 1 << 27,
       };
     }
 

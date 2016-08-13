@@ -86,6 +86,12 @@ namespace cling {
     ///
     void LogNonExistantDirectory(llvm::StringRef Path);
 
+     ///\brief sh style expansion of environment variables (i.e. $HOME/$USER)
+     ///
+     ///\param[in] Str - String to expand
+     ///
+     void ExpandEnvVars(std::string& Path);
+
     ///\brief Copies the current include paths into the HeaderSearchOptions.
     ///
     ///\param[in] Opts - HeaderSearchOptions to read from

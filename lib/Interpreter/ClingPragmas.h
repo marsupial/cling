@@ -27,12 +27,9 @@ namespace cling {
     Interpreter& m_Interp;
     meta::Commands* m_Commands;
 
-    void ReportCommandErr(clang::Preprocessor&, const clang::Token&);
     void LoadCommand(clang::Preprocessor&, clang::Token&, std::string);
-    int GetCommand(const llvm::StringRef CommandStr) const;
     bool RunCommand(clang::Lexer*, const llvm::StringRef&) const;
-    bool GetNextLiteral(clang::Preprocessor&, clang::Token&,
-                        std::string&, const char* = nullptr) const;
+
   public:
     ClingPragmaHandler(Interpreter& interp);
 
