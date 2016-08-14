@@ -10,8 +10,14 @@
 
 #include "cling/Interpreter/Interpreter.h"
 
+#include "A.h" // expected-error {{'A.h' file not found}}
+#include "B.h" // expected-error {{'B.h' file not found}}
+#include "C.h" // expected-error {{'C.h' file not found}}
+#include "D.h" // expected-error {{'D.h' file not found}}
+
 gCling->AddIncludePaths(TEST_PATH "Paths/A:" TEST_PATH "Paths/B:"
                         TEST_PATH "Paths/C");
+
 #include "A.h"
 #include "B.h"
 #include "C.h"
@@ -28,5 +34,4 @@ TestC
 TestD
 // CHECK: (const char *) "TestD"
 
-// expected-no-diagnostics
 .q
