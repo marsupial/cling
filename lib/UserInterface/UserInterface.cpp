@@ -140,16 +140,15 @@ namespace cling {
 
     while (true) {
       try {
-        TI.SetPrompt(Prompt.c_str());
-        m_MetaProcessor->getOuts().flush();
-        TextInput::EReadResult RR = TI.ReadInput();
-        TI.TakeInput(Line);
-        if (RR == TextInput::kRREOF) {
-          break;
+        {
+          MetaProcessor::MaybeRedirectOutputRAII RAII(*m_MetaProcessor);
+          TI.SetPrompt(Prompt.c_str());
+          if (TI.ReadInput() == TextInput::kRREOF)
+            break;
+          TI.TakeInput(Line);
         }
 
         cling::Interpreter::CompilationResult compRes;
-        MetaProcessor::MaybeRedirectOutputRAII RAII(m_MetaProcessor.get());
         const int indent = m_MetaProcessor->process(Line.c_str(), compRes);
 
         // Quit requested?
@@ -164,6 +163,7 @@ namespace cling {
           Prompt.append(1, '?');
           Prompt.append(indent * 3, ' ');
         }
+        m_MetaProcessor->getOuts().flush();
       }
       catch(InvalidDerefException& e) {
         e.diagnose();
