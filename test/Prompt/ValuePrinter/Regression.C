@@ -6,7 +6,7 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: cat %s | %cling 2>&1 | FileCheck %s
+// RUN: cat %s | %cling -Xclang -verify 2>&1 | FileCheck %s
 
 // This file should be used as regression test for the value printing subsystem
 // Reproducers of fixed bugs should be put here
@@ -23,7 +23,7 @@ public:
   int Var;
   A(int arg) { Var = arg; }
   int someFunc(float) { return 42; }
-  ~A() { printf("A d'tor\n"); }
+  ~A() { printf("A d'tor %d\n", Var); }
 };
 
 const A& foo(const A& arg) { return arg; }
@@ -32,13 +32,14 @@ A foo2(const A& arg) { return A(42); }
 
 foo(A(12)).Var
 // CHECK: (const int) 12
-// CHECK: A d'tor
+// CHECK: A d'tor 12
 // End PR #93006
 
 // myvector.end() failed to print (roottest/cling/stl/default/VectorSort.C)
-foo2(A(42))
+foo2(A(57))
+// CHECK: A d'tor 57
 // CHECK: (A) @0x{{[0-9a-f]+}}
-// CHECK: A d'tor
+// CHECK: A d'tor 42
 
  // Savannah #96523
 int *p = (int*)0x123;
@@ -77,7 +78,8 @@ auto bla=[](double *x, double *par, int blub){return x[0]*blub;}
 #include <functional>
 using namespace std::placeholders;
 auto fn_moo = std::bind (bla, _1,_2,10)
-// CHECK: error: call to global function cling::executePrintValue() not configured
+// expected-error {{call to global function cling::executePrintValue() not configured}}
+// CHECK: ({{.*}}) <unknown value>
 
 // Make sure cling survives
 12 // CHECK: (int) 12

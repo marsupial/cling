@@ -6,23 +6,21 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: clang -E -C %s | sed -e '/^#/d' > %t
-// RUN: cat %t | %cling -nostdinc++ -I%S/BadNew/A 2>&1 | FileCheck -check-prefix=CHECK -check-prefix=CHECKA %t
-// RUN: cat %s | %cling -nostdinc++ -I%S/BadNew/B 2>&1 | FileCheck -check-prefix=CHECK -check-prefix=CHECKB %s
+// RUN: %cling -E -C -P %s > %t
+// RUN: cat %t | %cling -nostdinc++ -I%S/BadNew/A -Xclang -verify 2>&1 | FileCheck %t
+// RUN: %cling -E -C -P -DCLING_TESTB %s > %t
+// RUN: cat %t | %cling -nostdinc++ -I%S/BadNew/B -Xclang -verify 2>&1 | FileCheck %t
 // testBadNewInclude
 
 // CHECK: Warning in cling::IncrementalParser::CheckABICompatibility():
 // CHECK:  Possible C++ standard library mismatch, compiled with {{.*$}}
 
 struct a {} TEST
-#if defined(__GLIBCXX__) && defined(__APPLE__)
-  // CHECKA: error: call to global function cling::executePrintValue() not configured
-  // CHECKA: (struct a &) <unknown value>
-#else
-  // CHECKA: error: 'string' file not found
-  // CHECKA: error: RuntimePrintValue.h could not be loaded
+#ifdef CLING_TESTB
+// expected-error@new:3 {{C++ requires a type specifier for all declarations}}
 #endif
 
-// CHECKB: error: RuntimePrintValue.h could not be loaded
+// expected-error@cling/Interpreter/RuntimePrintValue.h:* {{'string' file not found}}
+// expected-error {{RuntimePrintValue.h could not be loaded}}
 
 .q

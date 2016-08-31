@@ -193,7 +193,7 @@ static std::string executePrintValue(const Value &V, const T &val) {
   if (!printValueV.isValid() || printValueV.getPtr() == nullptr) {
     // Hopefully probably diagnosed the issue as part of evaluate(), but make
     // to mark the Sema with an error if not
-    Interp->getCI()->getDiagnostics().Report(clang::SourceLocation(),
+    Interp->getCI()->getDiagnostics().Report(Interp->getSourceLocation(),
        clang::diag::err_global_call_not_config) << "cling::executePrintValue()";
 
     return "<unknown value>";
@@ -693,7 +693,7 @@ namespace cling {
           const unsigned ID = Diag.getCustomDiagID(
                                       DiagnosticsEngine::Level::Error,
                                      "RuntimePrintValue.h could not be loaded");
-          Diag.Report(clang::SourceLocation(), ID);
+          Diag.Report(Interp->getSourceLocation(), ID);
           return "";
         }
       }

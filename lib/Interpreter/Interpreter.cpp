@@ -156,6 +156,15 @@ namespace cling {
     return m_IncrParser->getLastMemoryBufferEndLoc().getLocWithOffset(1);
   }
 
+  clang::SourceLocation Interpreter::getSourceLocation() const {
+    const Transaction* T = m_IncrParser->getCurrentTransaction();
+    if (!T) {
+      T = m_IncrParser->getLastTransaction();
+      if (!T)
+        return SourceLocation();
+    }
+    return T->getSourceStart(getCI()->getSourceManager());
+  }
 
   bool Interpreter::isInSyntaxOnlyMode() const {
     return getCI()->getFrontendOpts().ProgramAction
@@ -1020,7 +1029,10 @@ namespace cling {
       if (!V) V = &resultV;
       V->setWrapperFD(WrapperFD);
 
+      DiagnosticErrorTrap Trap(getCI()->getDiagnostics());
       ExecutionResult rslt = RunFunction(WrapperFD, V);
+      if (Trap.hasErrorOccurred())
+        getCI()->getDiagnostics().Reset(true);
 
       // If m_PrintValueTransaction has changed value, then lastT is now
       // the transaction that holds the transaction(s) of loading up the
