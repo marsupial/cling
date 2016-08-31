@@ -750,7 +750,7 @@ namespace cling {
 
       if (Result == kCmdInvalidSyntax) {
         if (CmdItr != End)
-          showHelp(CmdItr, Out);
+          showHelp(CmdItr, llvm::errs());
         else
           doHelpCommand(CmdArgs, "");
       }
