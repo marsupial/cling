@@ -546,19 +546,17 @@ CommandResult doShellCommand(CommandArguments& Params) {
   else
     return kCmdInvalidSyntax;
 
+  CommandLine = CommandLine.trim();
   if (!CommandLine.empty()) {
-    llvm::StringRef trimmed(CommandLine.trim(" \t\n\v\f\r "));
-    if (!trimmed.empty()) {
-      int ret = std::system(trimmed.str().c_str());
+    int Result = std::system(CommandLine.str().c_str());
 
-      // Build the result
-      clang::ASTContext& Ctx = Params.Interpreter.getCI()->getASTContext();
-      if (Params.OutValue) {
-        *Params.OutValue = Value(Ctx.IntTy, Params.Interpreter);
-        Params.OutValue->getAs<long long>() = ret;
-      }
-      return (ret == 0) ? kCmdSuccess : kCmdFailure;
+    // Build the result
+    clang::ASTContext& Ctx = Params.Interpreter.getCI()->getASTContext();
+    if (Params.OutValue) {
+      *Params.OutValue = Value(Ctx.IntTy, Params.Interpreter);
+      Params.OutValue->getAs<long long>() = Result;
     }
+    return (Result == 0) ? kCmdSuccess : kCmdFailure;
   }
   return kCmdFailure;
 }
