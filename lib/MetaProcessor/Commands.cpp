@@ -533,7 +533,9 @@ CommandResult doRedirectCommand(CommandArguments& Params) {
   // Default redirect is stdout.
   MetaProcessor::RedirectionScope stream = MetaProcessor::kSTDOUT;
 
+  unsigned preamble = 0;
   const Argument *arg = &Params.curArg();
+
   if (arg->is(tok::constant)) {
     // > or 1> the redirection is for stdout stream
     // 2> redirection for stderr stream
@@ -546,6 +548,7 @@ CommandResult doRedirectCommand(CommandArguments& Params) {
       return kCmdInvalidSyntax;
     }
     arg = &Params.nextArg();
+    ++preamble;
   }
 
   // &> redirection for both stdout & stderr
@@ -554,6 +557,7 @@ CommandResult doRedirectCommand(CommandArguments& Params) {
       stream = MetaProcessor::kSTDBOTH;
     }
     arg = &Params.nextArg();
+    ++preamble;
   }
 
   llvm::StringRef file;
@@ -584,10 +588,25 @@ CommandResult doRedirectCommand(CommandArguments& Params) {
         }
       }
     }
-    if (!arg->is(tok::eof) && !(stream & MetaProcessor::kSTDSTRM))
-      file = Params.asPath();
 
-    // Empty file means std.
+    if (!arg->is(tok::eof) && !(stream & MetaProcessor::kSTDSTRM)) {
+      file = Params.asPath();
+      if (!Params.curArg().is(tok::eof) && !preamble) {
+        llvm::StringRef Cmd = Params.remaining().trim();
+        if (!Cmd.empty()) {
+          std::error_code EC;
+          using namespace llvm::sys;
+          llvm::raw_fd_ostream Out(file, EC, fs::OpenFlags(
+                  fs::OpenFlags::F_Text | fs::OpenFlags::F_RW |
+                  (append ? fs::OpenFlags::F_Append : fs::OpenFlags::F_None)));
+          if (EC)
+            return kCmdFailure;
+          return Commands::get().execute(Cmd, Params.Interpreter, Out,
+                                         Params.Processor);
+        }
+      }
+    }
+
     Params.Processor->setStdStream(file/*file*/,
                                    stream/*which stream to redirect*/,
                                    append/*append mode*/);
@@ -964,7 +983,8 @@ Commands& Commands::get(bool Populate) {
       "      '>' or '1>'\t\t- Redirects the stdout stream only\n"
       "      '2>'\t\t\t- Redirects the stderr stream only\n"
       "      '&>' (or '2>&1')\t\t- Redirects both stdout and stderr\n"
-      "      '>>'\t\t\t- Appends to the given file",
+      "      '>>'\t\t\t- Appends to the given file\n"
+      "      '>[>] <file> <command>'\t- Save/Append command output to file",
                 MetaProcessor | kCmdCustomSyntax);
 
     sCommands.add("I", &doICommand, "[path]",
