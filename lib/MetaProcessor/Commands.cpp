@@ -112,6 +112,19 @@ llvm::StringRef CommandArguments::remaining() {
   return nextString(tok::eof);
 }
 
+llvm::StringRef CommandArguments::asPath() {
+  const Argument& Arg = curArg();
+  if (Arg.isOneOf(tok::slash | tok::comment)) {
+    // Like bash allow //path/to/file, just ignore the first /
+    const char* Start = Arg.getBufStart() + Arg.is(tok::comment);
+    // If path needs spaces, it should be quoted, so next space is next arg
+    const Argument& Next = nextArg(tok::space);
+    // Length is length of Next + 1 for initial "/". When at eof the path is "/"
+    return llvm::StringRef(Start, Next.is(tok::eof) ? 1 : Next.getLength()+1);
+  }
+  return argumentAsString(Arg);
+}
+
 CommandResult CommandArguments::execute(llvm::StringRef Cmd,
                                         std::string* Str,
                                         cling::Value* Value) {
@@ -456,14 +469,6 @@ CommandResult doOCommand(CommandArguments& Params) {
   return kCmdSuccess;
 }
 
-static llvm::StringRef rawPath(const Argument& Arg) {
-  if (Arg.is(tok::slash))
-    return Arg.getBufStart();
-  else if (Arg.is(tok::comment))
-    return Arg.getBufStart() + 1;
-  return argumentAsString(Arg);
-}
-
 // >RedirectCommand := '>' FilePath
 // FilePath := AnyString
 // AnyString := .*^(' ' | '\t')
@@ -524,7 +529,7 @@ CommandResult doRedirectCommand(CommandArguments& Params) {
       }
     }
     if (!arg->is(tok::eof) && !(stream & MetaProcessor::kSTDSTRM))
-      file = rawPath(*arg);
+      file = Params.asPath();
 
     // Empty file means std.
     Params.Processor->setStdStream(file/*file*/,
@@ -540,7 +545,7 @@ CommandResult doShellCommand(CommandArguments& Params) {
   llvm::StringRef CommandLine;
   const Argument *Arg = &Params.curArg();
   if (Arg->is(tok::comment))
-    CommandLine = rawPath(*Arg);
+    CommandLine = Params.asPath();
   else if (Arg->isOneOf(tok::excl_mark|tok::slash))
     CommandLine = Params.remaining();
   else

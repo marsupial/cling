@@ -97,6 +97,9 @@ namespace cling {
       ///\brief Get a reference to the current argument
       const Argument& curArg() const;
 
+      ///\brief Get a file path string for the current argument
+      llvm::StringRef asPath();
+
       ///\brief Interpret the next argument as optional integer value.
       ///
       ///\param[in] ParseBool - Interpret 'true' as 1 and 'false' 0.
