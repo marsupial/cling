@@ -122,9 +122,8 @@ namespace cling {
     llvm::SmallString<512> histfilePath;
     if (!getenv("CLING_NOHISTORY")) {
       // History file is $HOME/.cling_history
-      static const char* histfile = ".cling_history";
       GetUserHomeDirectory(histfilePath);
-      llvm::sys::path::append(histfilePath, histfile);
+      llvm::sys::path::append(histfilePath, ".cling_history");
     }
 
     using namespace textinput;
@@ -134,9 +133,7 @@ namespace cling {
 
     // Inform text input about the code complete consumer
     // TextInput owns the TabCompletion.
-    UITabCompletion* Completion =
-                      new UITabCompletion(m_MetaProcessor->getInterpreter());
-    TI.SetCompletion(Completion);
+    TI.SetCompletion(new UITabCompletion(m_MetaProcessor->getInterpreter()));
 
     TI.SetPrompt("[cling]$ ");
     std::string line;
