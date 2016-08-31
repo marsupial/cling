@@ -387,6 +387,11 @@ namespace cling {
     }
   }
 
+  void IncrementalParser::dump(llvm::raw_ostream& Stream) const {
+    for (const auto& BPair : m_MemoryBuffers)
+      Stream << BPair.first->getBuffer();
+  }
+
   void IncrementalParser::addTransaction(Transaction* T) {
     if (!T->isNestedTransaction() && T != getLastTransaction()) {
       if (getLastTransaction())

@@ -622,6 +622,11 @@ CommandResult doShellCommand(CommandArguments& Params) {
   return kCmdFailure;
 }
 
+CommandResult doSourceCommand(CommandArguments& Params) {
+  Params.Interpreter.getIncrParser().dump(Params.Output);
+  return kCmdSuccess;
+}
+
 } // anonymous namespace
 
 struct Commands::CommandObj {
@@ -1028,7 +1033,10 @@ Commands& Commands::get(bool Populate) {
 
     sCommands.add("ddump", doDumpDeclCommand, "<address>",
                   "reinterpret_cast<Clang::Decl*>(address)->dump()", Debug);
-  
+
+    sCommands.add("source", doSourceCommand, nullptr,
+                  "Show interpreter source");
+
     sCommands.builtins() = true;
   }
   return static_cast<Commands&>(sCommands);

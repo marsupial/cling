@@ -234,6 +234,8 @@ namespace cling {
 
     void setCommands(meta::Commands*);
 
+    void dump(llvm::raw_ostream&) const;
+
   private:
     ///\brief Finalizes the consumers (e.g. CodeGen) on a transaction.
     ///
