@@ -156,16 +156,6 @@ namespace cling {
     return m_IncrParser->getLastMemoryBufferEndLoc().getLocWithOffset(1);
   }
 
-  clang::SourceLocation Interpreter::getSourceLocation() const {
-    const Transaction* T = m_IncrParser->getCurrentTransaction();
-    if (!T) {
-      T = m_IncrParser->getLastTransaction();
-      if (!T)
-        return SourceLocation();
-    }
-    return T->getSourceStart(getCI()->getSourceManager());
-  }
-
   bool Interpreter::isInSyntaxOnlyMode() const {
     return getCI()->getFrontendOpts().ProgramAction
       == clang::frontend::ParseSyntaxOnly;
@@ -710,6 +700,25 @@ namespace cling {
     return Interpreter::kFailure;
   }
 
+  void Interpreter::createUniqueName(std::string& out) {
+    out += utils::Synthesize::UniquePrefix;
+    llvm::raw_string_ostream(out) << m_UniqueCounter++;
+  }
+
+  bool Interpreter::isUniqueName(llvm::StringRef name) {
+    return name.startswith(utils::Synthesize::UniquePrefix);
+  }
+
+  llvm::StringRef Interpreter::createUniqueWrapper() const {
+    llvm::SmallString<128> out(utils::Synthesize::UniquePrefix);
+    llvm::raw_svector_ostream(out) << m_UniqueCounter++;
+    return (getCI()->getASTContext().Idents.getOwn(out)).getName();
+  }
+
+  bool Interpreter::isUniqueWrapper(llvm::StringRef name) {
+    return name.startswith(utils::Synthesize::UniquePrefix);
+  }
+
   const std::string& Interpreter::WrapInput(const std::string& Input,
                                             std::string& Output,
                                             size_t& WrapPoint) const {
@@ -731,6 +740,34 @@ namespace cling {
     // in-case std::string::npos was passed
     WrapPoint = 0;
     return Input;
+  }
+
+  clang::SourceLocation Interpreter::getSourceLocation(bool skipWrapper) const {
+    const Transaction* T = m_IncrParser->getCurrentTransaction();
+    if (!T) {
+      T = m_IncrParser->getLastTransaction();
+      if (!T)
+        return SourceLocation();
+    }
+    if (skipWrapper) {
+#if !defined(_MSC_VER) || LLVM_MSC_PREREQ(1900)
+      char NotNull[1];
+      const size_t Size = ::snprintf(NotNull, sizeof(NotNull),
+                                     "void %s%llu(void* vpClingValue) {\n ",
+                                     utils::Synthesize::UniquePrefix,
+                                     m_UniqueCounter);
+#else
+      std::string str;
+      llvm::raw_string_ostream ostrm(str);
+      ostrm << "void " << utils::Synthesize::UniquePrefix << m_UniqueCounter
+            << "(void* vpClingValue) {\n ";
+      ostrm.flush();
+      const size_t Size = str.size();
+#endif
+      return T->getSourceStart(getCI()->getSourceManager())
+          .getLocWithOffset(Size);
+    }
+    return T->getSourceStart(getCI()->getSourceManager());
   }
 
   Interpreter::ExecutionResult
@@ -934,25 +971,6 @@ namespace cling {
     addr = compileFunction(funcname, code, false /*ifUniq*/,
                            false /*withAccessControl*/);
     return addr;
-  }
-
-  void Interpreter::createUniqueName(std::string& out) {
-    out += utils::Synthesize::UniquePrefix;
-    llvm::raw_string_ostream(out) << m_UniqueCounter++;
-  }
-
-  bool Interpreter::isUniqueName(llvm::StringRef name) {
-    return name.startswith(utils::Synthesize::UniquePrefix);
-  }
-
-  llvm::StringRef Interpreter::createUniqueWrapper() const {
-    llvm::SmallString<128> out(utils::Synthesize::UniquePrefix);
-    llvm::raw_svector_ostream(out) << m_UniqueCounter++;
-    return (getCI()->getASTContext().Idents.getOwn(out)).getName();
-  }
-
-  bool Interpreter::isUniqueWrapper(llvm::StringRef name) {
-    return name.startswith(utils::Synthesize::UniquePrefix);
   }
 
   Interpreter::CompilationResult

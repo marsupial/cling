@@ -193,7 +193,7 @@ static std::string executePrintValue(const Value &V, const T &val) {
   if (!printValueV.isValid() || printValueV.getPtr() == nullptr) {
     // Hopefully probably diagnosed the issue as part of evaluate(), but make
     // to mark the Sema with an error if not
-    Interp->getCI()->getDiagnostics().Report(Interp->getSourceLocation(),
+    Interp->getCI()->getDiagnostics().Report(Interp->getSourceLocation(true),
        clang::diag::err_global_call_not_config) << "cling::executePrintValue()";
 
     return "<unknown value>";

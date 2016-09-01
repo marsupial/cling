@@ -77,8 +77,7 @@ auto bla=[](double *x, double *par, int blub){return x[0]*blub;}
 
 #include <functional>
 using namespace std::placeholders;
-auto fn_moo = std::bind (bla, _1,_2,10)
-// expected-error {{call to global function cling::executePrintValue() not configured}}
+auto fn_moo = std::bind (bla, _1,_2,10) // expected-error {{call to global function cling::executePrintValue() not configured}}
 // CHECK: ({{.*}}) <unknown value>
 
 // Make sure cling survives
