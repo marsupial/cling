@@ -347,4 +347,8 @@ namespace cling {
     return D->isFromASTFile();
   }
 
+  SourceLocation Transaction::getSourceStart(clang::SourceManager& SM) const {
+    return SM.getLocForStartOfFile(m_BufferFID);
+  }
+
 } // end namespace cling
