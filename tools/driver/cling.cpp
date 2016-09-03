@@ -18,6 +18,7 @@
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/ManagedStatic.h"
+#include "llvm/Support/Path.h"
 
 #include <iostream>
 #include <fstream>
@@ -122,7 +123,18 @@ int main( int argc, char **argv ) {
           continue;
         }
         else
-          Cmd += ".x ";
+          Cmd = ".x ";
+      } else {
+        const llvm::StringRef Ext = llvm::sys::path::extension(Input);
+        const size_t ArgBegin = Ext.find('(');
+        if (ArgBegin != llvm::StringRef::npos) {
+          if (Ext.substr(ArgBegin).find(')') != llvm::StringRef::npos) {
+            if (Interp.lookupFileOrLibrary(
+                        Input.substr(0, Input.size() - (Ext.size()-ArgBegin)))
+                    .exists())
+              Cmd = ".x ";
+          }
+        }
       }
       Cmd += Input;
       Ui.getMetaProcessor()->process(Cmd.c_str(), Result, 0);
