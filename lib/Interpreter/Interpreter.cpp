@@ -743,7 +743,8 @@ namespace cling {
       // Suppport Input and Output begin the same string
       std::string Wrapper = Input.substr(WrapPoint);
       Wrapper.insert(0, Header);
-      Wrapper.append("\n;\n}");
+      Wrapper.append("\n;\n} //");
+      Wrapper.append(utils::Synthesize::UniquePrefix);
       Wrapper.insert(0, Input.substr(0, WrapPoint));
       Wrapper.swap(Output);
       WrapPoint += Header.size();

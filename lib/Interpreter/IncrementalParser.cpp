@@ -387,9 +387,111 @@ namespace cling {
     }
   }
 
-  void IncrementalParser::dump(llvm::raw_ostream& Stream) const {
-    for (const auto& BPair : m_MemoryBuffers)
-      Stream << BPair.first->getBuffer();
+  static bool dumpSource(llvm::raw_ostream& Stream, llvm::StringRef Buf) {
+    llvm::SmallString<256> Tmp("void ");
+    llvm::raw_svector_ostream(Tmp) << utils::Synthesize::UniquePrefix;
+
+    size_t Begin = Buf.find(Tmp.c_str());
+    if (Begin != llvm::StringRef::npos) {
+      if (Begin != 0) {
+        Stream << Buf.substr(0, Begin);
+        Buf = Buf.substr(Begin);
+        Begin = 0;
+      }
+
+      // Skip over everything including next '/n'
+      Begin = Buf.find('\n', Begin + Tmp.size());
+      assert(Begin != llvm::StringRef::npos && "Bad wrapper");
+      ++Begin;
+
+      Tmp.resize(0);
+      llvm::raw_svector_ostream(Tmp) << "\n;\n} //"
+                                     << utils::Synthesize::UniquePrefix;
+
+      size_t End = Buf.rfind(Tmp.c_str());
+      assert(End != llvm::StringRef::npos && "Bad wrapper");
+
+      llvm::StringRef Src = Buf.substr(Begin, End-Begin);
+      // Skip wrapped cling::printValue statemnts that we created
+      // But keep any cling::printValue satements user entered
+      if (Src.startswith(" cling::printValue(")) {
+        if (Buf.rfind(utils::Synthesize::UniquePrefix) == llvm::StringRef::npos)
+          Stream << Src;
+      } else
+        Stream << Src;
+
+      End += Tmp.size();
+      if (End < Buf.size()) {
+        Src = Buf.substr(End);
+        Stream << Src;
+      }
+      if (Src.back() != '\n')
+        Stream << '\n';
+      return true;
+    }
+    return false;
+  }
+
+  void IncrementalParser::dump(llvm::raw_ostream& Stream, DumpFlags Flgs) const {
+    if (Flgs==kDumpBuffers) {
+      for (const auto& BPair : m_MemoryBuffers)
+        Stream <<  BPair.first->getBuffer();
+      return;
+    }
+    const bool Clean = Flgs & kDumpCleanSource;
+
+    if (Flgs & kDumpTransactions) {
+      for (Transaction* T : m_Transactions) {
+        SourceManager& SM = getCI()->getASTContext().getSourceManager();
+        bool Invalid = true;
+        const llvm::MemoryBuffer* Buf = SM.getBuffer(T->getBufferFID(),
+                                                     T->getSourceStart(SM),
+                                                     &Invalid);
+        if (Buf && !Invalid) {
+          const llvm::StringRef Str = Buf->getBuffer();
+          if (!Clean || !dumpSource(Stream, Str))
+            Stream << Str;
+        }
+      }
+      return;
+    }
+
+    unsigned Runtime = 0;
+    for (const auto& BPair : m_MemoryBuffers) {
+      llvm::StringRef Str = BPair.first->getBuffer();
+      if (!Clean || !dumpSource(Stream, Str)) {
+        // This is all annoyingly implementation specific
+        switch (Runtime) {
+          case 0:
+            if (Str.equals("#include <new>\n")) {
+              ++Runtime;
+              continue;
+            }
+            break;
+          case 1:
+            if (Str.startswith(
+                    "#include \"cling/Interpreter/RuntimeUniverse.h\"\n"
+                    "namespace cling {namespace runtime { "
+                    "cling::Interpreter ")) {
+              ++Runtime;
+              continue;
+            }
+            break;
+          case 2:
+            if (Str.equals(
+                    "#include \"cling/Interpreter/RuntimePrintValue.h\"\n")) {
+              ++Runtime;
+              continue;
+            }
+          default:
+            break;
+        }
+        if (Str.startswith("extern \"C\" void __cling_Destruct_"))
+          continue;
+
+        Stream << Str;
+      }
+    }
   }
 
   void IncrementalParser::addTransaction(Transaction* T) {

@@ -234,7 +234,18 @@ namespace cling {
 
     void setCommands(meta::Commands*);
 
-    void dump(llvm::raw_ostream&) const;
+    enum DumpFlags {
+      kDumpBuffers      = 0, ///< Dump all memory buffers (all user input)
+      kDumpTransactions = 1, ///< Dump only Transactions (valid statements)
+      kDumpCleanSource  = 2  ///< Clean output (remove wrappers)
+    };
+    ///\brief Dump the user input, per transaction or raw.
+    ///
+    ///\param[in] Stream - stream to write to.
+    ///\param[in] DumpFlags - what to dump
+    ///
+    void dump(llvm::raw_ostream& Stream,
+              DumpFlags = DumpFlags(kDumpTransactions|kDumpCleanSource)) const;
 
   private:
     ///\brief Finalizes the consumers (e.g. CodeGen) on a transaction.

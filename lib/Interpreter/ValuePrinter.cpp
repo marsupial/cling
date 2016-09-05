@@ -177,6 +177,7 @@ static std::string executePrintValue(const Value &V, const T &val) {
   printValueSS << getTypeString(V);
   printValueSS << (const void *) &val;
   printValueSS << ");";
+  printValueSS << " // " << utils::Synthesize::UniquePrefix;
 
   Interpreter *Interp = V.getInterpreter();
   Value printValueV;
