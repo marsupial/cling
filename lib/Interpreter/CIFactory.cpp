@@ -534,7 +534,10 @@ namespace {
   public:
     
     void addArgument(const char* arg, std::string value = std::string()) {
-      m_Saved.push_back(std::make_pair(arg,std::move(value)));
+      m_Saved.push_back(std::make_pair(arg,value));
+    }
+    void addHeaderSearch(std::string value) {
+      m_Saved.push_back(std::make_pair("-I",value));
     }
     container_t::const_iterator begin() const { return m_Saved.begin(); }
     container_t::const_iterator end() const { return m_Saved.end(); }
@@ -569,7 +572,7 @@ namespace {
               cling::utils::LogNonExistantDirectory(Path);
           }
           else
-            Args.addArgument("-I", Path.str());
+            Args.addHeaderSearch(Path.str());
         }
       }
       ::pclose(PF);
@@ -608,7 +611,7 @@ namespace {
     }
 
     for (llvm::StringRef Path : Paths)
-      Args.addArgument("-I", Path.str());
+      Args.addHeaderSearch(Path.str());
 
     return true;
   }
@@ -629,7 +632,7 @@ namespace {
         utils::SplitPaths(Includes, Dirs, utils::kAllowNonExistant,
                           ";", Verbose);
         for (const llvm::StringRef& Path : Dirs)
-          sArguments.addArgument("-I", Path.str());
+          sArguments.addHeaderSearch(Path.str());
       }
 
       // When built with access to the proper Windows APIs, try to actually find
@@ -640,7 +643,7 @@ namespace {
           const std::string VSIncl = VSDir + "\\VC\\include";
           if (Verbose)
             llvm::errs() << "Adding VisualStudio SDK: '" << VSIncl << "'\n";
-          sArguments.addArgument("-I", std::move(VSIncl));
+          sArguments.addHeaderSearch(std::move(VSIncl));
         }
         if (!opts.NoBuiltinInc) {
           std::string WindowsSDKDir;
@@ -650,13 +653,13 @@ namespace {
             WindowsSDKDir += "include";
             if (Verbose)
               llvm::errs() << "Adding Windows SDK: '" << WindowsSDKDir << "'\n";
-            sArguments.addArgument("-I", std::move(WindowsSDKDir));
+            sArguments.addHeaderSearch(std::move(WindowsSDKDir));
           }
           else {
             VSDir.append("\\VC\\PlatformSDK\\Include");
             if (Verbose)
               llvm::errs() << "Adding Platform SDK: '" << VSDir << "'\n";
-            sArguments.addArgument("-I", std::move(VSDir));
+            sArguments.addHeaderSearch(std::move(VSDir));
           }
         }
       }
@@ -672,7 +675,7 @@ namespace {
           llvm::errs() << "Adding UniversalCRT SDK: '"
                        << UniversalCRTSdkPath << "'\n";
         }
-        sArguments.addArgument("-I", std::move(UniversalCRTSdkPath));
+        sArguments.addHeaderSearch(std::move(UniversalCRTSdkPath));
       }
 #endif
 
