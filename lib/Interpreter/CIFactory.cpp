@@ -1132,7 +1132,7 @@ namespace {
       return false;
     }
   };
-  
+
   static CompilerInstance*
   createCIImpl(std::unique_ptr<llvm::MemoryBuffer> Buffer,
                const CompilerOptions& COpts, const char* LLVMDir,
@@ -1262,7 +1262,10 @@ namespace {
     if (!PCHFileName.empty()) {
       assert(!Diags->hasErrorOccurred() && !Diags->hasFatalErrorOccurred() &&
              "Error has already occured");
-      if (llvm::sys::fs::is_regular_file(PCHFileName)) {
+
+      if (cling::utils::LookForFile(argvCompile, PCHFileName,
+              &CI->getFileManager(),
+              COpts.Verbose ? "Precompiled header" : nullptr)) {
         // Load target options etc from PCH.
         struct PCHListener: public ASTReaderListener {
           CompilerInvocation& m_Invocation;
