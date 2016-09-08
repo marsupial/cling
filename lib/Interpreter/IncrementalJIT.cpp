@@ -14,6 +14,16 @@
 #include "llvm/ExecutionEngine/Orc/LambdaResolver.h"
 #include "llvm/Support/DynamicLibrary.h"
 
+#if defined(LLVM_ON_WIN32)
+# define WIN32_LEAN_AND_MEAN
+# define NOGDI
+# ifndef NOMINMAX
+#  define NOMINMAX
+# endif
+# include <Windows.h>
+# include <Psapi.h>
+#endif
+
 #ifdef __APPLE__
 // Apple adds an extra '_'
 # define MANGLE_PREFIX "_"
@@ -225,6 +235,46 @@ IncrementalJIT::getSymbolAddressWithoutMangling(llvm::StringRef Name,
 
   if (auto Sym = m_LazyEmitLayer.findSymbol(Name, false))
     return Sym;
+
+#if defined(LLVM_ON_WIN32)
+ #ifdef _WIN64
+  const DWORD Flags = LIST_MODULES_64BIT;
+ #else
+  const DWORD Flags = LIST_MODULES_32BIT;
+ #endif
+
+  DWORD Bytes;
+  const std::string CStr = Name.str();
+  llvm::SmallVector<HMODULE, 1024> Modules;
+  Modules.resize(Modules.capacity());
+  if (::EnumProcessModulesEx(::GetCurrentProcess(), &Modules[0],
+                           Modules.capacity_in_bytes(), &Bytes, Flags) != 0) {
+    // Search the modules we got
+    const DWORD NumNeeded = Bytes/sizeof(HMODULE);
+    const DWORD NumFirst = Modules.size();
+    if (NumNeeded < NumFirst)
+      Modules.resize(NumNeeded);
+
+    // In reverse so user loaded modules are searched first
+    for (auto It = Modules.rbegin(), End = Modules.rend(); It < End; ++It) {
+      if (const void* Addr = ::GetProcAddress(*It, CStr.c_str()))
+        return llvm::orc::JITSymbol(uint64_t(Addr),
+                                    llvm::JITSymbolFlags::Exported);
+    }
+    if (NumNeeded > NumFirst) {
+      // The number of modules was too small to get them all, so call again
+      Modules.resize(NumNeeded);
+      if (::EnumProcessModulesEx(::GetCurrentProcess(), &Modules[0],
+                               Modules.capacity_in_bytes(), &Bytes, Flags) != 0) {
+        for (DWORD i = NumNeeded-1; i > NumFirst; --i) {
+          if (const void* Addr = ::GetProcAddress(Modules[i], CStr.c_str()))
+            return llvm::orc::JITSymbol(uint64_t(Addr),
+                                        llvm::JITSymbolFlags::Exported);
+        }
+      }
+    }
+  }
+#endif
 
   return llvm::orc::JITSymbol(nullptr);
 }
