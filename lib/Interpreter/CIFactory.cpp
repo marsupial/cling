@@ -935,17 +935,28 @@ namespace {
     return &Cmd->getArguments();
   }
 
+  static void SetVersionMacro(PreprocessorOptions& PPOpts, const char* Macro,
+                              int Major, int Minor, int Patch) {
+    std::stringstream s;
+    s << Macro << "=" << (Major * 100) + (Minor * 10) + Patch;
+    PPOpts.addMacroDef(s.str());
+  }
+
   /// Set cling's preprocessor defines to match the cling binary.
   static void SetPreprocessorFromBinary(PreprocessorOptions& PPOpts) {
-#ifdef _MSC_VER
+
+#if defined(_MSC_VER)
+    PPOpts.addMacroDef("__CLING__MSC_VER=" ClingStringify(_MSC_VER));
+    //  This seems harsh, should it be driven by an actual setting?
     PPOpts.addMacroDef("_HAS_EXCEPTIONS=0");
-#ifdef _DEBUG
-    PPOpts.addMacroDef("_DEBUG=1");
-#elif defined(NDEBUG)
-    PPOpts.addMacroDef("NDEBUG=1");
-#else // well, what else?
-    PPOpts.addMacroDef("NDEBUG=1");
-#endif
+    // Should these two be done for all compilers?
+  #ifdef _DEBUG
+      PPOpts.addMacroDef("_DEBUG=1");
+  #else
+      PPOpts.addMacroDef("NDEBUG=1");
+  #endif
+    // https://blogs.msdn.microsoft.com/vcblog/2015/12/04/clang-with-microsoft-codegen-in-vs-2015-update-1/
+    // _MSC_VER and __clang__ can both be defined.
 #endif
 
     // Since cling, uses clang instead, macros always sees __CLANG__ defined
@@ -954,15 +965,63 @@ namespace {
     // of the two is the underlying compiler.
 
 #ifdef __clang__
-    PPOpts.addMacroDef("__CLING__clang__=" ClingStringify(__clang__));
+  #if defined(__apple_build_version__)
+     // __apple_build_version__ >= 8000031 Xcode 8
+     #if __apple_build_version__ >= 7030029
+      #define __CLING__clang__ 380
+     #elif __apple_build_version__ >= 7000000
+      #define __CLING__clang__ 370
+     #elif __apple_build_version__ >= 6020037
+      #define __CLING__clang__ 360
+     #elif __apple_build_version__ >= 6000051
+      #define __CLING__clang__ 350
+     #elif __apple_build_version__ >= 5030038
+      #define __CLING__clang__ 340
+     #elif __apple_build_version__ >= 5000275
+      #define __CLING__clang__ 330
+     #elif __apple_build_version__ >= 4250024
+      #define __CLING__clang__ 320
+     #elif __apple_build_version__ >= 3180045
+      #define __CLING__clang__ 310
+     #elif __apple_build_version__ >= 2111001
+      #define __CLING__clang__ 300
+     #endif
+  #endif
+  #ifndef __CLING__clang__
+    SetVersionMacro(PPOpts, "__CLING__clang__", __clang_major__,
+                    __clang_minor__, __clang_patchlevel__);
+  #else
+    PPOpts.addMacroDef("__CLING__clang__=" ClingStringify(__CLING__clang__));
+    #undef __CLING__clang__
+  #endif
+
+  #if defined(__GLIBCXX__)
+    // __GLIBCXX__ is defined in headers, so let's do this now in case it's
+    // desired before any #include statments.
+    // Sadly there's no easy way to get the libstdc++ version.
+    PPOpts.addMacroDef("__CLING__GLIBCXX__=" ClingStringify(__GLIBCXX__));
+  #endif
+
 #elif defined(__GNUC__)
     PPOpts.addMacroDef("__CLING__GNUC__=" ClingStringify(__GNUC__));
+    PPOpts.addMacroDef("__CLING__GNUC_MINOR__=" ClingStringify(__GNUC_MINOR__));
+    // __GLIBCXX__ is defined in headers, so let's do this now in case it's
+    // desired before any #include statments.
+    // Do a more informative version that expands to g++ version
+    SetVersionMacro(PPOpts, "__CLING__GLIBCXX__", __GNUC__,
+                    __GNUC_MINOR__, __GNUC_PATCHLEVEL__);
+
 #endif
 
-// https://gcc.gnu.org/onlinedocs/libstdc++/manual/using_dual_abi.html
 #ifdef _GLIBCXX_USE_CXX11_ABI
+  // https://gcc.gnu.org/onlinedocs/libstdc++/manual/using_dual_abi.html
     PPOpts.addMacroDef("_GLIBCXX_USE_CXX11_ABI="
                        ClingStringify(_GLIBCXX_USE_CXX11_ABI));
+#endif
+#ifdef _GLIBCXX_USE_NANOSLEEP
+  // http://stackoverflow.com/questions/12523122/what-is-glibcxx-use-nanosleep-all-about
+    PPOpts.addMacroDef("_GLIBCXX_USE_NANOSLEEP="
+                       ClingStringify(_GLIBCXX_USE_NANOSLEEP));
 #endif
   }
 
