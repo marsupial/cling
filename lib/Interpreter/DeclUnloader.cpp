@@ -423,7 +423,10 @@ bool DeclUnloader::VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC)
     } else
       reportContext(errors[0], Out);
 
-    Sema->Diags.Report(Loc, diag::err_expected) << Out.str();
+    DiagnosticsEngine& Diags = Sema->Diags;
+    Diags.Report(Loc, diag::err_expected) << Out.str();
+    Diags.Report(Loc, Diags.getCustomDiagID(DiagnosticsEngine::Level::Note,
+                 "Please run .source and send output to cling-dev@cern.ch"));
   }
 
 #endif
@@ -456,14 +459,10 @@ bool DeclUnloader::VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC)
 
     bool Successful = true;
     if (DC->containsDecl(D)) {
-#ifdef NDEBUG
-      DC->removeDecl(D);
-#else
       llvm::SmallVector<DeclContext*, 4> errors;
       DC->removeDecl(D, &errors);
       if (!errors.empty())
         reportErrors(m_Sema, D, Loc, errors);
-#endif
     }
 
     // With the bump allocator this is nop.

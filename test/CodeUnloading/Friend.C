@@ -6,7 +6,7 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: cat %s | %cling -I %S | FileCheck -allow-empty %s
+// RUN: cat %s | %cling -I %S -Xclang -verify 2>&1 | FileCheck -allow-empty %s
 // Test friendUnload
 
 void bestFriend();
@@ -22,7 +22,9 @@ void bestFriend();
 .compareState "NF"
 //CHECK-NOT: Differences
 
-#include "FriendRecursive.h"
+// TODO Fix why this actually errors over expected error & note testing!
+#include "FriendRecursive.h" // expected-error@FriendRecursive.h:6 {{expected success trying to remove CXXRecord 'TestB' from TranslationUnit}}
+// expected-note@FriendRecursive.h:6 {{Please run .source and send output to cling-dev@cern.ch}}
 .undo
 .compareState "NF"
 //CHECK-NOT: Differences
