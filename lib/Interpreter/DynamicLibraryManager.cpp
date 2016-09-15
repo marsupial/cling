@@ -153,25 +153,31 @@ namespace cling {
     if (foundDyLib.empty()) {
       // Add DyLib extension:
       llvm::SmallString<512> filenameWithExt(libStem);
-#if defined(LLVM_ON_UNIX)
-#ifdef __APPLE__
       llvm::SmallString<512>::iterator IStemEnd = filenameWithExt.end() - 1;
-#endif
-      static const char* DyLibExt = ".so";
+
+      const char* kLibraryExtenstions[] = {
+#if defined(LLVM_ON_UNIX)
+ #if defined(__APPLE__)
+        ".dylib",
+ #endif
+        ".so",
 #elif defined(LLVM_ON_WIN32)
-      static const char* DyLibExt = ".dll";
+        ".dll",
 #else
-# error "Unsupported platform."
+ #error "Unknown library extension."
 #endif
-      filenameWithExt += DyLibExt;
-      foundDyLib = lookupLibInPaths(filenameWithExt);
-#ifdef __APPLE__
-      if (foundDyLib.empty()) {
-        filenameWithExt.erase(IStemEnd + 1, filenameWithExt.end());
-        filenameWithExt += ".dylib";
+        nullptr,
+      };
+
+      for (unsigned i = 0; ;
+           filenameWithExt.erase(IStemEnd + 1, filenameWithExt.end())) {
+        filenameWithExt += kLibraryExtenstions[i];
         foundDyLib = lookupLibInPaths(filenameWithExt);
+        if (!foundDyLib.empty())
+          break;
+        if (!kLibraryExtenstions[++i])
+          break;
       }
-#endif
     }
 
     if (foundDyLib.empty())
