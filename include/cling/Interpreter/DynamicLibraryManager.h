@@ -54,24 +54,6 @@ namespace cling {
 
     InterpreterCallbacks* m_Callbacks;
 
-    ///\brief Concatenates current include paths and the system include paths
-    /// and performs a lookup for the filename.
-    ///\param[in] libStem - The filename being looked up
-    ///
-    ///\returns the canonical path to the file or empty string if not found
-    ///
-    std::string lookupLibInPaths(llvm::StringRef libStem) const;
-
-
-    ///\brief Concatenates current include paths and the system include paths
-    /// and performs a lookup for the filename. If still not found it tries to
-    /// add the platform-specific extensions (such as so, dll, dylib) and
-    /// retries the lookup (from lookupLibInPaths)
-    ///\param[in] filename - The filename being looked up
-    ///
-    ///\returns the canonical path to the file or empty string if not found
-    ///
-    std::string lookupLibMaybeAddExt(llvm::StringRef filename) const;
   public:
     DynamicLibraryManager(const InvocationOptions& Opts);
     ~DynamicLibraryManager();

@@ -36,6 +36,174 @@ namespace llvm {
 }
 
 namespace cling {
+namespace {
+
+  class FileSearch {
+    enum BestMatch {
+      kNoMatch,       // Nothing matched
+      kMatchNotRight, // Matched something, but it wasn't right filetype
+      kMatchName,     // Matched by name
+      kMatchEdited    // Matched by name after editing the name
+    };
+    typedef llvm::SmallVectorImpl<llvm::StringRef> const * NameEdits;
+
+    llvm::SmallString<1024> m_Path;
+    NameEdits m_Prefixes;
+    NameEdits m_Extensions;
+    std::string m_FilePath;
+    BestMatch m_BestMatch;
+    const bool m_Verbose;
+
+    bool testFile(std::string FilePath) {
+      if (m_Verbose)
+        cling::errs() << "Looking for library: '" << FilePath << "'\n";
+      bool Exists;
+      if (DynamicLibraryManager::isSharedLib(FilePath, &Exists)) {
+        m_FilePath.swap(FilePath);
+        m_BestMatch = kMatchName;
+        if (m_Verbose)
+          cling::errs() << "Found library: '" << m_FilePath << "'\n";
+        return true;
+      }
+      if (Exists && !m_BestMatch) {
+        if (m_Verbose)
+          cling::errs() << "Ignoring '" << FilePath << "', it is not a library\n";
+        m_BestMatch = kMatchNotRight;
+      }
+      return false;
+    }
+
+    BestMatch lookForFileExt(llvm::StringRef Name, llvm::StringRef Path) {
+      m_Path.assign(Path);
+      llvm::sys::path::append(m_Path, Name);
+      if (testFile(m_Path.str()))
+        return kMatchName;
+
+      if (m_Extensions && m_BestMatch < kMatchName) {
+        for (const auto& Ext : *m_Extensions) {
+          m_Path.resize(Path.size());
+          llvm::sys::path::append(m_Path, Name+Ext);
+          if (testFile(m_Path.str()))
+            return kMatchEdited;
+        }
+      }
+      return kNoMatch;
+    }
+
+    BestMatch lookForFile(llvm::StringRef Name, llvm::StringRef Path) {
+      // If the directory doesn't exist, neither will any file!
+      if (!llvm::sys::fs::is_directory(Path)) {
+        if (m_Verbose)
+          utils::LogNonExistantDirectory(Path);
+        return kNoMatch;
+      }
+
+      // FileName or FileName.ext takes precedence over libFileName.ext
+      const BestMatch Match = lookForFileExt(Name, Path);
+      if (Match > kMatchNotRight)
+        return Match;
+
+      if (m_BestMatch < kMatchName) {
+        if (m_Prefixes) {
+          const std::string NameStr = Name.str();
+          for (const auto& Prefix : *m_Prefixes) {
+            if (lookForFileExt(Prefix.str()+NameStr, Path))
+              return kMatchEdited;
+          }
+        }
+      }
+      return kNoMatch;
+    }
+
+    struct NameEditRAII {
+      NameEdits m_Saved;
+      NameEdits& m_Restore;
+      NameEditRAII(llvm::StringRef Name, NameEdits& Exts, bool IsExt = true)
+      : m_Saved(Exts), m_Restore(Exts) {
+        if (!m_Saved)
+          return;
+        if (IsExt) {
+          llvm::StringRef Ext = llvm::sys::path::extension(Name);
+          if (Ext.empty())
+            return;
+          // If the extension is in the list already, don't run extension pass
+          if (std::find(m_Saved->begin(), m_Saved->end(), Ext)
+              != m_Saved->end()) {
+            m_Restore = nullptr;
+            return;
+          }
+        } else {
+          // If the the name begins with a prefix, don't run prefix pass
+          for (const auto& Prefix : *m_Saved) {
+            if (Name.startswith(Prefix)) {
+              m_Restore = nullptr;
+              return;
+            }
+          }
+        }
+      }
+      ~NameEditRAII() { if (m_Saved) m_Restore = m_Saved; }
+    };
+
+  public:
+    FileSearch(NameEdits Extensions = nullptr,
+               NameEdits Prefixes = nullptr, bool Verbose = false)
+      : m_Prefixes(Prefixes), m_Extensions(Extensions), m_BestMatch(kNoMatch),
+        m_Verbose(Verbose) {}
+
+    std::string operator () (llvm::StringRef Name,
+                             const std::vector<std::string>& Paths) {
+      // Set the extension and prefix lists to null is the name has either
+      // an extension or prefix.
+      NameEditRAII Exts(Name, m_Extensions), Prfx(Name, m_Prefixes, false);
+      for (const auto& Path : Paths) {
+        // Absolute name match, best possible, done
+        if (lookForFile(Name, Path) == kMatchName)
+          break;
+
+        // Prior behaviour, take first match whether it's a library or not
+        // if (m_BestMatch == kMatchNotRight)
+        //  break;
+      }
+      if (m_BestMatch >= kMatchName)
+        return m_FilePath;
+      return std::string();
+    }
+
+    bool isSharedLib() const {
+      return m_BestMatch >= kMatchName;
+    }
+  };
+} // anonymous namespace
+
+  bool DynamicLibraryManager::isSharedLib(llvm::StringRef LibName,
+                                          bool* exists) {
+    using namespace llvm::sys::fs;
+    file_magic Magic;
+    const std::error_code Error = identify_magic(LibName, Magic);
+    if (exists)
+      *exists = !Error;
+
+    return !Error &&
+#ifdef __APPLE__
+      (Magic == file_magic::macho_fixed_virtual_memory_shared_lib
+       || Magic == file_magic::macho_dynamically_linked_shared_lib
+       || Magic == file_magic::macho_dynamically_linked_shared_lib_stub
+       || Magic == file_magic::macho_universal_binary)
+#elif defined(LLVM_ON_UNIX)
+#ifdef __CYGWIN__
+      (Magic == file_magic::pecoff_executable)
+#else
+      (Magic == file_magic::elf_shared_object)
+#endif
+#elif defined(LLVM_ON_WIN32)
+      (Magic == file_magic::pecoff_executable || platform::IsDLL(LibName.str()))
+#else
+# error "Unsupported platform."
+#endif
+      ;
+  }
+
   DynamicLibraryManager::DynamicLibraryManager(const InvocationOptions& Opts)
     : m_Opts(Opts), m_Callbacks(0) {
     const llvm::SmallVector<const char*, 10> kSysLibraryEnv = {
@@ -90,109 +258,6 @@ namespace cling {
     }
   }
 
-  bool DynamicLibraryManager::isSharedLib(llvm::StringRef LibName,
-                                          bool* exists /*= nullptr*/) {
-    using namespace llvm::sys::fs;
-    file_magic Magic;
-    const std::error_code Error = identify_magic(LibName, Magic);
-    if (exists)
-      *exists = !Error;
-
-    return !Error &&
-#ifdef __APPLE__
-      (Magic == file_magic::macho_fixed_virtual_memory_shared_lib
-       || Magic == file_magic::macho_dynamically_linked_shared_lib
-       || Magic == file_magic::macho_dynamically_linked_shared_lib_stub
-       || Magic == file_magic::macho_universal_binary)
-#elif defined(LLVM_ON_UNIX)
-#ifdef __CYGWIN__
-      (Magic == file_magic::pecoff_executable)
-#else
-      (Magic == file_magic::elf_shared_object)
-#endif
-#elif defined(LLVM_ON_WIN32)
-      (Magic == file_magic::pecoff_executable || platform::IsDLL(LibName.str()))
-#else
-# error "Unsupported platform."
-#endif
-      ;
-  }
-
-  static std::string lookInPaths(llvm::StringRef libStem,
-                                 const std::vector<std::string>& Paths,
-                                 bool &exists) {
-    llvm::SmallString<1024> ThisPath;
-    for (const auto& Path : Paths) {
-      ThisPath.assign(Path);
-      llvm::sys::path::append(ThisPath, libStem);
-      const std::string lib = ThisPath.str();
-      if (isSharedLib(lib, &exists))
-        return lib;
-      if (exists)
-        break;
-    }
-    return std::string();
-  }
-
-  std::string
-  DynamicLibraryManager::lookupLibInPaths(llvm::StringRef libStem) const {
-    bool exists = false;
-    const std::string Path = lookInPaths(libStem, m_Opts.LibSearchPath, exists);
-    if (!Path.empty() || exists)
-      return Path;
-
-    return lookInPaths(libStem, m_SystemSearchPaths, exists);
-  }
-
-  std::string
-  DynamicLibraryManager::lookupLibMaybeAddExt(llvm::StringRef libStem) const {
-    using namespace llvm::sys;
-
-    std::string foundDyLib = lookupLibInPaths(libStem);
-
-    if (foundDyLib.empty()) {
-      // Add DyLib extension:
-      llvm::SmallString<512> filenameWithExt(libStem);
-      llvm::SmallString<512>::iterator IStemEnd = filenameWithExt.end() - 1;
-
-      const char* kLibraryExtenstions[] = {
-#if defined(LLVM_ON_UNIX)
- #if defined(__APPLE__)
-        ".dylib",
- #endif
-        ".so",
-#elif defined(LLVM_ON_WIN32)
-        ".dll",
-#else
- #error "Unknown library extension."
-#endif
-        nullptr,
-      };
-
-      for (unsigned i = 0; ;
-           filenameWithExt.erase(IStemEnd + 1, filenameWithExt.end())) {
-        filenameWithExt += kLibraryExtenstions[i];
-        foundDyLib = lookupLibInPaths(filenameWithExt);
-        if (!foundDyLib.empty())
-          break;
-        if (!kLibraryExtenstions[++i])
-          break;
-      }
-    }
-
-    if (foundDyLib.empty())
-      return std::string();
-
-    // get canonical path name and check if already loaded
-    const std::string Path = platform::NormalizePath(foundDyLib);
-    if (Path.empty()) {
-      cling::errs() << "cling::DynamicLibraryManager::lookupLibMaybeAddExt(): "
-        "error getting real (canonical) path of library " << foundDyLib << '\n';
-      return foundDyLib;
-    }
-    return Path;
-  }
-
   std::string DynamicLibraryManager::normalizePath(llvm::StringRef path) {
     // Make the path canonical if the file exists.
     const std::string Path = path.str();
@@ -220,14 +285,32 @@ namespace cling {
         return FileEntry(std::move(libStem.mNameOrPath), FileEntry::kResolved);
     }
 
-    std::string foundName = lookupLibMaybeAddExt(libName);
-    if (foundName.empty() && libName.find("lib")!=0) {
-      // try with "lib" prefix:
-      foundName = lookupLibMaybeAddExt("lib" + libName);
-    }
+    // 'Overallocate' so users can add custom extensions/prefixes
+    // Stackbased so it's not a big deal
+    const llvm::SmallVector<llvm::StringRef, 6> kLibraryExtenstions = {
+#if defined(LLVM_ON_UNIX)
+#if defined(__APPLE__)
+      ".dylib",
+#endif
+      ".so",
+#elif defined(LLVM_ON_WIN32)
+      ".dll",
+#else
+#error "Unknown library extension."
+#endif
+    };
+    const llvm::SmallVector<llvm::StringRef, 3> kLibraryPrefixes = {
+      "lib"
+    };
 
-    if (isSharedLib(foundName))
-      return FileEntry(normalizePath(foundName), FileEntry::kLibrarySet);
+    FileSearch Search(&kLibraryExtenstions, &kLibraryPrefixes, m_Opts.Verbose());
+    std::string Found = Search(libName, m_Opts.LibSearchPath);
+    if (Found.empty())
+      Found = Search(libName, m_SystemSearchPaths);
+    if (Search.isSharedLib())
+      return FileEntry(platform::NormalizePath(Found), FileEntry::kLibrarySet);
+
+    // Mark as resolved, nothing was found, or something that isn't a shared lib
     return FileEntry(std::move(libStem.mNameOrPath), FileEntry::kResolved);
   }
 
