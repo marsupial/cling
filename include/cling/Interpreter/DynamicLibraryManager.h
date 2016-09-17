@@ -10,7 +10,7 @@
 #ifndef CLING_DYNAMIC_LIBRARY_MANAGER_H
 #define CLING_DYNAMIC_LIBRARY_MANAGER_H
 
-#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
 
@@ -37,11 +37,10 @@ namespace cling {
 
   private:
     typedef const void* DyLibHandle;
-    typedef llvm::DenseMap<DyLibHandle, std::string> DyLibs;
+    typedef llvm::StringMap<DyLibHandle> DyLibs;
     ///\brief DynamicLibraries loaded by this Interpreter.
     ///
     DyLibs m_DyLibs;
-    llvm::StringSet<> m_LoadedLibraries;
 
     ///\brief Contains the list of the current include paths.
     ///
