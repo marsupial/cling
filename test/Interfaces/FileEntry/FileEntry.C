@@ -97,15 +97,14 @@ gCling->loadFile("libTest")
 
 // Move file libTest.h back to libTest
 renamer();
-// ### clang's caching is interfering with how this should work!
-//gCling->loadFile(feH)
-// NOCHECK: (cling::Interpreter::CompilationResult) (cling::Interpreter::CompilationResult::kSuccess) : ({{(unsigned )?}}int) 0
+gCling->loadFile(feH)
+// CHECK: (cling::Interpreter::CompilationResult) (cling::Interpreter::CompilationResult::kSuccess) : ({{(unsigned )?}}int) 0
 
-//LoadedFrom
-// NOCHECK: (const char *) "DirB"
+LoadedFrom
+// CHECK: (const char *) "DirB"
 
-//funcFace()
-// NOCHECK: (int) 462
+funcFace()
+// CHECK: (int) 462
 
 renamer();
 gCling->loadFile("DirB/libTest")

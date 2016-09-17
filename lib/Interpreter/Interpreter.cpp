@@ -1445,37 +1445,54 @@ namespace cling {
     if (canonicalFile.empty())
       canonicalFile = std::move(file.mNameOrPath);
 
-    //Copied from clang's PPDirectives.cpp
-    bool isAngled = false;
+    // PP::LookupFile used to issue 'nice' diagnostic
+    // Copied from clang's PPDirectives.cpp
     // Clang doc says:
     // "LookupFrom is set when this is a \#include_next directive, it
     // specifies the file to start searching from."
-    const DirectoryLookup* FromDir = 0;
-    const clang::FileEntry* FromFile = 0;
-    const DirectoryLookup* CurDir = 0;
     Preprocessor& PP = getCI()->getPreprocessor();
-    // PP::LookupFile uses it to issue 'nice' diagnostic
-    SourceLocation fileNameLoc;
-    const clang::FileEntry* FE = PP.LookupFile(fileNameLoc, canonicalFile,
-                       isAngled, FromDir, FromFile,
+    SourceManager& SM = PP.getSourceManager();
+    FileManager& FM = SM.getFileManager();
+    const unsigned ourUID = FM.nextFileID();
+    const DirectoryLookup *CurDir = 0;
+TOP:
+    const clang::FileEntry* FE = PP.LookupFile(SourceLocation(), canonicalFile,
+                       /*isAngled*/ false, /*FromDir*/ 0, /*FromFile*/ 0,
                        CurDir, /*SearchPath*/0, /*RelativePath*/ 0,
                        /*suggestedModule*/0, 0 /*IsMapped*/, /*SkipCache*/false,
                        /*OpenFile*/ false, /*CacheFail*/ false);
     if (FE && FE->isValid()) {
-      // Just because it's valid in the cache, doesn't mean it really is
-      // ###TODO: We can avoid re-stating a file when it's actually not from
-      // cache by comparing against FileManager::NextFileUID
+      // The following is great for running the intepreter interactively as
+      // the file-system and files can change durring the process' lifetime.
+      // When not running interactively, should the error recovery be less
+      // forgiving? Is there then an expectation that if a file was seen or
+      // missing once at a given location that state should be honored for
+      // the process lifetime?
+
+      // Just because it's valid in the cache, doesn't mean it really is.
+      // Avoid hitting the fs if the FileEntry is brand new...it was just stated
       vfs::Status Stat;
-      FileManager& FM = PP.getSourceManager().getFileManager();
-      if (!FM.getNoncachedStatValue(FE->getName(), Stat)) {
-        if (Stat.isRegularFile()||Stat.isSymlink()) {
+      bool        StatDone = false;
+      if (FE->getUID() == ourUID ||
+          (StatDone = !FM.getNoncachedStatValue(FE->getName(), Stat))) {
+        if (!StatDone || Stat.isRegularFile() || Stat.isSymlink()) {
+          // Valid file, return it as an resolved/absolute path
           SmallString<512> path(FE->getName());
           FM.makeAbsolutePath(path);
           return FileEntry(FE, path.c_str());
         }
       }
-      else
-        FM.invalidateCache(const_cast<clang::FileEntry*>(FE));
+      else {
+        // There was a previous file but it's no longer valid
+        FileID FID = SM.translateFile(FE);
+        if (FID.isValid()) {
+          // Invalidate it in the cache and try the search paths again.
+          // FIXME: Should start the new search from the last directory searched
+          SM.invalidateCache(FID);
+          goto TOP;
+        } else
+          FM.invalidateCache(const_cast<clang::FileEntry*>(FE), &SM);
+      }
     }
     return getDynamicLibraryManager()->lookupLibrary(std::move(canonicalFile));
   }
@@ -1504,7 +1521,7 @@ namespace cling {
   Interpreter::loadHeader( FileEntry fileObj, Transaction** T /*= 0*/) {
     FileEntry file = lookupFileOrLibrary(std::move(fileObj));
     if (!file.exists()) {
-      getSema().Diag(getSourceLocation(), clang::diag::err_pp_file_not_found)
+      getSema().Diag(getSourceLocation(true), clang::diag::err_pp_file_not_found)
         << file.name();
       return kFailure;
     }
