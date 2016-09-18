@@ -79,7 +79,7 @@ namespace cling {
     std::string Err;
     for (DyLibs::const_reverse_iterator Itr = m_DyLibs.rbegin(),
          End = m_DyLibs.rend(); Itr < End; ++Itr) {
-      platform::DLClose(Itr->second, &Err);
+      platform::DLClose(Itr->second.getPointer(), &Err);
       if (!Err.empty()) {
         llvm::errs() << "DynamicLibraryManager::~DynamicLibraryManager(): "
                      << Err << '\n';
@@ -223,10 +223,8 @@ namespace cling {
       return kLoadLibNotFound;
 
     const std::string &canonicalLib = file.filePath();
-    if (m_DyLibs.lookup(canonicalLib))
+    if (m_DyLibs.count(canonicalLib))
       return kLoadLibAlreadyLoaded;
-
-    // TODO: !permanent case
 
     std::string errMsg;
     DyLibHandle dyLibHandle = platform::DLOpen(canonicalLib, &errMsg);
@@ -236,7 +234,8 @@ namespace cling {
       return kLoadLibLoadError;
     }
 
-    if (!m_DyLibs.insert(std::make_pair(canonicalLib, dyLibHandle)).second) {
+    if (!m_DyLibs.insert(std::make_pair(canonicalLib,
+                                  DyLibValue(dyLibHandle, permanent))).second) {
       // Perhaps another thread beat us?
       platform::DLClose(dyLibHandle);
       return kLoadLibAlreadyLoaded;
@@ -255,10 +254,14 @@ namespace cling {
     if (Itr == m_DyLibs.end())
       return;
 
-    // TODO: !permanent case
+    DyLibValue& loadedLib = Itr->second;
+    if (loadedLib.getInt()) {
+      llvm::errs() << "'" << canonicalLoadedLib << "' was loaded permanently.";
+      return;
+    }
 
     std::string errMsg;
-    DyLibHandle dyLibHandle = Itr->second;
+    DyLibHandle dyLibHandle = loadedLib.getPointer();
     platform::DLClose(dyLibHandle, &errMsg);
     if (!errMsg.empty()) {
       cling::errs() << "cling::DynamicLibraryManager::unloadLibrary(): "
