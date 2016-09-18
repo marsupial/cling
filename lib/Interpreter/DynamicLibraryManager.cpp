@@ -76,14 +76,16 @@ namespace cling {
   }
 
   DynamicLibraryManager::~DynamicLibraryManager() {
-    std::string Err;
-    for (DyLibs::const_reverse_iterator Itr = m_DyLibs.rbegin(),
-         End = m_DyLibs.rend(); Itr < End; ++Itr) {
-      platform::DLClose(Itr->second.getPointer(), &Err);
-      if (!Err.empty()) {
-        llvm::errs() << "DynamicLibraryManager::~DynamicLibraryManager(): "
-                     << Err << '\n';
-        Err.clear();
+    if (m_DyLibs) {
+      std::string Err;
+      for (DyLibs::const_reverse_iterator Itr = m_DyLibs->rbegin(),
+           End = m_DyLibs->rend(); Itr < End; ++Itr) {
+        platform::DLClose(Itr->second.getPointer(), &Err);
+        if (!Err.empty()) {
+          llvm::errs() << "DynamicLibraryManager::~DynamicLibraryManager(): "
+                       << Err << '\n';
+          Err.clear();
+        }
       }
     }
   }
@@ -223,7 +225,9 @@ namespace cling {
       return kLoadLibNotFound;
 
     const std::string &canonicalLib = file.filePath();
-    if (m_DyLibs.count(canonicalLib))
+    if (!m_DyLibs)
+      m_DyLibs.reset(new DyLibs);
+    else if (m_DyLibs->count(canonicalLib))
       return kLoadLibAlreadyLoaded;
 
     std::string errMsg;
@@ -234,7 +238,7 @@ namespace cling {
       return kLoadLibLoadError;
     }
 
-    if (!m_DyLibs.insert(std::make_pair(canonicalLib,
+    if (!m_DyLibs->insert(std::make_pair(canonicalLib,
                                   DyLibValue(dyLibHandle, permanent))).second) {
       // Perhaps another thread beat us?
       platform::DLClose(dyLibHandle);
@@ -248,10 +252,13 @@ namespace cling {
   }
 
   void DynamicLibraryManager::unloadLibrary(FileEntry libStem) {
+    if (!m_DyLibs)
+      return;
+
     FileEntry file = lookupLibrary(std::move(libStem));
     const std::string &canonicalLoadedLib = file.filePath();
-    DyLibs::iterator Itr = m_DyLibs.find(canonicalLoadedLib);
-    if (Itr == m_DyLibs.end())
+    DyLibs::iterator Itr = m_DyLibs->find(canonicalLoadedLib);
+    if (Itr == m_DyLibs->end())
       return;
 
     DyLibValue& loadedLib = Itr->second;
@@ -271,12 +278,14 @@ namespace cling {
     if (InterpreterCallbacks* C = getCallbacks())
       C->LibraryUnloaded(dyLibHandle, canonicalLoadedLib);
 
-    m_DyLibs.erase(Itr);
+    m_DyLibs->erase(Itr);
+    if (m_DyLibs->empty())
+      m_DyLibs.reset();
   }
 
   bool DynamicLibraryManager::isLibraryLoaded( const FileEntry &file ) const {
     assert(file.resolved() && "isLibraryLoaded requires a resolved path");
-    return m_DyLibs.count(file.filePath());
+    return m_DyLibs && m_DyLibs->count(file.filePath());
   }
 
   void DynamicLibraryManager::ExposeHiddenSharedLibrarySymbols(void* handle) {
