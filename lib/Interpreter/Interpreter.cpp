@@ -473,6 +473,8 @@ namespace cling {
       delete m_StoredStates[i];
     m_StoredStates.clear();
 
+    m_DyLibManager.reset();
+
 #if defined(LLVM_ON_WIN32)
     for (void *Ptr : m_RuntimeFacets)
       delete reinterpret_cast<std::_Facet_base*>(Ptr)->_Decref();
