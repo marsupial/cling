@@ -50,7 +50,7 @@ namespace cling {
 
     ///\brief System's include path, get initialized at construction time.
     ///
-    llvm::SmallVector<std::string, 32> m_SystemSearchPaths;
+    std::vector<std::string> m_SystemSearchPaths;
 
     InterpreterCallbacks* m_Callbacks;
 
