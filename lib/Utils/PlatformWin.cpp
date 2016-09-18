@@ -570,7 +570,7 @@ void DLClose(const void* Lib, std::string* Err) {
   }
 }
 
-bool GetSystemLibraryPaths(llvm::SmallVectorImpl<std::string>& Paths) {
+bool GetSystemLibraryPaths(std::vector<std::string>& Paths) {
   char Buf[MAX_PATHC];
   // Generic form of C:\Windows\System32
   HRESULT result = ::SHGetFolderPathA(NULL, CSIDL_FLAG_CREATE | CSIDL_SYSTEM,

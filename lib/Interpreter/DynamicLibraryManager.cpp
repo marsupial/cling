@@ -118,23 +118,30 @@ namespace cling {
       ;
   }
 
+  static std::string lookInPaths(llvm::StringRef libStem,
+                                 const std::vector<std::string>& Paths,
+                                 bool &exists) {
+    llvm::SmallString<1024> ThisPath;
+    for (const auto& Path : Paths) {
+      ThisPath.assign(Path);
+      llvm::sys::path::append(ThisPath, libStem);
+      const std::string lib = ThisPath.str();
+      if (isSharedLib(lib, &exists))
+        return lib;
+      if (exists)
+        break;
+    }
+    return std::string();
+  }
+
   std::string
   DynamicLibraryManager::lookupLibInPaths(llvm::StringRef libStem) const {
-    llvm::SmallVector<std::string, 128>
-      Paths(m_Opts.LibSearchPath.begin(), m_Opts.LibSearchPath.end());
-    Paths.append(m_SystemSearchPaths.begin(), m_SystemSearchPaths.end());
+    bool exists = false;
+    const std::string Path = lookInPaths(libStem, m_Opts.LibSearchPath, exists);
+    if (!Path.empty() || exists)
+      return Path;
 
-    for (llvm::SmallVectorImpl<std::string>::const_iterator
-           IPath = Paths.begin(), E = Paths.end();IPath != E; ++IPath) {
-      llvm::SmallString<512> ThisPath(*IPath); // FIXME: move alloc outside loop
-      llvm::sys::path::append(ThisPath, libStem);
-      bool exists;
-      if (isSharedLib(ThisPath.str(), &exists))
-        return ThisPath.str();
-      if (exists)
-        return "";
-    }
-    return "";
+    return lookInPaths(libStem, m_SystemSearchPaths, exists);
   }
 
   std::string

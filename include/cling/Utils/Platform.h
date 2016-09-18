@@ -13,6 +13,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Compiler.h"
 #include <string>
+#include <vector>
 
 namespace cling {
 namespace utils {
@@ -26,7 +27,7 @@ namespace platform {
   ///
   /// \returns true on success false otherwise
   ///
-  bool GetSystemLibraryPaths(llvm::SmallVectorImpl<std::string>& Paths);
+  bool GetSystemLibraryPaths(std::vector<std::string>& Paths);
 
   ///\brief Returns a normalized version of the given Path
   ///

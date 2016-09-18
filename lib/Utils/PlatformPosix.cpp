@@ -161,7 +161,7 @@ bool Popen(const std::string& Cmd, llvm::SmallVectorImpl<char>& Buf, bool RdE) {
   return false;
 }
 
-bool GetSystemLibraryPaths(llvm::SmallVectorImpl<std::string>& Paths) {
+bool GetSystemLibraryPaths(std::vector<std::string>& Paths) {
 #if defined(__APPLE__) || defined(__CYGWIN__)
   Paths.push_back("/usr/local/lib/");
   Paths.push_back("/usr/X11R6/lib/");
