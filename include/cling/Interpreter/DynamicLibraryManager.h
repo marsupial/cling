@@ -42,7 +42,7 @@ namespace cling {
     typedef llvm::MapVector<std::string,DyLibValue> DyLibs;
     ///\brief DynamicLibraries loaded by this Interpreter.
     ///
-    DyLibs m_DyLibs;
+    std::unique_ptr<DyLibs> m_DyLibs;
 
     ///\brief Contains the list of the current include paths.
     ///
