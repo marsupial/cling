@@ -21,6 +21,20 @@
 #include <system_error>
 #include <sys/stat.h>
 
+namespace llvm {
+  template<>
+  struct DenseMapInfo<std::string>  {
+    static inline std::string getEmptyKey() { return std::string(); }
+    static inline std::string getTombstoneKey() { return std::string(1, 0); }
+    static unsigned getHashValue(const std::string& Val) {
+      return hash_value(Val);
+    }
+    static bool isEqual(const std::string& LHS, const std::string& RHS) {
+      return LHS == RHS;
+    }
+  };
+}
+
 namespace cling {
   DynamicLibraryManager::DynamicLibraryManager(const InvocationOptions& Opts)
     : m_Opts(Opts), m_Callbacks(0) {
@@ -61,7 +75,18 @@ namespace cling {
     m_SystemSearchPaths.push_back(".");
   }
 
-  DynamicLibraryManager::~DynamicLibraryManager() {}
+  DynamicLibraryManager::~DynamicLibraryManager() {
+    std::string Err;
+    for (DyLibs::const_reverse_iterator Itr = m_DyLibs.rbegin(),
+         End = m_DyLibs.rend(); Itr < End; ++Itr) {
+      platform::DLClose(Itr->second, &Err);
+      if (!Err.empty()) {
+        llvm::errs() << "DynamicLibraryManager::~DynamicLibraryManager(): "
+                     << Err << '\n';
+        Err.clear();
+      }
+    }
+  }
 
   bool DynamicLibraryManager::isSharedLib(llvm::StringRef LibName,
                                           bool* exists /*= nullptr*/) {
@@ -197,28 +222,28 @@ namespace cling {
     if (!file.isLibrary())
       return kLoadLibNotFound;
 
-    const std::string &canonicalLoadedLib = file.filePath();
-    if (m_DyLibs.lookup(canonicalLoadedLib))
+    const std::string &canonicalLib = file.filePath();
+    if (m_DyLibs.lookup(canonicalLib))
       return kLoadLibAlreadyLoaded;
 
     // TODO: !permanent case
 
     std::string errMsg;
-    DyLibHandle dyLibHandle = platform::DLOpen(canonicalLoadedLib, &errMsg);
+    DyLibHandle dyLibHandle = platform::DLOpen(canonicalLib, &errMsg);
     if (!dyLibHandle) {
       cling::errs() << "cling::DynamicLibraryManager::loadLibrary(): " << errMsg
                     << '\n';
       return kLoadLibLoadError;
     }
 
-    if (!m_DyLibs.emplace_second(canonicalLoadedLib, dyLibHandle).second) {
+    if (!m_DyLibs.insert(std::make_pair(canonicalLib, dyLibHandle)).second) {
       // Perhaps another thread beat us?
       platform::DLClose(dyLibHandle);
       return kLoadLibAlreadyLoaded;
     }
 
     if (InterpreterCallbacks* C = getCallbacks())
-      C->LibraryLoaded(dyLibHandle, canonicalLoadedLib);
+      C->LibraryLoaded(dyLibHandle, canonicalLib);
 
     return kLoadLibSuccess;
   }

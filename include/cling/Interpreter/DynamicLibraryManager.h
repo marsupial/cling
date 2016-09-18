@@ -10,7 +10,7 @@
 #ifndef CLING_DYNAMIC_LIBRARY_MANAGER_H
 #define CLING_DYNAMIC_LIBRARY_MANAGER_H
 
-#include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
 
@@ -37,7 +37,7 @@ namespace cling {
 
   private:
     typedef const void* DyLibHandle;
-    typedef llvm::StringMap<DyLibHandle> DyLibs;
+    typedef llvm::MapVector<std::string,DyLibHandle> DyLibs;
     ///\brief DynamicLibraries loaded by this Interpreter.
     ///
     DyLibs m_DyLibs;

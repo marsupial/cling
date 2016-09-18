@@ -473,6 +473,8 @@ namespace cling {
     m_RuntimeIntercept.reset();
 #endif
 
+    m_DyLibManager.reset();
+
     if (m_Executor)
       m_Executor->shuttingDown();
 
