@@ -16,7 +16,7 @@
 #include "llvm/Support/DynamicLibrary.h"
 
 #ifdef __APPLE__
-// Apple adds an extra '_'
+// Apple Mach-O adds an extra '_'
 # define MANGLE_PREFIX "_"
 #endif
 
@@ -372,6 +372,8 @@ IncrementalJIT::lookupSymbol(llvm::StringRef Name, void *InAddr, bool Jit) {
       std::string Key(Name);
 #ifdef MANGLE_PREFIX
       Key.insert(0, MANGLE_PREFIX);
+      if (m_TMDataLayout.hasLinkerPrivateGlobalPrefix())
+        Key.insert(0, MANGLE_PREFIX);
 #endif
       m_SymbolMap[Key] = llvm::JITTargetAddress(InAddr);
     }
@@ -423,17 +425,27 @@ IncrementalJIT::getSymbolAddress(const std::string& Name, bool InProcess) {
 }
 
 size_t IncrementalJIT::addModules(std::vector<llvm::Module*>&& modules) {
-  // If this module doesn't have a DataLayout attached then attach the
-  // default.
+
+#ifndef NDEBUG
+  // Make sure layouts are same/compatible.
   for (auto&& mod: modules) {
-    mod->setDataLayout(m_TMDataLayout);
+    assert(m_TM->isCompatibleDataLayout(mod->getDataLayout())
+           && "Layouts differ");
   }
+#endif
 
   // LLVM MERGE FIXME: update this to use new interfaces.
   auto Resolver = llvm::orc::createLambdaResolver(
     [&](const std::string &S) {
       if (auto Sym = getInjectedSymbols(S))
         return JITSymbol((uint64_t)Sym.getAddress(), Sym.getFlags());
+#ifdef MANGLE_PREFIX
+      const size_t PrfxLen = strlen(MANGLE_PREFIX);
+      const bool HasPrefix = !S.compare(0, PrfxLen, MANGLE_PREFIX);
+      if (!m_TMDataLayout.hasLinkerPrivateGlobalPrefix() && HasPrefix) {
+        return m_ExeMM->findSymbol(std::string(MANGLE_PREFIX, PrfxLen) + S);
+      }
+#endif
       return m_ExeMM->findSymbol(S);
     },
     [&](const std::string &Name) {

@@ -387,7 +387,7 @@ namespace cling {
       addModule(CG->ReleaseModule(), m_OptLevel, true);
       Overload.Emit(m_Executor.get()
 #ifdef LLVM_ON_WIN32
-                    , true
+                    , m_Opts.CompilerOpts.JITFormat == 0
 #endif
                    );
 
