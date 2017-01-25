@@ -823,7 +823,7 @@ namespace cling {
     // "LookupFrom is set when this is a \#include_next directive, it specifies
     // the file to start searching from."
     const DirectoryLookup* FromDir = 0;
-    const FileEntry* FromFile = 0;
+    const clang::FileEntry* FromFile = 0;
     const DirectoryLookup* CurDir = 0;
 
     ModuleMap::KnownHeader suggestedModule;
@@ -1429,7 +1429,7 @@ namespace cling {
     // "LookupFrom is set when this is a \#include_next directive, it
     // specifies the file to start searching from."
     const DirectoryLookup* FromDir = 0;
-    const FileEntry* FromFile = 0;
+    const clang::FileEntry* FromFile = 0;
     const DirectoryLookup* CurDir = 0;
     Preprocessor& PP = getCI()->getPreprocessor();
     // PP::LookupFile uses it to issue 'nice' diagnostic
