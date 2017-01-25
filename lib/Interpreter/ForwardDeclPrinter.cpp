@@ -196,11 +196,11 @@ namespace cling {
 
     auto &PP = m_PP;
     auto isDirectlyReacheable = [&PP](llvm::StringRef FileName) {
-      const FileEntry* FE = nullptr;
+      const clang::FileEntry* FE = nullptr;
       SourceLocation fileNameLoc;
       bool isAngled = false;
       const DirectoryLookup* FromDir = nullptr;
-      const FileEntry* FromFile = nullptr;
+      const clang::FileEntry* FromFile = nullptr;
       const DirectoryLookup* CurDir = nullptr;
 
       FE = PP.LookupFile(fileNameLoc, FileName, isAngled,

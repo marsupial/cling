@@ -105,14 +105,15 @@ namespace cling {
 
       assert(m_PP);
 
-      auto addFile = [this,decl](llvm::StringRef FileName, bool warn) {
-        if (FileName.empty()) return (const FileEntry*)nullptr;
+      auto addFile = [this,decl](llvm::StringRef FileName, bool warn)
+                                                    -> const clang::FileEntry* {
+        if (FileName.empty()) return nullptr;
 
-        const FileEntry* FE = 0;
+        const clang::FileEntry* FE = 0;
         SourceLocation fileNameLoc;
         bool isAngled = false;
         const DirectoryLookup* FromDir = 0;
-        const FileEntry* FromFile = 0;
+        const clang::FileEntry* FromFile = 0;
         const DirectoryLookup* CurDir = 0;
         bool needCacheUpdate = false;
 
@@ -133,7 +134,7 @@ namespace cling {
           auto& Vec = (*m_Map)[FE];
           Vec.push_back(decl);
           if (needCacheUpdate) return FE;
-          else return (const FileEntry*)nullptr;
+          else return nullptr;
         } else if (warn) {
           // If the top level header is expected to be findable at run-time,
           // the direct header might not because the include path might be
@@ -150,15 +151,15 @@ namespace cling {
                                      true /*qualified*/);
             cling::errs() << "\n";
           }
-          return (const FileEntry*)nullptr;
+          return nullptr;
         } else {
           // Case of the direct header that is not a top level header, no
           // warning in this case (to likely to be a false positive).
-          return (const FileEntry*)nullptr;
+          return nullptr;
         }
       };
 
-      const FileEntry* cacheUpdate;
+      const clang::FileEntry* cacheUpdate;
 
       if ( (cacheUpdate = addFile(FileNames.first,true)) ) {
         m_PrevFE.first = cacheUpdate;
