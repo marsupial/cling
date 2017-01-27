@@ -24,6 +24,7 @@
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/Type.h"
 #include "clang/Sema/Sema.h"
+#include "clang/Sema/SemaDiagnostic.h"
 #include "clang/Frontend/CompilerInstance.h"
 
 #include "llvm/Support/Format.h"
@@ -140,22 +141,6 @@ struct AccessCtrlRAII_t {
     Diags.setSuppressAllDiagnostics(PrevSupress);
   }
 };
-
-#ifndef NDEBUG
-/// Is typenam parsable?
-bool canParseTypeName(cling::Interpreter& Interp, llvm::StringRef typenam) {
-
-  AccessCtrlRAII_t AccessCtrlRAII(Interp);
-
-  cling::Interpreter::CompilationResult Res
-    = Interp.declare("namespace { void* cling_printValue_Failure_Typename_check"
-                     " = (void*)" + typenam.str() + "nullptr; }");
-  if (Res != cling::Interpreter::kSuccess)
-    cling::errs() << "ERROR in cling::executePrintValue(): "
-                     "this typename cannot be spelled.\n";
-  return Res == cling::Interpreter::kSuccess;
-}
-#endif
 
 static std::string printDeclType(const clang::QualType& QT,
                                  const clang::NamedDecl* D) {
@@ -699,14 +684,13 @@ static std::string callPrintValue(const Value& V, const void* Val,
   if (printValueV.isValid() && printValueV.getPtr())
     return *(std::string *) printValueV.getPtr();
 
-  // That didn't work. We probably diagnosed the issue as part of evaluate().
-  cling::errs() <<"ERROR in cling::executePrintValue(): cannot pass value!\n";
-
-  // Check that the issue comes from an unparsable type name: lambdas, unnamed
-  // namespaces, types declared inside functions etc. Assert on everything
-  // else.
-  assert(!canParseTypeName(*Interp, getTypeString(V))
-         && "printValue failed on a valid type name.");
+  // Probably diagnosed the issue as part of evaluate(), but make sure to
+  // mark the Sema with an error if not.
+  clang::DiagnosticsEngine& Diag = Interp->getDiagnostics();
+  const unsigned ID = Diag.getCustomDiagID(
+                             clang::DiagnosticsEngine::Level::Error,
+                             "Could not execute cling::printValue with '%0'");
+  Diag.Report(Interp->getSourceLocation(), ID) << getTypeString(V);
 
   return valuePrinterInternal::kUndefined;
 }
