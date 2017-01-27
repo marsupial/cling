@@ -54,6 +54,7 @@ extern "C" void cling_PrintValue(void * /*cling::Value**/ V) {
 namespace cling {
   namespace valuePrinterInternal {
     extern const char* const kEmptyCollection = "{}";
+    extern const char* const kUndefined = "<undefined>";
   }
 }
 
@@ -622,7 +623,7 @@ static std::string callPrintValue(const Value& V, const void* Val) {
   assert(!canParseTypeName(*Interp, getTypeString(V))
          && "printValue failed on a valid type name.");
 
-  return "ERROR in cling::executePrintValue(): missing value string.";
+  return valuePrinterInternal::kUndefined;
 }
 
 template <typename T>
@@ -866,19 +867,22 @@ namespace cling {
         strm << printUnpackedClingValue(*value);
       }
       strm << "]";
-    } else
-      strm << "<<<invalid>>> " << printAddress(value, '@');
-
+    } else {
+      strm << valuePrinterInternal::kUndefined
+           << ' ' << printAddress(value, '@');
+    }
     return strm.str();
   }
 
   namespace valuePrinterInternal {
 
     std::string printTypeInternal(const Value &V) {
+      assert(V.getInterpreter() && "Invalid cling::Value");
       return printQualType(V.getASTContext(), V.getType());
     }
 
     std::string printValueInternal(const Value &V) {
+      assert(V.getInterpreter() && "Invalid cling::Value");
       // Include "RuntimePrintValue.h" only on the first printing.
       // This keeps the interpreter lightweight and reduces the startup time.
       // But user can undo past the transaction that invoked this, so whether
@@ -903,7 +907,7 @@ namespace cling {
           // It's redundant, but nicer to see the error at the bottom.
           // if (!Trap.hasErrorOccurred())
           cling::errs() << "RuntimePrintValue.h could not be loaded.\n";
-          return "";
+          return valuePrinterInternal::kUndefined;
         }
       }
       return printUnpackedClingValue(V);

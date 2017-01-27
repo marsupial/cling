@@ -13,10 +13,12 @@
 #include <cmath>
 
 cling::Value V;
-V // CHECK: (cling::Value &) <<<invalid>>> @0x{{.*}}
+V // CHECK: (cling::Value &) <undefined> @0x{{.*}}
+
+V.dump(); // CHECK-NEXT: <undefined>
 
 gCling->evaluate("return 1;", V);
-V // CHECK: (cling::Value &) boxes [(int) 1]
+V // CHECK-NEXT: (cling::Value &) boxes [(int) 1]
 
 gCling->evaluate("(void)V", V);
 V // CHECK-NEXT: (cling::Value &) boxes [(void) ]
@@ -213,7 +215,7 @@ V = cling::Value()
 //CHECK-NEXT: MADE+{10}:dtor
 //CHECK-NEXT: MADE+{9}:dtor
 //CHECK-NEXT: MADE+{8}:dtor
-//CHECK-NEXT: (cling::Value &) <<<invalid>>> @0x{{.*}}
+//CHECK-NEXT: (cling::Value &) <undefined> @0x{{.*}}
 
 gCling->evaluate("arrV", V);
 //CHECK-NEXT: MADE+{11}:copy
