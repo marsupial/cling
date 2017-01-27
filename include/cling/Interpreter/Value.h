@@ -54,13 +54,13 @@ namespace cling {
     Storage m_Storage;
 
     enum EStorageType {
+      kManagedAllocation,
+      kPointerType,
       kSignedIntegerOrEnumerationType,
       kUnsignedIntegerOrEnumerationType,
       kDoubleType,
       kFloatType,
       kLongDoubleType,
-      kPointerType,
-      kManagedAllocation,
       kUnsupportedType
     };
 
@@ -124,8 +124,10 @@ namespace cling {
     template<typename T>
     struct CastFwd {
       static T cast(const Value& V) {
-        EStorageType storageType = V.getStorageType();
-        switch (storageType) {
+        switch (V.getStorageType()) {
+        case kManagedAllocation:
+        case kPointerType:
+          return (T) (uintptr_t) V.getAs<void*>();
         case kSignedIntegerOrEnumerationType:
           return (T) V.getAs<long long>();
         case kUnsignedIntegerOrEnumerationType:
@@ -136,9 +138,6 @@ namespace cling {
           return (T) V.getAs<float>();
         case kLongDoubleType:
           return (T) V.getAs<long double>();
-        case kPointerType:
-        case kManagedAllocation:
-          return (T) (uintptr_t) V.getAs<void*>();
         case kUnsupportedType:
           V.AssertOnUnsupportedTypeCast();
         }
@@ -149,9 +148,7 @@ namespace cling {
     template<typename T>
     struct CastFwd<T*> {
       static T* cast(const Value& V) {
-        EStorageType storageType = V.getStorageType();
-        if (storageType == kPointerType
-            || storageType == kManagedAllocation)
+        if (V.getStorageType() <= kPointerType)
           return (T*) (uintptr_t) V.getAs<void*>();
         V.AssertOnUnsupportedTypeCast();
         return 0;
