@@ -7,7 +7,8 @@
 //------------------------------------------------------------------------------
 
 // RUN: cat %s | %cling -I%S -Xclang -verify 2>&1 | FileCheck --allow-empty %s
-// Test undefMacros
+// XFAIL: *
+// Test undefMacros (Fails until LLVM upgrad can handle new callbacks).
 
 // Invoke the printer to get it in the undo queue early
 "TEST"
@@ -27,6 +28,7 @@
 TEST
 // CHECK: (const char [7]) "TEST 4"
 
+.undo // FIXME: REMOVE once print unloading is merged
 .undo //print
 .undo //include
 
@@ -37,6 +39,7 @@ TEST // expected-error@2 {{use of undeclared identifier 'TEST'}}
 .undo
 TEST
 // CHECK: (const char [8]) "DEFINED"
+.undo // FIXME: REMOVE once print unloading is merged
 .undo // print
 .undo // define
 

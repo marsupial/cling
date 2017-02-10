@@ -53,7 +53,7 @@ namespace cling {
     /// Macro support
     void MacroUndefined(const clang::Token &MacroNameTok,
                         const clang::MacroDefinition &MD,
-                        const clang::MacroDirective *Undef) final;
+                        const clang::MacroDirective *Undef) /*final*/;
   };
 
   ///\brief Collects declarations and fills them in cling::Transaction.
