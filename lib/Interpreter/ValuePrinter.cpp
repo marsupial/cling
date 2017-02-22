@@ -884,13 +884,15 @@ namespace cling {
       // But user can undo past the transaction that invoked this, so whether
       // we are first or not is known by the interpreter.
       //
-      // Additionally add any transactions that occur in this scope as
-      // children to the transaction that invoked us
+      // Additionally the user could have included RuntimePrintValue.h before
+      // this code is run, so if there is no print transaction, check if
+      // CLING_RUNTIME_PRINT_VALUE_H is defined.
+      // FIXME: Relying on this macro isn't the best, but what's another way?
 
       Interpreter* Interp = V.getInterpreter();
       Interpreter::TransactionMerge M(Interp, true);
       const Transaction*& T = Interp->printValueTransaction();
-      if (!T) {
+      if (!T && !Interp->getMacro("CLING_RUNTIME_PRINT_VALUE_H")) {
         // DiagnosticErrorTrap Trap(Interp->getSema().getDiagnostics());
         Interp->declare("#include \"cling/Interpreter/RuntimePrintValue.h\"",
                         const_cast<Transaction**>(&T));
