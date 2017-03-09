@@ -19,6 +19,10 @@
 #include <string>
 #include <unordered_map>
 
+#ifdef LLVM_ON_WIN32
+#include <unordered_set>
+#endif
+
 namespace llvm {
   class raw_ostream;
   struct GenericValue;
@@ -215,6 +219,11 @@ namespace cling {
       kNumTransactions
     };
     mutable const Transaction* m_CachedTrns[kNumTransactions] = {};
+
+#ifdef LLVM_ON_WIN32
+    // Windows specific _Facet_base pointers registered at runtime.
+    std::unordered_set<void*> m_RuntimeFacets;
+#endif
 
     ///\brief Worker function, building block for interpreter's public
     /// interfaces.
