@@ -81,6 +81,8 @@ extern "C" std::type_info
 
 using namespace clang;
 
+extern "C" void* __emutls_get_address(struct __emutls_control*);
+
 namespace {
 
   static cling::Interpreter::ExecutionResult
@@ -342,6 +344,15 @@ namespace cling {
           m_RuntimeIntercept.reset();
         }
       }
+
+      // FIXME: Using emulated TLS LLVM doesn't respect external TLS data.
+      // By passing itself as the argument to __emutls_get_address, it can
+      // return a pointer to the current thread's _Init_thread_epoch.
+      // This obviously handles only one case, and would need to be rethought
+      // to properly support extern __declspec(thread), though hopefully that
+      // construct is dubious enough to never be used .
+      m_Executor->addSymbol("__emutls_v._Init_thread_epoch",
+          utils::FunctionToVoidPtr(&__emutls_get_address), true);
 
 #endif
 
