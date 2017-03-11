@@ -61,7 +61,8 @@
 #ifdef LLVM_ON_WIN32
 #include "cling/Utils/Platform.h"
 #include <unordered_set>
-#endif
+#else
+extern "C" void* __dso_handle;
 
 #if (defined(__clang__) ? !__has_feature(cxx_rtti) : !defined(__GXX_RTTI))
 #define CLING_NO_RTTI
@@ -74,7 +75,9 @@ extern "C" std::type_info
   *_ZTISt12out_of_range,
   *_ZTISt13runtime_error,
   *_ZTISt9bad_alloc;
-#endif
+#endif // No RTTI
+
+#endif // !LLVM_ON_WIN32
 
 using namespace clang;
 
@@ -302,8 +305,10 @@ namespace cling {
       // Defined even when not in C++ in case any other language uses it.
       Overload("__cxa_atexit", this, 3);
 
-      // __dso_handle is inserted for the link phase, as macro is useless then
-      m_Executor->addSymbol("__dso_handle", this, true);
+      // Give the user a __dso_handle in case they need it.
+      // Note cling will generate code: __cxa_atexit(Dtor, 0, __dso_handle);
+      // but Overload("__cxa_atexit") above replaces __dso_handle with this.
+      m_Executor->addSymbol("__dso_handle", &__dso_handle, true);
 
 #ifdef CLING_NO_RTTI
       m_Executor->addSymbol("_ZTISt9exception", &_ZTISt9exception, 1);
