@@ -39,17 +39,8 @@ class Azog;
 class IncrementalExecutor;
 
 class IncrementalJIT {
-public:
-  using SymbolMapT = llvm::StringMap<llvm::JITTargetAddress>;
-
-private:
   friend class Azog;
-
-  ///\brief The IncrementalExecutor who owns us.
-  IncrementalExecutor& m_Parent;
-  llvm::JITEventListener* m_GDBListener; // owned by llvm::ManagedStaticBase
-
-  SymbolMapT m_SymbolMap;
+  using SymbolMapT = llvm::StringMap<llvm::JITTargetAddress>;
 
   class NotifyObjectLoadedT {
   public:
@@ -90,6 +81,20 @@ private:
   typedef llvm::orc::LazyEmittingLayer<CompileLayerT> LazyEmitLayerT;
   typedef LazyEmitLayerT::ModuleSetHandleT ModuleSetHandleT;
 
+  typedef std::set<const void*> SectionAddrSet;
+  struct ObjSetHandleCompare {
+    using ObjSetHandleT = ObjectLayerT::ObjSetHandleT;
+    bool operator()(ObjSetHandleT H1, ObjSetHandleT H2) const {
+      return &*H1 < &*H2;
+    }
+  };
+
+  ///\brief The IncrementalExecutor who owns us.
+  IncrementalExecutor& m_Parent;
+  llvm::JITEventListener* m_GDBListener; // owned by llvm::ManagedStaticBase
+
+  SymbolMapT m_SymbolMap;
+
   std::unique_ptr<llvm::TargetMachine> m_TM;
   llvm::DataLayout m_TMDataLayout;
 
@@ -106,13 +111,6 @@ private:
   // We need to store ObjLayerT::ObjSetHandles for each of the object sets
   // that have been emitted but not yet finalized so that we can forward the
   // mapSectionAddress calls appropriately.
-  typedef std::set<const void *> SectionAddrSet;
-  struct ObjSetHandleCompare {
-    bool operator()(ObjectLayerT::ObjSetHandleT H1,
-                    ObjectLayerT::ObjSetHandleT H2) const {
-      return &*H1 < &*H2;
-    }
-  };
   SectionAddrSet m_SectionsAllocatedSinceLastLoad;
   std::map<ObjectLayerT::ObjSetHandleT, SectionAddrSet, ObjSetHandleCompare>
     m_UnfinalizedSections;
