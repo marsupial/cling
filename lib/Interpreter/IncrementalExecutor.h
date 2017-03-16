@@ -165,9 +165,9 @@ namespace cling {
 
     ///\brief Unload a set of JIT symbols.
     bool unloadFromJIT(llvm::Module* M, Transaction::ExeUnloadHandle H) {
-      auto iMod = std::find(m_ModulesToJIT.begin(), m_ModulesToJIT.end(), M);
-      if (iMod != m_ModulesToJIT.end())
-        m_ModulesToJIT.erase(iMod);
+      auto iMod = std::find(m_ModulesToJIT.rbegin(), m_ModulesToJIT.rend(), M);
+      if (iMod != m_ModulesToJIT.rend())
+        m_ModulesToJIT.erase(std::next(iMod).base());
       else
         m_JIT->removeModules((size_t)H.m_Opaque);
       return true;
