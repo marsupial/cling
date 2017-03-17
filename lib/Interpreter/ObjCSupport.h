@@ -12,7 +12,7 @@
 
 #ifdef CLING_OBJC_SUPPORT
 
-#include "clang/CodeGen/IObjCLookup.h"
+#include "clang/Basic/cling.h"
 #include <vector>
 #include <string>
 
