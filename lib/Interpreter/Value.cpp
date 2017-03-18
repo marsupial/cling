@@ -47,12 +47,6 @@ namespace {
     ///\brief The destructor function.
     DtorFunc_t m_DtorFunc;
 
-    ///\brief The size of the allocation (for arrays)
-    unsigned long m_AllocSize;
-
-    ///\brief The number of elements in the array
-    unsigned long m_NElements;
-
     ///\brief The start of the allocation.
     char m_Payload[1];
 
@@ -60,16 +54,15 @@ namespace {
     ///\brief Initialize the storage management part of the allocated object.
     ///  The allocator is referencing it, thus initialize m_RefCnt with 1.
     ///\param [in] dtorFunc - the function to be called before deallocation.
-    AllocatedValue(void* dtorFunc, size_t allocSize, size_t nElements):
+    AllocatedValue(void* dtorFunc):
       m_RefCnt(1),
-      m_DtorFunc(cling::utils::VoidToFunctionPtr<DtorFunc_t>(dtorFunc)),
-      m_AllocSize(allocSize), m_NElements(nElements)
+      m_DtorFunc(cling::utils::VoidToFunctionPtr<DtorFunc_t>(dtorFunc))
     {}
 
     char* getPayload() { return m_Payload; }
 
     static unsigned getPayloadOffset() {
-      static const AllocatedValue Dummy(0,0,0);
+      static const AllocatedValue Dummy(0);
       return Dummy.m_Payload - (const char*)&Dummy;
     }
 
@@ -84,14 +77,8 @@ namespace {
     ///   such.
     void Release() {
       assert (m_RefCnt > 0 && "Reference count is already zero.");
-      if (--m_RefCnt == 0) {
-        if (m_DtorFunc) {
-          assert(m_NElements && "No elements!");
-          char* Payload = getPayload();
-          const auto Skip = m_AllocSize / m_NElements;
-          while (m_NElements-- != 0)
-            (*m_DtorFunc)(Payload + m_NElements * Skip);
-        }
+      if (--m_RefCnt == 0 && m_DtorFunc) {
+        (*m_DtorFunc)(getPayload());
         delete [] (char*)this;
       }
     }
@@ -166,20 +153,6 @@ namespace cling {
     return isValid() && Ctx.hasSameType(getType(), Ctx.VoidTy);
   }
 
-  size_t Value::GetNumberOfElements() const {
-    if (const clang::ConstantArrayType* ArrTy
-        = llvm::dyn_cast<clang::ConstantArrayType>(getType())) {
-      llvm::APInt arrSize(sizeof(size_t)*8, 1);
-      do {
-        arrSize *= ArrTy->getSize();
-        ArrTy = llvm::dyn_cast<clang::ConstantArrayType>(ArrTy->getElementType()
-                                                         .getTypePtr());
-      } while (ArrTy);
-      return static_cast<size_t>(arrSize.getZExtValue());
-    }
-    return 1;
-  }
-
   Value::EStorageType Value::determineStorageType(clang::QualType QT) {
     const clang::Type* desugCanon = QT.getCanonicalType().getTypePtr();
     if (desugCanon->isSignedIntegerOrEnumerationType())
@@ -196,8 +169,7 @@ namespace cling {
         return kLongDoubleType;
     } else if (desugCanon->isPointerType() || desugCanon->isObjectType()
                || desugCanon->isReferenceType()) {
-      if (desugCanon->isRecordType() || desugCanon->isConstantArrayType()
-          || desugCanon->isMemberPointerType())
+      if (desugCanon->isRecordType() || desugCanon->isMemberPointerType())
         return kManagedAllocation;
       return kPointerType;
     }
@@ -208,19 +180,13 @@ namespace cling {
     assert(needsManagedAllocation() && "Does not need managed allocation");
     void* dtorFunc = 0;
     clang::QualType DtorType = getType();
-    // For arrays we destruct the elements.
-    if (const clang::ConstantArrayType* ArrTy
-        = llvm::dyn_cast<clang::ConstantArrayType>(DtorType.getTypePtr())) {
-      DtorType = ArrTy->getElementType();
-    }
     if (const clang::RecordType* RTy = DtorType->getAs<clang::RecordType>())
       dtorFunc = m_Interpreter->compileDtorCallFor(RTy->getDecl());
 
     const clang::ASTContext& ctx = getASTContext();
     unsigned payloadSize = ctx.getTypeSizeInChars(getType()).getQuantity();
     char* alloc = new char[AllocatedValue::getPayloadOffset() + payloadSize];
-    AllocatedValue* allocVal = new (alloc) AllocatedValue(dtorFunc, payloadSize,
-                                                          GetNumberOfElements());
+    AllocatedValue* allocVal = new (alloc) AllocatedValue(dtorFunc);
     m_Storage.m_Ptr = allocVal->getPayload();
   }
 

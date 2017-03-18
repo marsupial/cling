@@ -118,8 +118,6 @@ namespace cling {
     ///   dependencies.
     void AssertOnUnsupportedTypeCast() const;
 
-    size_t GetNumberOfElements() const;
-
     // Allow simplisticCastAs to be partially specialized.
     template<typename T>
     struct CastFwd {
