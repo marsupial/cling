@@ -13,12 +13,10 @@
 #include <cmath>
 
 cling::Value V;
-V // CHECK: (cling::Value &) <undefined> @0x{{.*}}
-
-V.dump(); // CHECK-NEXT: <undefined>
+V // CHECK: (cling::Value &) <<<invalid>>> @0x{{.*}}
 
 gCling->evaluate("return 1;", V);
-V // CHECK-NEXT: (cling::Value &) boxes [(int) 1]
+V // CHECK: (cling::Value &) boxes [(int) 1]
 
 gCling->evaluate("(void)V", V);
 V // CHECK-NEXT: (cling::Value &) boxes [(void) ]
@@ -204,17 +202,17 @@ gCling->evaluate("arrV", V);
 // Now V gets destructed...
 //CHECK-NEXT: VAR+{4}:dtor
 // ...and the elements are copied:
-//CHECK-NEXT: MADE+{8}:copy
-//CHECK-NEXT: MADE+{9}:copy
-//CHECK-NEXT: MADE+{10}:copy
+//CHECK-NOT: MADE+{8}:copy
+//CHECK-NOT: MADE+{9}:copy
+//CHECK-NOT: MADE+{10}:copy
 
 V // CHECK-NEXT: (cling::Value &) boxes [(Tracer [3]) { @{{.*}}, @{{.*}}, @{{.*}} }]
 
 // Explicitly destory the copies
 V = cling::Value()
-//CHECK-NEXT: MADE+{10}:dtor
-//CHECK-NEXT: MADE+{9}:dtor
-//CHECK-NEXT: MADE+{8}:dtor
+//CHECK-NOT: MADE+{10}:dtor
+//CHECK-NOT: MADE+{9}:dtor
+//CHECK-NOT: MADE+{8}:dtor
 //CHECK-NEXT: (cling::Value &) <undefined> @0x{{.*}}
 
 gCling->evaluate("arrV", V);
@@ -231,7 +229,3 @@ gCling->evaluate("arrV", V);
 // CHECK-NEXT: VAR{3}:dtor
 // CHECK-NEXT: REF{1}:dtor
 
-// V going out of scope
-//CHECK-NEXT: MADE+{13}:dtor
-//CHECK-NEXT: MADE+{12}:dtor
-//CHECK-NEXT: MADE+{11}:dtor

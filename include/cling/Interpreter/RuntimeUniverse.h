@@ -121,46 +121,6 @@ namespace cling {
       ///
       void* setValueWithAlloc(void* vpI, void* vpV, void* vpQT, char vpOn);
 
-      ///\brief Placement new doesn't work for arrays. It needs to be called on
-      /// each element. For non-PODs we also need to call the *structors. This
-      /// handles also multi dimension arrays since the init order is
-      /// independent on the dimensions.
-      ///
-      /// We must be consistent with clang. Eg:
-      ///\code
-      ///extern "C" int printf(const char*,...);
-      /// struct S {
-      ///    static int sI;
-      ///    int I;
-      ///    S(): I(sI++) {}
-      /// };
-      /// int S::sI = 0;
-      /// S arr[5][3];
-      /// int main() {
-      ///    for (int i = 0; i < 5; ++i)
-      ///    for (int j = 0; j < 3; ++j)
-      ///       printf("[%d][%d]%d\n", i, j, arr[i][j].I);
-      ///    return 0;
-      /// }
-      ///\endcode
-      /// must be consistent with what clang does, since it is not well defined
-      /// in the C++ standard.
-      ///
-      ///\param[in] src - array to copy
-      ///\param[in] placement - where to copy
-      ///\param[in] size - size of the array.
-      ///
-      template <class T, class = T (*)() /*disable for arrays*/>
-      void copyArray(T* src, void* placement, std::size_t size) {
-        for (int i = 0; i < size; ++i)
-          new ((void*)(((T*)placement) + i)) T(src[i]);
-      }
-
-      // "size" is the number of elements even for subarrays; flatten the type:
-      template <class T, std::size_t N>
-      void copyArray(const T (*src)[N], void* placement, std::size_t size) {
-        copyArray(src[0], placement, size);
-      }
     } // end namespace internal
   } // end namespace runtime
 } // end namespace cling
