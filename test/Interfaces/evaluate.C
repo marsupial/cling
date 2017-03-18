@@ -203,24 +203,24 @@ Tracer arrV[] = {ObjMaker(), ObjMaker(), ObjMaker()};
 gCling->evaluate("arrV", V);
 // Now V gets destructed...
 //CHECK-NEXT: VAR+{4}:dtor
-// ...and the elements are copied:
-//CHECK-NEXT: MADE+{8}:copy
-//CHECK-NEXT: MADE+{9}:copy
-//CHECK-NEXT: MADE+{10}:copy
+// ...and the elements should be referenced, not copied:
+//CHECK-NOT: MADE+{8}:copy
+//CHECK-NOT: MADE+{9}:copy
+//CHECK-NOT: MADE+{10}:copy
 
 V // CHECK-NEXT: (cling::Value &) boxes [(Tracer [3]) { @{{.*}}, @{{.*}}, @{{.*}} }]
 
-// Explicitly destory the copies
+// Explicitly reset the Value
 V = cling::Value()
-//CHECK-NEXT: MADE+{10}:dtor
-//CHECK-NEXT: MADE+{9}:dtor
-//CHECK-NEXT: MADE+{8}:dtor
+//CHECK-NOT: MADE+{10}:dtor
+//CHECK-NOT: MADE+{9}:dtor
+//CHECK-NOT: MADE+{8}:dtor
 //CHECK-NEXT: (cling::Value &) <<<invalid>>> @0x{{.*}}
 
 gCling->evaluate("arrV", V);
-//CHECK-NEXT: MADE+{11}:copy
-//CHECK-NEXT: MADE+{12}:copy
-//CHECK-NEXT: MADE+{13}:copy
+//CHECK-NOT: MADE+{11}:copy
+//CHECK-NOT: MADE+{12}:copy
+//CHECK-NOT: MADE+{13}:copy
 
 // Destruct the variables with static storage:
 // Destruct arrV:
@@ -231,7 +231,3 @@ gCling->evaluate("arrV", V);
 // CHECK-NEXT: VAR{3}:dtor
 // CHECK-NEXT: REF{1}:dtor
 
-// V going out of scope
-//CHECK-NEXT: MADE+{13}:dtor
-//CHECK-NEXT: MADE+{12}:dtor
-//CHECK-NEXT: MADE+{11}:dtor

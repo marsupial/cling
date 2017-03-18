@@ -334,8 +334,7 @@ namespace cling {
         return kLongDoubleType;
     } else if (desugCanon->isPointerType() || desugCanon->isObjectType()
                || desugCanon->isReferenceType()) {
-      if (desugCanon->isRecordType() || desugCanon->isConstantArrayType()
-          || desugCanon->isMemberPointerType())
+      if (desugCanon->isRecordType() || desugCanon->isMemberPointerType())
         return kManagedAllocation;
       return kPointerType;
     }

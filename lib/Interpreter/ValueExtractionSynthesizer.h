@@ -33,10 +33,6 @@ namespace cling {
     ///
     clang::Expr* m_UnresolvedWithAlloc;
 
-    ///\brief cling::runtime::internal::copyArray cache.
-    ///
-    clang::Expr* m_UnresolvedCopyArray;
-
 public:
     ///\ brief Constructs the return synthesizer.
     ///

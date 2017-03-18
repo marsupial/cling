@@ -26,7 +26,7 @@ using namespace clang;
 namespace cling {
   ValueExtractionSynthesizer::ValueExtractionSynthesizer(Interpreter& I)
     : WrapperTransformer(&I.getSema()), m_Interp(I), m_UnresolvedNoAlloc(0),
-      m_UnresolvedWithAlloc(0), m_UnresolvedCopyArray(0) {}
+      m_UnresolvedWithAlloc(0) {}
 
   // pin the vtable here.
   ValueExtractionSynthesizer::~ValueExtractionSynthesizer() { }
@@ -149,8 +149,6 @@ namespace cling {
         //      call to cling::internal::setValueNoAlloc(...);
         // 2) object type (alloc on the stack) :
         //      cling::internal::setValueWithAlloc
-        //   2.1) constant arrays:
-        //          call to cling::runtime::internal::copyArray(...)
         //
         // We need to synthesize later:
         // Wrapper has signature: void w(cling::Value SVR)
@@ -158,8 +156,6 @@ namespace cling {
         //   setValueNoAlloc(gCling, &SVR, lastExprTy, lastExpr())
         // case 2):
         //   new (setValueWithAlloc(gCling, &SVR, lastExprTy)) (lastExpr)
-        // case 2.1):
-        //   copyArray(src, placement, size)
 
         Expr* SVRInit = SynthesizeSVRInit(lastExpr);
         // if we had return stmt update to execute the SVR init, even if the
@@ -276,8 +272,8 @@ namespace {
         Call = m_Sema->CreateBuiltinBinOp(locStart, BO_Comma, Call.get(), E);
 
     }
-    else if (desugaredTy->isRecordType() || desugaredTy->isConstantArrayType()
-             || desugaredTy->isMemberPointerType()) {
+    else if (desugaredTy->isRecordType() ||
+             desugaredTy->isMemberPointerType()) {
       // 2) object types :
       // check existence of copy constructor before call
       if (!desugaredTy->isMemberPointerType()
@@ -286,53 +282,37 @@ namespace {
       // call new (setValueWithAlloc(gCling, &SVR, ETy)) (E)
       Call = m_Sema->ActOnCallExpr(/*Scope*/0, m_UnresolvedWithAlloc,
                                    locStart, CallArgs, locEnd);
+      assert(!Call.isInvalid() && "Invalid Call before building new");
+
       Expr* placement = Call.get();
-      if (const ConstantArrayType* constArray
-          = dyn_cast<ConstantArrayType>(desugaredTy.getTypePtr())) {
-        CallArgs.clear();
-        CallArgs.push_back(E);
-        CallArgs.push_back(placement);
-        if (size_t arrSize = AST.getConstantArrayElementCount(constArray)) {
-          Expr* arrExpr = utils::Synthesize::IntegerLiteralExpr(AST, arrSize);
-          CallArgs.push_back(arrExpr);
-        }
-        // 2.1) arrays:
-        // call copyArray(T* src, void* placement, size_t size)
-        Call = m_Sema->ActOnCallExpr(/*Scope*/0, m_UnresolvedCopyArray,
-                                     locStart, CallArgs, locEnd);
-
+      if (!E->getSourceRange().isValid()) {
+        // We cannot do CXXNewExpr::CallInit (see Sema::BuildCXXNew) but
+        // that's what we want. Fail...
+        return E;
       }
-      else {
-        if (!E->getSourceRange().isValid()) {
-          // We cannot do CXXNewExpr::CallInit (see Sema::BuildCXXNew) but
-          // that's what we want. Fail...
-          return E;
-        }
-        TypeSourceInfo* ETSI = AST.getTrivialTypeSourceInfo(ETy, noLoc);
 
-        assert(!Call.isInvalid() && "Invalid Call before building new");
+      TypeSourceInfo* ETSI = AST.getTrivialTypeSourceInfo(ETy, noLoc);
 
-        Call = m_Sema->BuildCXXNew(E->getSourceRange(),
-                                   /*useGlobal ::*/true,
-                                   /*placementLParen*/ noLoc,
-                                   MultiExprArg(placement),
-                                   /*placementRParen*/ noLoc,
-                                   /*TypeIdParens*/ SourceRange(),
-                                   /*allocType*/ ETSI->getType(),
-                                   /*allocTypeInfo*/ETSI,
-                                   /*arraySize*/0,
-                                   /*directInitRange*/E->getSourceRange(),
-                                   /*initializer*/E
-                                   );
-        if (Call.isInvalid()) {
-          m_Sema->Diag(E->getLocStart(), diag::err_undeclared_var_use)
-            << "operator new";
-          return Call.get();
-        }
+      Call = m_Sema->BuildCXXNew(E->getSourceRange(),
+                                 /*useGlobal ::*/true,
+                                 /*placementLParen*/ noLoc,
+                                 MultiExprArg(placement),
+                                 /*placementRParen*/ noLoc,
+                                 /*TypeIdParens*/ SourceRange(),
+                                 /*allocType*/ ETSI->getType(),
+                                 /*allocTypeInfo*/ETSI,
+                                 /*arraySize*/0,
+                                 /*directInitRange*/E->getSourceRange(),
+                                 /*initializer*/E);
 
-        // Handle possible cleanups:
-        Call = m_Sema->ActOnFinishFullExpr(Call.get());
+      if (Call.isInvalid()) {
+        m_Sema->Diag(E->getLocStart(), diag::err_undeclared_var_use)
+          << "operator new";
+        return Call.get();
       }
+
+      // Handle possible cleanups:
+      Call = m_Sema->ActOnFinishFullExpr(Call.get());
     }
     else {
       // Mark the current number of arguemnts
@@ -353,7 +333,8 @@ namespace {
                                              E).get();
         CallArgs.push_back(AddrOfE);
       }
-      else if (desugaredTy->isAnyPointerType()) {
+      else if (desugaredTy->isAnyPointerType() ||
+               desugaredTy->isConstantArrayType()) {
         // function pointers need explicit void* cast.
         QualType VoidPtrTy = AST.VoidPtrTy;
         TypeSourceInfo* TSI = AST.getTrivialTypeSourceInfo(VoidPtrTy, noLoc);
@@ -440,22 +421,6 @@ namespace {
     m_UnresolvedWithAlloc = m_Sema->BuildDeclarationNameExpr(CSS, R, ADL).get();
     if (!m_UnresolvedWithAlloc)
       return VSError(m_Interp, "cling::runtime::internal::setValueWithAlloc");
-
-    R.clear();
-    R.setLookupName(&AST.Idents.get("copyArray"));
-    m_Sema->LookupQualifiedName(R, NSD);
-    // FIXME: In the case of the multiple interpreters (parent-child),
-    // the child interpreter doesn't include the runtime universe.
-    // The child interpreter will try to import this function from its
-    // parent interpreter, but it will fail, because this is a template function.
-    // Once the import of template functions becomes supported by clang,
-    // this check can be de-activated.
-    if (R.empty() && !m_Interp.parent())
-      return VSError(m_Interp, "cling::runtime::internal::copyArray");
-
-    m_UnresolvedCopyArray = m_Sema->BuildDeclarationNameExpr(CSS, R, ADL).get();
-    if (!m_UnresolvedCopyArray)
-      return VSError(m_Interp, "cling::runtime::internal::copyArray");
 
     m_UnresolvedNoAlloc = unresolvedNoAlloc;
     return true;
