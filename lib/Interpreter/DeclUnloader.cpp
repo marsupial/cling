@@ -1451,9 +1451,7 @@ bool DeclUnloader::VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC)
                                         ClassTemplateSpecializationDecl* CTSD) {
     // ClassTemplateSpecializationDecl: CXXRecordDecl, FoldingSet
 
-    const bool VisitingSpec = m_Flags & kVisitingSpecialization;
-    const SourceLocation Loc = CTSD->getPointOfInstantiation();
-    if (VisitingSpec && !Loc.isValid())
+    if (m_Flags & kVisitingSpecialization)
       return true;
 
     ClassTemplateSpecializationDecl* CanonCTSD =
@@ -1467,7 +1465,7 @@ bool DeclUnloader::VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC)
                                                  CanonCTSD);
 
     bool Success = true;
-    if (!wasInstatiatedBefore(Loc)) {
+    if (!wasInstatiatedBefore(CTSD->getLocEnd())) {
       VisitorState VS(*this, kVisitingSpecialization);
       Success = VisitCXXRecordDecl(CTSD);
     }
