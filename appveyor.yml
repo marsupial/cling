@@ -8,6 +8,7 @@ configuration:
 branches:
   only:
     - master
+    - CERN
 
 cache:
   - builddir
@@ -51,12 +52,12 @@ install:
 
 build_script:
   - tools\packaging\cpt.py ^
-        --current-dev=tar ^
-        --with-cling-url=https://github.com/%APPVEYOR_REPO_NAME% ^
-        --with-clang-url=http://root.cern.ch/git/clang.git ^
-        --with-llvm-url=http://root.cern.ch/git/llvm.git ^
-        --with-cmake-flags="-DLLVM_OPTIMIZED_TABLEGEN=ON -G\"%CMAKE_GEN%\"" ^
-        --skip-cleanup
+     --current-dev=branch:CERN \
+     --with-cling-url=https://github.com/%APPVEYOR_REPO_NAME% ^
+     --with-clang-url=http://github.com/marsupial/clang.git ^
+     --with-llvm-url=http://github.com/marsupial/llvm.git ^
+     --with-cmake-flags="-DLLVM_OPTIMIZED_TABLEGEN=ON -G\"%CMAKE_GEN%\"" ^
+     --skip-cleanup
 
 init:
 - ps: iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))
