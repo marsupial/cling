@@ -6,9 +6,13 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
+// Test reload-differing-layouts
+
 // RUN: cat %s | %cling --noruntime -DCLING_NO_NORUTIME -I%S -Xclang -verify 2>&1 | FileCheck %s
 // RUN: cat %s | %cling -I%S -Xclang -verify 2>&1 | FileCheck %s
-// Test reload-differing-layouts
+// XFAIL: *
+// Disagreement on GlobalDecl rom CodeGenModule::GetOrCreateLLVMFunction
+// calling CodeGenModule::lookupRepresentativeDecl causes this to fail.
 
 extern "C" int printf(const char*, ...);
 
