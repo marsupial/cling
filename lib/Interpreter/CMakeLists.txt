@@ -59,6 +59,7 @@ add_cling_library(clingInterpreter OBJECT
   IncrementalExecutor.cpp
   IncrementalJIT.cpp
   IncrementalParser.cpp
+  InterceptBuilder.cpp
   Interpreter.cpp
   InterpreterCallbacks.cpp
   InvocationOptions.cpp

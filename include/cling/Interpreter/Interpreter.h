@@ -217,7 +217,6 @@ namespace cling {
     };
     mutable const Transaction* m_CachedTrns[kNumTransactions];
 
-    class InterceptBuilder;
     struct RuntimeIntercept;
 
 #ifdef LLVM_ON_WIN32

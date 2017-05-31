@@ -26,6 +26,7 @@
 #include "cling/Interpreter/CompilationOptions.h"
 #include "cling/Interpreter/DynamicExprInfo.h"
 #include "cling/Interpreter/DynamicLibraryManager.h"
+#include "cling/Interpreter/InterceptBuilder.h"
 #include "cling/Interpreter/LookupHelper.h"
 #include "cling/Interpreter/Transaction.h"
 #include "cling/Interpreter/Value.h"
@@ -236,138 +237,6 @@ namespace cling {
     }
   };
 
-  // Build & emit LLVM function overrides that will call into:
-  //   Interpreter::RuntimeIntercept
-  //
-  // Arg0 and Arg1 are forwarded from the call site, but nothing else.
-  // __cxa_atexit(Func, Arg, __dso_handle) ->
-  //   Interpreter::RuntimeIntercept(Func, Arg, 0, this)
-  //
-  class Interpreter::InterceptBuilder {
-    llvm::SmallVector<llvm::Function*, 8> m_Functions;
-    llvm::LLVMContext& m_Ctx;
-    llvm::Type* I32;
-    llvm::Type* PtrT;
-    llvm::Type* Void;
-    llvm::Module *m_Module;
-    llvm::AttributeSet* m_Attrs;
-
-  public:
-    InterceptBuilder(llvm::Module* Module, llvm::AttributeSet* Attrs = nullptr) :
-      m_Ctx(Module->getContext()), I32(llvm::Type::getInt32Ty(m_Ctx)),
-      PtrT(llvm::Type::getInt8PtrTy(m_Ctx)), Void(llvm::Type::getVoidTy(m_Ctx)),
-      m_Module(Module), m_Attrs(Attrs) {
-    }
-  
-    bool Build(llvm::Function *F, void *Ptr, unsigned Cmd) {
-      if (!F)
-        return false;
-
-      llvm::BasicBlock* Block = llvm::BasicBlock::Create(m_Ctx, "", F);
-      llvm::IRBuilder<> Builder(Block);
-
-      // Forward first 2 args passed to the function, casting to PtrT
-      llvm::SmallVector<llvm::Value*, 4> Args;
-      llvm::Function::arg_iterator FArg = F->arg_begin();
-      switch (F->getArgumentList().size()) {
-        default:
-        case 2:
-          Args.push_back(Builder.CreateBitOrPointerCast(&(*FArg), PtrT));
-          ++FArg;
-        case 1:
-          Args.push_back(Builder.CreateBitOrPointerCast(&(*FArg), PtrT));
-          ++FArg;
-        case 0:
-          break;
-      }
-
-      // Add remaining arguments
-      switch (Args.size()) {
-        case 0: Args.push_back(llvm::Constant::getNullValue(PtrT));
-        case 1: Args.push_back(llvm::Constant::getNullValue(PtrT));
-        case 2: Args.push_back(Builder.getInt32(Cmd));
-        default: break;
-      }
-      assert(Args.size() == 3 && "Wrong number of arguments");
-
-      // Add the final void* argument
-      Args.push_back(Builder.CreateIntToPtr(Builder.getInt64(uintptr_t(Ptr)),
-                                            PtrT));
-
-      // typedef int (*) (void*, void*, unsigned, void*) FuncPtr;
-      // FuncPtr FuncAddr = (FuncPtr) 0xDoCommand;
-      llvm::SmallVector<llvm::Type*, 4> ArgTys = { PtrT, PtrT, I32, PtrT };
-      llvm::Value* FuncAddr = Builder.CreateIntToPtr(
-          Builder.getInt64(uintptr_t(utils::FunctionToVoidPtr(
-              &Interpreter::RuntimeIntercept::Dispatch))),
-          llvm::PointerType::get(llvm::FunctionType::get(I32, ArgTys, false),
-                                 0),
-          "FuncCast");
-
-      // int rval = FuncAddr(%0, %1, Cmd, Ptr);
-      llvm::Value* Result = Builder.CreateCall(FuncAddr, Args, "rval");
-
-      // return rval;
-      Builder.CreateRet(Result);
-      return true;
-    }
-
-    // Build a function declaration :
-    // void | int  Name (void*, void*, void*, ... NArgs)
-    // FIXME: Alias all functions with first that matches Ptr, Cmd and NArgs >=
-    llvm::Function* Build(llvm::StringRef Name, bool Ret, unsigned NArgs,
-                          void* Ptr, unsigned Cmd) {
-      // Declare the function [void|int] Name (void* [,void*])
-      llvm::SmallVector<llvm::Type*, 8> ArgTy(NArgs, PtrT);
-      llvm::Type* RTy = Ret ? I32 : Void;
-      llvm::Function* F = llvm::cast_or_null<llvm::Function>(
-          m_Attrs
-              ? m_Module->getOrInsertFunction(
-                    Name, llvm::FunctionType::get(RTy, ArgTy, false), *m_Attrs)
-              : m_Module->getOrInsertFunction(
-                    Name, llvm::FunctionType::get(RTy, ArgTy, false)));
-
-      if (F && Build(F, Ptr, Cmd)) {
-        m_Functions.push_back(F);
-        return F;
-      }
-      return nullptr;
-    }
-
-    // Force built function to be emitted to the JIT
-    void Emit(IncrementalExecutor* Exec) {
-      for (auto&& F : m_Functions) {
-        void* Addr = Exec->getPointerToGlobalFromJIT(*F);
-        if (!Addr) {
-          llvm::errs() << "Function '" << F->getName()
-                       << "' was not overloaded\n";
-        }
-#ifdef LLVM_ON_WIN32
-        else {
-          // Add to injected symbols explicitly on Windows, as COFF format
-          // doesn't tag individual symbols as exported and the JIT needs this.
-          // https://reviews.llvm.org/rL258665
-          Exec->addSymbol(F->getName(), Addr, true);
-        }
-#endif
-      }
-    }
-
-    const llvm::DataLayout& getDataLayout() const {
-      return m_Module->getDataLayout();
-    }
-
-    llvm::Function* operator () (llvm::StringRef Name, bool Ret, unsigned NArgs,
-                                 void* Ptr, unsigned Cmd) {
-      return Build(Name, Ret, NArgs, Ptr, Cmd);
-    }
-
-    llvm::Function* operator () (llvm::StringRef Name, void* Ptr,
-                                 unsigned NArgs = 1) {
-      return Build(Name, true, NArgs, Ptr, RuntimeIntercept::kAtExitFunc);
-    }
-  };
-
   Interpreter::Interpreter(int argc, const char* const *argv,
                            const char* llvmdir /*= 0*/, bool noRuntime,
                            const Interpreter* parentInterp) :
@@ -422,7 +291,7 @@ namespace cling {
       //
       const clang::LangOptions& LangOpts = CI->getLangOpts();
       clang::CodeGenerator* CG = m_IncrParser->getCodeGenerator();
-      InterceptBuilder Overload(CG->GetModule());
+      InterceptBuilder Overload(CG->GetModule(), &RuntimeIntercept::Dispatch);
 
       // C atexit, std::atexit (Windows uses this for registering static dtors)
       Overload("atexit", this);
@@ -482,7 +351,11 @@ namespace cling {
 
       // Add the modules and emit the symbols
       addModule(CG->ReleaseModule(), m_OptLevel, true);
-      Overload.Emit(m_Executor.get());
+      Overload.Emit(m_Executor.get()
+#ifdef LLVM_ON_WIN32
+                    , true
+#endif
+                   );
 
       // Start a new module for the remaining initialization
       m_IncrParser->StartModule();
