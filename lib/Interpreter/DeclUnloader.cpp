@@ -38,8 +38,16 @@ bool DeclUnloader::UnloadDecl(Decl* D) {
   // FIXME: This prune can easily be handled in the Transaction to save memory.
   // ClassTemplateSpecializationDecl does it's own filtering based on Location.
   if (!D->isInvalidDecl()) {
-    if (wasInstatiatedBefore(D->getLocEnd()))
+    if (wasInstatiatedBefore(D->getLocEnd())) {
+#if defined(__apple_build_version__) && (__apple_build_version__ < 8000000)
+      if (ClassTemplateSpecializationDecl* CTSD = dyn_cast<ClassTemplateSpecializationDecl>(D))
+        if (CTSD->getName() == "__tree_node_base")
+          if (NamespaceDecl* NS = dyn_cast_or_null<NamespaceDecl>(CTSD->getDeclContext()))
+            if (NS->getName() == "__1")
+              return Visit(D);
+#endif
       return true;
+    }
   }
 
   DiagnosticErrorTrap Trap(m_Sema->getDiagnostics());
