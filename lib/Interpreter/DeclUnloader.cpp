@@ -1464,9 +1464,6 @@ bool DeclUnloader::VisitRedeclarable(clang::Redeclarable<T>* R, DeclContext* DC)
       ClassTemplateDeclExt::removeSpecialization(CTSD->getSpecializedTemplate(),
                                                  CanonCTSD);
 
-    if (wasInstatiatedBefore(CTSD->getPointOfInstantiation()))
-      return true;
-
     VisitorState VS(*this, kVisitingSpecialization);
 
     bool Successful = true;
