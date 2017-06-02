@@ -764,47 +764,72 @@ static std::string printStringType(const Value &V, const clang::Type* Type) {
   return "";
 }
 
-static std::string printBuiltinValue(const cling::Value& V,
-                                     const clang::BuiltinType *BT) {
-  switch (BT->getKind()) {
+template <class T>
+static std::string printBuiltinValues(const cling::Value& V, size_t N) {
+  // When N == 0, not an array but single value
+  if (N == 0) {
+    const T Value = V.simplisticCastAs<T>();
+    return cling::printValue(&Value);
+  }
+
+  smallstream Strm;
+  const T* Array = reinterpret_cast<const T*>(V.getPtr());
+  Strm << printValue(&Array[0]);
+  for (size_t i = 1; i < N; ++i)
+    Strm << ", " << cling::printValue(&Array[i]);
+
+  return Strm.str();
+}
+
+static std::string printBuiltinValues(const clang::BuiltinType::Kind Kind,
+                                      const cling::Value& V,
+                                      size_t N = 0 /* 0 means not an array */) {
+  switch (Kind) {
     case clang::BuiltinType::NullPtr:
       return kNullPtrStr;
     case clang::BuiltinType::Bool:
-      return executePrintValue<bool>(V, V.getLL());
+      return printBuiltinValues<bool>(V, N);
 
     case clang::BuiltinType::Char_S:
-      return executePrintValue<signed char>(V, V.getLL());
+      return printBuiltinValues<char>(V, N);
     case clang::BuiltinType::SChar:
-      return executePrintValue<signed char>(V, V.getLL());
+      return printBuiltinValues<signed char>(V, N);
     case clang::BuiltinType::Short:
-      return executePrintValue<short>(V, V.getLL());
+      return printBuiltinValues<short>(V, N);
     case clang::BuiltinType::Int:
-      return executePrintValue<int>(V, V.getLL());
+      return printBuiltinValues<int>(V, N);
     case clang::BuiltinType::Long:
-      return executePrintValue<long>(V, V.getLL());
+      return printBuiltinValues<long>(V, N);
     case clang::BuiltinType::LongLong:
-      return executePrintValue<long long>(V, V.getLL());
+      return printBuiltinValues<long long>(V, N);
 
     case clang::BuiltinType::Char_U:
-      return executePrintValue<unsigned char>(V, V.getULL());
+      return printBuiltinValues<unsigned char>(V, N);
     case clang::BuiltinType::UChar:
-      return executePrintValue<unsigned char>(V, V.getULL());
+      return printBuiltinValues<unsigned char>(V, N);
     case clang::BuiltinType::UShort:
-      return executePrintValue<unsigned short>(V, V.getULL());
+      return printBuiltinValues<unsigned short>(V, N);
     case clang::BuiltinType::UInt:
-      return executePrintValue<unsigned int>(V, V.getULL());
+      return printBuiltinValues<unsigned int>(V, N);
     case clang::BuiltinType::ULong:
-      return executePrintValue<unsigned long>(V, V.getULL());
+      return printBuiltinValues<unsigned long>(V, N);
     case clang::BuiltinType::ULongLong:
-      return executePrintValue<unsigned long long>(V, V.getULL());
+      return printBuiltinValues<unsigned long long>(V, N);
 
     case clang::BuiltinType::Float:
-      return executePrintValue<float>(V, V.getFloat());
+      return printBuiltinValues<float>(V, N);
     case clang::BuiltinType::Double:
-      return executePrintValue<double>(V, V.getDouble());
+      return printBuiltinValues<double>(V, N);
     case clang::BuiltinType::LongDouble:
-      return executePrintValue<long double>(V, V.getLongDouble());
+      return printBuiltinValues<long double>(V, N);
 
+    case clang::BuiltinType::Char16:
+      return printBuiltinValues<char16_t>(V, N);
+    case clang::BuiltinType::Char32:
+      return printBuiltinValues<char32_t>(V, N);
+    case clang::BuiltinType::WChar_S:
+      return printBuiltinValues<wchar_t>(V, N);
+      
     default:
       break;
   }
@@ -839,34 +864,9 @@ static std::string printUnpackedClingValue(const Value &V) {
       return Str;
   } else if (const clang::BuiltinType *BT
       = llvm::dyn_cast<clang::BuiltinType>(Td.getCanonicalType().getTypePtr())) {
-    // FIXME: Use ranged comparison:
-    // if (BT->getKind() >= clang::BuiltinType::Bool &&
-    //     BT->getKind() <= clang::BuiltinType::NullPtr)
-    // Requires support for Int128, UInt128, Half, Float128 in printBuiltinValue
-    switch (BT->getKind()) {
-      case clang::BuiltinType::Bool:
-      case clang::BuiltinType::Char_S:
-      case clang::BuiltinType::SChar:
-      case clang::BuiltinType::Short:
-      case clang::BuiltinType::Int:
-      case clang::BuiltinType::Long:
-      case clang::BuiltinType::LongLong:
-
-      case clang::BuiltinType::Char_U:
-      case clang::BuiltinType::UChar:
-      case clang::BuiltinType::UShort:
-      case clang::BuiltinType::UInt:
-      case clang::BuiltinType::ULong:
-      case clang::BuiltinType::ULongLong:
-
-      case clang::BuiltinType::Float:
-      case clang::BuiltinType::Double:
-      case clang::BuiltinType::LongDouble:
-      return printBuiltinValue(V, BT);
-
-      default:
-        break;
-    }
+    const std::string ValueStr = printBuiltinValues(BT->getKind(), V);
+    if (!ValueStr.empty())
+      return ValueStr;
   } else
     assert(!Ty->isIntegralOrEnumerationType() && "Bad Type.");
 
@@ -911,13 +911,13 @@ namespace cling {
       using namespace llvm;
       using namespace clang;
 
-      // Early out for builtin types, and pointers to them
+      // Early out for builtin types, pointers to them, and const arrays of them
       clang::QualType Ty =
           V.getType().getDesugaredType(V.getASTContext()).getCanonicalType();
       if (const BuiltinType *BT = dyn_cast<BuiltinType>(Ty.getTypePtr())) {
-          std::string val = printBuiltinValue(V, BT);
-          if (!val.empty())
-            return val;
+          std::string Str = printBuiltinValues(BT->getKind(), V);
+          if (!Str.empty())
+            return Str;
       } else if (Ty->isPointerType() || Ty->isReferenceType()) {
         // Check if the pointer resolves to a builtin-type
         unsigned level = 0;
@@ -933,6 +933,32 @@ namespace cling {
             return printValue(reinterpret_cast<const char* const*>(&ptr));
           }
           return printValue(&ptr);
+        }
+      } else if (Ty->isConstantArrayType()) {
+        const clang::Type* Te = Ty->getArrayElementTypeNoTypeQual();
+        if (const BuiltinType *BT = dyn_cast<BuiltinType>(Te)) {
+          const void *ptr = V.getPtr();
+          clang::ASTContext& C = V.getASTContext();
+          const clang::ConstantArrayType *CArrTy = C.getAsConstantArrayType(Ty);
+          const size_t N = CArrTy->getSize().getZExtValue();
+          switch (BT->getKind()) {
+            case BuiltinType::Char_S:
+              return toUTF8(reinterpret_cast<const char*>(ptr), N, 1);
+            case BuiltinType::Char16:
+              return toUTF8(reinterpret_cast<const char16_t*>(ptr), N, 'u');
+            case BuiltinType::Char32:
+              return toUTF8(reinterpret_cast<const char32_t*>(ptr), N, 'U');
+            case BuiltinType::WChar_S:
+              return toUTF8(reinterpret_cast<const wchar_t*>(ptr), N, 'L');
+            default:
+              break;
+          }
+          // early out to "{}" as printBuiltinValues with 'N=0' is special
+          if (N==0)
+            return kEmptyCollection;
+
+          return enclose(printBuiltinValues(BT->getKind(), V, N),
+                                            " { ", " }");
         }
       }
 
