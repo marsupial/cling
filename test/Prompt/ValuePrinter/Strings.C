@@ -9,6 +9,7 @@
 // Windows wants -Wno-deprecated-declarations
 //RUN: cat %s | %cling -Wno-deprecated-declarations -Xclang -verify 2>&1 | FileCheck %s
 
+#include <string>
 #include <stdlib.h>
 #ifdef _WIN32
  extern "C" int SetConsoleOutputCP(unsigned int);
@@ -29,18 +30,18 @@ const char* Data = (const char*) 0x01
 
 std::string RawData("\x12""\x13");
 
-cling::printValue(&RawData)[1]
+RawData[0]
 // CHECK-NEXT: (char) '0x12'
 
-cling::printValue(&RawData)[2]
+RawData[1]
 // CHECK-NEXT: (char) '0x13'
 
 RawData = "Line1\nLine2\rLine3";
-cling::printValue(&RawData)[6]
+RawData[5]
 // CHECK-NEXT: (char) '\n'
-cling::printValue(&RawData)[12]
+RawData[11]
 // CHECK-NEXT: (char) '\r'
-cling::printValue(&RawData)[13]
+RawData[12]
 // CHECK-NEXT: (char) 'L'
 
 "Line1\nLine2\nLine3"
