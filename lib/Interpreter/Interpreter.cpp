@@ -192,6 +192,8 @@ namespace cling {
     m_DynamicLookupEnabled(false), m_RawInputEnabled(false),
     m_OptLevel(parentInterp ? parentInterp->m_OptLevel : -1) {
 
+    ::memset(m_CachedTrns, 0, sizeof(m_CachedTrns));
+
     if (handleSimpleOptions(m_Opts))
       return;
 
@@ -1274,6 +1276,14 @@ namespace cling {
 
         Itr = std::find_if(m_StoredStates.begin(), m_StoredStates.end(),
                            Predicate);
+      }
+    }
+
+    // Clear any cached transaction states.
+    for (unsigned i = 0; i < kNumTransactions; ++i) {
+      if (m_CachedTrns[i] == &T) {
+        m_CachedTrns[i] = nullptr;
+        break;
       }
     }
 
