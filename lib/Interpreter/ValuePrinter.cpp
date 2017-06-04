@@ -1051,7 +1051,7 @@ static std::string printUnpackedClingValue(const Value &V) {
     if (!ValueStr.empty())
       return ValueStr;
   } else
-    assert(!Ty->isIntegralOrEnumerationType() && "Bad Type.");
+    assert(!Td.getCanonicalType()->isIntegralOrEnumerationType() && "Bad Type.");
 
   if (!V.getPtr())
     return kNullPtrStr;
