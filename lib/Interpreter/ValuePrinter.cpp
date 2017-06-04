@@ -592,7 +592,8 @@ namespace cling {
 
 namespace {
 
-static std::string callPrintValue(const Value& V, const void* Val) {
+static std::string callPrintValue(const Value& V, const void* Val,
+                                  const char* Cast = nullptr) {
   Interpreter *Interp = V.getInterpreter();
   Value printValueV;
 
@@ -600,10 +601,11 @@ static std::string callPrintValue(const Value& V, const void* Val) {
     // Use an llvm::raw_ostream to prepend '0x' in front of the pointer value.
 
     cling::ostrstream Strm;
+    const char* Closer = ")";
     Strm << "cling::printValue(";
-    Strm << getTypeString(V);
-    Strm << &Val;
-    Strm << ");";
+    if (Cast)
+      Strm << "static_cast<" << Cast << ">(*";
+    Strm << getTypeString(V) << &Val << Closer[!Cast] << ");";
 
     // We really don't care about protected types here (ROOT-7426)
     AccessCtrlRAII_t AccessCtrlRAII(*Interp, true);
@@ -637,16 +639,21 @@ public:
 
 template <typename T> static
 typename std::enable_if<!HasExplicitPrintValue<const T>::value, std::string>::type
-executePrintValue(const Value& V, const T& val) {
-  return callPrintValue(V, &val);
+executePrintValue(const Value& V, const T& Val) {
+  return callPrintValue(V, &Val);
 }
 
 template <typename T> static
 typename std::enable_if<HasExplicitPrintValue<const T>::value, std::string>::type
-executePrintValue(const Value& V, const T& val) {
-  return printValue(&val);
+executePrintValue(const Value& V, const T& Val) {
+  return printValue(&Val);
 }
 
+template <typename T> static std::string
+convertPrint(const Value& V, const char* Conv) {
+  return Conv ? callPrintValue(V, V.getPtr(), Conv)
+              : executePrintValue(V, *reinterpret_cast<const T*>(V.getPtr()));
+}
 
 static std::string printEnumValue(const Value &V) {
   cling::ostrstream enumString;
@@ -754,18 +761,18 @@ static std::string printFunctionValue(const Value &V, const void *ptr, clang::Qu
   return o.str();
 }
 
-static std::string printStringType(const Value &V, const clang::Type* Type) {
+static std::string printStringType(const Value& V, const clang::Type* Type,
+                                   bool Conv = false) {
   switch (V.getInterpreter()->getLookupHelper().isStringType(Type)) {
     case LookupHelper::kStdString:
-      return executePrintValue<std::string>(V, *(std::string*)V.getPtr());
+      return convertPrint<std::string>(V, Conv ? "std::string" : nullptr);
     case LookupHelper::kWCharString:
-      return executePrintValue<std::wstring>(V, *(std::wstring*)V.getPtr());
+      return convertPrint<std::wstring>(V, Conv ? "std::wstring" : nullptr);
     case LookupHelper::kUTF16Str:
-      return executePrintValue<std::u16string>(V, *(std::u16string*)V.getPtr());
+      return convertPrint<std::u16string>(V, Conv ? "std::u16string" : nullptr);
     case LookupHelper::kUTF32Str:
-      return executePrintValue<std::u32string>(V, *(std::u32string*)V.getPtr());
-    default:
-      break;
+      return convertPrint<std::u32string>(V, Conv ? "std::u32string" : nullptr);
+    default: break;
   }
   return "";
 }
@@ -938,6 +945,19 @@ static std::string printUnpackedClingValue(const Value &V) {
     std::string Str = printStringType(V, CXXRD->getTypeForDecl());
     if (!Str.empty())
       return Str;
+
+    // look for conversion operator to std::string
+    for (clang::NamedDecl* D : CXXRD->getVisibleConversionFunctions()) {
+      if (clang::CXXConversionDecl* Conversion =
+              llvm::dyn_cast<clang::CXXConversionDecl>(D->getUnderlyingDecl())) {
+        clang::QualType RTy = Conversion->getConversionType().getNonReferenceType();
+        if (clang::CXXRecordDecl *RTD = RTy->getAsCXXRecordDecl()) {
+          Str = printStringType(V, RTD->getTypeForDecl(), true);
+          if (!Str.empty())
+            return Str;
+        }
+      }
+    }
   } else if (const clang::BuiltinType *BT
       = llvm::dyn_cast<clang::BuiltinType>(Td.getCanonicalType().getTypePtr())) {
     const std::string ValueStr = printBuiltinValues(BT->getKind(), V);

@@ -296,6 +296,18 @@ namespace cling {
       return cling::printValue(V);
     }
   }
+
+  // Reference pass throughs, for objects with 'operator std::string()'
+  std::string printValue(const std::string& Str) { return printValue(&Str); }
+
+  // Reference pass through, for objects with 'operator std::wstring()'
+  std::string printValue(const std::wstring& Str) { return printValue(&Str); }
+
+  // Reference pass through, for objects with 'operator std::u16string()'
+  std::string printValue(const std::u16string& Str) { return printValue(&Str); }
+
+  // Reference pass through, for objects with 'operator std::u32string()'
+  std::string printValue(const std::u32string& Str) { return printValue(&Str); }
 }
 
 #endif
