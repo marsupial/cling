@@ -112,16 +112,15 @@ namespace cling {
       }
       catch(InterpreterException& e) {
         if (!e.diagnose()) {
-          cling::errs() << ">>> Caught an interpreter exception!\n"
-                        << ">>> " << e.what() << '\n';
+          cling::errs() << ">>> Caught an interpreter exception: '" << e.what()
+                        << "'.\n";
         }
       }
       catch(std::exception& e) {
-        cling::errs() << ">>> Caught a std::exception!\n"
-                     << ">>> " << e.what() << '\n';
+        cling::errs() << ">>> Caught a std::exception: '" << e.what() << "'.\n";
       }
       catch(...) {
-        cling::errs() << "Exception occurred. Recovering...\n";
+        cling::errs() << ">>> Caught an unkown exception.\n";
       }
     }
     m_MetaProcessor->getOuts().flush();
