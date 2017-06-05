@@ -210,13 +210,6 @@ endif ()
 # The JIT needs to be able to resolve these symbols from cling; unhide them.
 string(REPLACE "-fvisibility=hidden" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
 
-# The package needs to be compiler without RTTI information
-if(MSVC)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GR-")
-else()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
-endif()
-
 if(MSVC)
   add_definitions(/DNOMINMAX)
 endif()
@@ -230,6 +223,11 @@ include(CMakeParseArguments)
 macro(add_cling_subdirectory name)
   add_llvm_subdirectory(CLING TOOL ${name})
 endmacro()
+
+if(CLING_CLANG_RUNTIME_PATCH)
+  message(STATUS "Cling client with clang patching at runtime")
+  add_definitions(-DCLING_CLANG_RUNTIME_PATCH)
+endif()
 
 file (STRINGS "VERSION" CLING_VERSION)
 string(REGEX REPLACE "([0-9]).[0-9]+~[a-zA-Z]+" "\\1" CLING_VERSION_MAJOR ${CLING_VERSION})
@@ -253,6 +251,56 @@ macro(set_cling_windows_version_resource_properties name)
       PRODUCT_NAME "cling")
   endif()
 endmacro()
+
+# Exception handling needs special attention:
+#
+# LLVM/clang generally isn't built with exeption handling, however, cling
+# definitively throws exceptions and does so deep in LLVM code meaning objects
+# will be leaked (both in LLVM and cling).
+#
+# To get arround this add a CLING_GEN_UNWIND_CODE flag that can be used
+# in case LLVM_REQUIRES_EH needs to be off for compatability reasons.
+
+set(CLING_GEN_UNWIND_CODE ON BOOL "Generate stack-unwinding code in cling libs")
+
+if (NOT LLVM_REQUIRES_EH)
+  message(WARNING "LLVM_REQUIRES_EH is off meaning LLVM objects will be leaked if building LLVM now.")
+elseif(NOT CLING_GEN_UNWIND_CODE)
+  message(WARNING "CLING_GEN_UNWIND_CODE is off meaning cling objects will be leaked.")
+endif()
+
+if (MSVC)
+  # /EHs because cling_ThrowIfInvalidPointer is extern “C”
+  set(clingExceptions_ON "/D _HAS_EXCEPTIONS=1 /EHs /wd4714")
+  set(clingExceptions_OFF "/D _HAS_EXCEPTIONS=0 /EHs-c-")
+  set(clingRTTI_ON "/GR")
+  set(clingRTTI_OFF "/GR-")
+  set(clingEHRTTIRegEx "(/EHs(-c-?)|_HAS_EXCEPTIONS=(0|1))")
+else()
+  # Compiling everything with exception handling breaks some catch blocks
+  # in 'test/ErrorRecovery/Exceptions.C'.
+  # Possibly caused by the mixture of -fno-rtti & -frtti.
+  set(clingExceptions_ON "-fexceptions")
+  set(clingExceptions_OFF "-fno-exceptions")
+  set(clingRTTI_ON "-frtti")
+  set(clingRTTI_OFF "-fno-rtti")
+  set(clingEHRTTIRegEx "-f(exceptions|no-exceptions)")
+endif()
+
+if (CLING_GEN_UNWIND_CODE OR LLVM_REQUIRES_EH)
+  set(clingExceptionFlags "${clingExceptions_ON}")
+else()
+  set(clingExceptionFlags "${clingExceptions_OFF}")
+endif()
+
+# Honor LLVM_REQUIRES_RTTI whether being built in LLVM or not
+# Introducing a new flag doesn't make sense as there will be link time failure
+# when RTTI doesn't match between LLVM and cling.
+if (LLVM_REQUIRES_RTTI)
+  set(clingRTTIFlags "${clingRTTI_ON}")
+else()
+  set(clingRTTIFlags "${clingRTTI_OFF}")
+endif()
 
 macro(add_cling_library name)
   cmake_parse_arguments(ARG
@@ -296,43 +344,38 @@ macro(add_cling_library name)
     set(ARG_ENABLE_SHARED SHARED)
   endif()
 
-  if (MSVC)
-    # On Windows exceptions aren’t as generic as an x64 ABI.
-    # Stack unwinding code must be generated for every function between the
-    # throw and catch blocks.
-    if (${name} STREQUAL "clingInterpreter")
-      # All of libClingInterpreter is compiled with exceptions, mostly because
-      # llvm_unreachable throws an exception. Otherwise it could be reduced:
-      #    Exception.cpp, Interpreter.cpp, IncrementalParser.cpp,
-      #    IncrementalExecutor.cpp
-      set(cling_ex_file_match ".cpp$")
-    elseif(${name} STREQUAL "clingUserInterface")
-      # For libClingUserInterface, only UserInterface.cpp uses exceptions.
-      set(cling_ex_file_match "^UserInterface.cpp$")
-    endif()
-    if(cling_ex_file_match)
-      # needs to be on before llvm_add_library so flags can be set below
-      set(LLVM_REQUIRES_EH ON)
-      set(LLVM_REQUIRES_RTTI ON)
-    endif()
-  endif()
-
   llvm_add_library(${name} ${ARG_ENABLE_SHARED} ${ARG_UNPARSED_ARGUMENTS} ${srcs})
 
-  if (MSVC AND cling_ex_file_match)
-    # /EHs because cling_runtime_internal_throwIfInvalidPointer is extern “C”
-    if (cling_ex_file_match)
-      foreach(file_var ${ARGN})
-        if (file_var MATCHES ${cling_ex_file_match})
-          set_property(SOURCE ${file_var} APPEND_STRING PROPERTY COMPILE_FLAGS
-                       " /D _HAS_EXCEPTIONS=1 /EHs /GR /wd4714 ")
-        elseif (file_var MATCHES ".cpp$")
-          set_property(SOURCE ${file_var} APPEND_STRING PROPERTY COMPILE_FLAGS
-                       " /D _HAS_EXCEPTIONS=0 /EHs-c- /GR- ")
-        endif()
-      endforeach()
-    endif()
+  # Strip the Exception flags llvm_add_library has added at target scope.
+  # Neccessary as flags at target scope override those (come after) file scope
+  #
+  if(TARGET "obj.${name}" OR TARGET ${name})
+    if(TARGET "obj.${name}")
+	  set(cling_cur_target "obj.${name}")
+	else()
+	  set(cling_cur_target "${name}")
+	endif()
+
+    get_property(llvm_added_flags TARGET ${cling_cur_target} PROPERTY COMPILE_FLAGS)
+	STRING(REGEX REPLACE ${clingEHRTTIRegEx} "" llvm_edited_Flags ${llvm_added_flags})
+	set_property(TARGET ${cling_cur_target} PROPERTY COMPILE_FLAGS ${llvm_edited_Flags})
+	#MESSAGE("COMPILE_FLAGS: '${llvm_added_flags}' '${llvm_edited_Flags}'")
+
+    get_property(llvm_added_flags TARGET ${cling_cur_target} PROPERTY COMPILE_DEFINITIONS)
+	STRING(REGEX REPLACE ${clingEHRTTIRegEx} "" llvm_edited_Flags ${llvm_added_flags})
+	set_property(TARGET ${cling_cur_target} PROPERTY COMPILE_DEFINITIONS ${llvm_edited_Flags})
+	#MESSAGE("COMPILE_DEFINITIONS: '${llvm_added_flags}' '${llvm_edited_Flags}'")
+  else()
+   MESSAGE("SKIPPED: ${name}")
   endif()
+
+  # Add Cling's RTTI and exception flags
+  foreach(file_var ${ARGN})
+    if("${file_var}" MATCHES "\\.c(pp|$)")
+      set_property(SOURCE ${file_var} APPEND_STRING PROPERTY COMPILE_FLAGS
+                   " ${clingExceptionFlags} ")
+	endif()
+  endforeach()
 
   if(TARGET ${name})
     target_link_libraries(${name} ${INTERFACE} ${LLVM_COMMON_LIBS})
@@ -376,8 +419,8 @@ option(ROOT_CLASSIC "Building as part of the ROOT (classic)." OFF)
 if(DEFINED ROOT_BINARY_DIR)
   # Building as part of ROOT (CMake)
   include_directories(BEFORE
-    ${CMAKE_BINARY_DIR}/interpreter/llvm/src/tools/clang/include
-    ${CMAKE_SOURCE_DIR}/interpreter/llvm/src/tools/clang/include
+    ${CMAKE_CURRENT_BINARY_DIR}/../llvm/src/tools/clang/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../llvm/src/tools/clang/include
     )
 elseif(ROOT_CLASSIC)
   # Building as part of ROOT (classic)
