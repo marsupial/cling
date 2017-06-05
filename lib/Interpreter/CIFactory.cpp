@@ -318,7 +318,7 @@ namespace {
 
     #if defined(__GLIBCXX__)
       // Avoid '__float128 is not supported on this target' errors
-      if (!opts.StdVersion) {
+      if (!opts.Language && !opts.StdVersion) {
         switch (CxxStdCompiledWith()) {
           case 17:
             // Hopefully -D__float128=void can be removed when -std=c++17 works.
