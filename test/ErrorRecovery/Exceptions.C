@@ -6,7 +6,7 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: cat %s | %built_cling -Xclang -verify 2>&1 | FileCheck %s
+// RUN: cat %s | %built_cling 2>&1 | FileCheck %s
 
 // Still failing on Windows:
 //  typeid() fails when cling was compiled without LLVM_REQUIRES_RTTI / -frtti
@@ -80,9 +80,9 @@ CLING_TEST_STD_EXCEPT(5, std::bad_alloc, "%s", e.what())
 // CHECK-NEXT: Caught Ref std::exception std::bad_alloc std::bad_alloc
 
 CLING_TEST_EXCEPT(6, const char*, "%s", e)
-// expected-warning@2 {{duplicate 'const' declaration specifier}}
-// expected-warning@2 {{duplicate 'const' declaration specifier}}
-// CHECK-NEXT: Caught: char const* c-string
+// expected-warning@input_line_57:2 {{duplicate 'const' declaration specifier}}
+// expected-warning@input_line_57:2 {{duplicate 'const' declaration specifier}}
+//      CHECK: Caught: char const* c-string
 // CHECK-NEXT: Caught Ref: char const* c-string
 // CHECK-NEXT: Caught All Handler
 
@@ -152,6 +152,9 @@ try {
 } catch (const cling::InvalidDerefException& E) {
   printf("InvalidDerefException: %s\n", E.what());
 }
+// expected-warning@input_line_113:4 {{null passed to a callee that requires a non-null argument}}
+// Above only triggers with libc++ headers?
+
 // CHECK-NEXT: InvalidDerefException: Trying to dereference null pointer or trying to call routine taking non-null arguments
 
 try {
@@ -163,10 +166,10 @@ try {
 // CHECK-NEXT: std::exception: Trying to dereference null pointer or trying to call routine taking non-null arguments
 
 throw cling::InterpreterException("From JIT A")
-// CHECK-NEXT: >>> Caught an interpreter exception: 'From JIT A'
+// CHECK-NEXT: >>> Caught an interpreter exception: 'From JIT A'.
 
 throw std::runtime_error("From JIT B")
-// CHECK-NEXT: >>> Caught a std::exception: 'From JIT B'
+// CHECK-NEXT: >>> Caught a std::exception: 'From JIT B'.
 
 throw "StringExcept";
 // CHECK-NEXT: >>> Caught an unkown exception.
