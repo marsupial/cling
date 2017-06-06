@@ -803,11 +803,12 @@ namespace cling {
     // ExprStmt can be evaluated and etc. Such enforcement cannot happen in the
     // worker, because it is used from various places, where there is no such
     // rule
-    CompilationOptions CO(this);
+    CompilationOptions CO(this, "cling::Interpreter::evaluate");
     CO.DeclarationExtraction = 0;
     CO.ValuePrinting = 0;
     CO.ResultEvaluation = 1;
 
+    moveLineNumber(-1);
     return EvaluateInternal(input, CO, &V);
   }
 
