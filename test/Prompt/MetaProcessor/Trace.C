@@ -7,9 +7,10 @@
 //------------------------------------------------------------------------------
 
 // RUN: cat %s | %cling | FileCheck %s
+
 int abcdefghxyz = 10
 //CHECK: (int) 10
 .trace ast abcdefghxyz
 //CHECK: Dumping abcdefghxyz:
-//CHECK: VarDecl {{0x[0-9a-f]+}} <input_line_[[@LINE-3]]:2:2, col:20> col:6 used abcdefghxyz 'int' cinit
+//CHECK: VarDecl {{0x[0-9a-f]+}} <input_line_11:2:2, col:20> col:6 used abcdefghxyz 'int' cinit
 //CHECK: `-IntegerLiteral {{0x[0-9a-f]+}} <col:20> 'int' 10

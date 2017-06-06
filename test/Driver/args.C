@@ -10,7 +10,7 @@
 //RUN: %cling ".x %s(42,\"AAA)BBB\")" 2>&1 | FileCheck -check-prefix=CHECK-DOTX %s
 
 // From .x-implicit args() call:
-//CHECK: input_line_4:2:2: error: no matching function for call to 'args'
+//CHECK: input_line_2:2:2: error: no matching function for call to 'args'
 //CHECK-DOTX-NOT: {{.*error|note:.*}}
 
 extern "C" int printf(const char* fmt, ...);

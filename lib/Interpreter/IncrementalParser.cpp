@@ -180,7 +180,7 @@ namespace cling {
   IncrementalParser::IncrementalParser(Interpreter* interp, const char* llvmdir):
     m_Interpreter(interp),
     m_CI(CIFactory::createCI("", interp->getOptions(), llvmdir)),
-    m_Consumer(nullptr), m_ModuleNo(0) {
+    m_Consumer(nullptr), m_ModuleNo(0), m_LineOffset(1) {
 
     if (!m_CI) {
       cling::errs() << "Compiler instance could not be created.\n";
@@ -293,6 +293,15 @@ namespace cling {
     return m_Consumer->getTransaction();
   }
 
+  size_t IncrementalParser::getLineNumber() const {
+    return m_MemoryBuffers.size() + m_LineOffset;
+  }
+
+  size_t IncrementalParser::moveLineOffset(int Offset){
+    m_LineOffset += Offset;
+    return getLineNumber();
+  }
+
   const Transaction*
   IncrementalParser::mergeTransactionsAfter(const Transaction *T, bool Prev) {
     llvm::SmallVector<Transaction*, 8> merge;
@@ -345,7 +354,7 @@ namespace cling {
   SourceLocation IncrementalParser::getLastMemoryBufferEndLoc() const {
     const SourceManager& SM = getCI()->getSourceManager();
     SourceLocation Result = SM.getLocForStartOfFile(m_VirtualFileID);
-    return Result.getLocWithOffset(m_MemoryBuffers.size() + 1);
+    return Result.getLocWithOffset(getLineNumber());
   }
 
   IncrementalParser::~IncrementalParser() {
@@ -731,7 +740,7 @@ namespace cling {
     PP.enableIncrementalProcessing();
 
     std::ostringstream source_name;
-    source_name << CO.LineName << "_" (m_MemoryBuffers.size() + 1);
+    source_name << CO.LineName << "_" << getLineNumber();
 
     // Create an uninitialized memory buffer, copy code in and append "\n"
     size_t InputSize = input.size(); // don't include trailing 0

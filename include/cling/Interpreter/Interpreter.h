@@ -399,6 +399,12 @@ namespace cling {
     ///
     bool isUniqueName(llvm::StringRef name);
 
+    ///\brief Offsets the current line number by the given amount.
+    ///
+    ///\returns Updated line number.
+    ///
+    size_t moveLineNumber(int Offset = 1);
+
     ///\brief Adds multiple include paths separated by a delimter.
     ///
     ///\param[in] PathsStr - Path(s)

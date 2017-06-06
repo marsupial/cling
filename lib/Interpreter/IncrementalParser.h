@@ -82,6 +82,9 @@ namespace cling {
     ///\brief Number of created modules.
     unsigned m_ModuleNo;
 
+    ///\brief Offset of m_MemoryBuffers to first user input line.
+    int m_LineOffset;
+
     ///\brief Code generator
     ///
     std::unique_ptr<clang::CodeGenerator> m_CodeGen;
@@ -118,6 +121,8 @@ namespace cling {
     clang::CodeGenerator* getCodeGenerator() const { return m_CodeGen.get(); }
     bool hasCodeGenerator() const { return m_CodeGen.get(); }
     clang::SourceLocation getLastMemoryBufferEndLoc() const;
+    size_t getLineNumber() const;
+    size_t moveLineOffset(int Offset);
 
     /// \{
     /// \name Transaction Support

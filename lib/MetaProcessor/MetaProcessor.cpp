@@ -305,7 +305,8 @@ namespace cling {
 
     if (input_line.empty() ||
         (input_line.size() == 1 && input_line.front() == '\n')) {
-      // just a blank line, nothing to do.
+      // just a blank line, nothing to do but advance the line number
+      m_Interp.moveLineNumber();
       return expectedIndent;
     }
 
@@ -317,6 +318,8 @@ namespace cling {
 
       if (m_MetaParser->isQuitRequested())
         return -1;
+
+      m_Interp.moveLineNumber();
 
       if (actionResult != MetaSema::AR_Success)
         compRes = Interpreter::kFailure;

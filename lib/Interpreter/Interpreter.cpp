@@ -399,6 +399,9 @@ namespace cling {
     for (auto&& I: IncrParserTransactions)
       m_IncrParser->commitTransaction(I);
 
+    // Sync offset so input line numbers match.
+    m_IncrParser->moveLineOffset(-(m_IncrParser->getLineNumber() - 1));
+
     // Disable suggestions for ROOT
     bool showSuggestions = !llvm::StringRef(ClingStringify(CLING_VERSION)).startswith("ROOT");
 
@@ -1647,5 +1650,9 @@ namespace cling {
       }
     } // namespace internal
   }  // namespace runtime
+
+  size_t Interpreter::moveLineNumber(int Offset) {
+    return m_IncrParser->moveLineOffset(Offset);
+  }
 
 } //end namespace cling
