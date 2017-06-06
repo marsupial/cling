@@ -492,7 +492,7 @@ namespace cling {
                 "Interpreter* gCling";
         AssignIfValue(Strm, ThisP, "Interpreter*", " }}");
       } else {
-        Strm << "#include \"cling/Interpreter/CValuePrinter.h\"\n"
+        Strm << "#include \"cling-c/ValuePrinter.h\"\n"
                 "void* gCling";
         AssignIfValue(Strm, ThisP, "void*");
       }

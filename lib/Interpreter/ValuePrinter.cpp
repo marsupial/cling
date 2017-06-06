@@ -9,7 +9,6 @@
 
 #include "cling/Interpreter/Value.h"
 
-#include "cling/Interpreter/CValuePrinter.h"
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/LookupHelper.h"
 #include "cling/Interpreter/Transaction.h"
@@ -17,6 +16,7 @@
 #include "cling/Utils/AST.h"
 #include "cling/Utils/Output.h"
 #include "cling/Utils/Validation.h"
+#include "cling-c/ValuePrinter.h"
 
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
@@ -42,13 +42,15 @@
 
 using namespace cling;
 
+CLING_EXTERN_C_
 // Implements the CValuePrinter interface.
-extern "C" void cling_PrintValue(void * /*cling::Value**/ V) {
+void cling_PrintValue(void * /*cling::Value**/ V) {
   //Value* value = (Value*)V;
 
   //std::string typeStr = printTypeInternal(*value);
   //std::string valueStr = printValueInternal(*value);
 }
+_CLING_EXTERN_C
 
 // Exported for RuntimePrintValue.h
 namespace cling {

@@ -8,14 +8,13 @@
 //------------------------------------------------------------------------------
 
 #include "cling/Interpreter/Interpreter.h"
-//#include "cling/Interpreter/CValuePrinter.h"
 #include "cling/Interpreter/DynamicExprInfo.h"
 #include "cling/Interpreter/InterpreterCallbacks.h"
 #include "cling/Interpreter/LookupHelper.h"
 #include "cling/Utils/Output.h"
-#include "clang/AST/Type.h"
+#include "cling-c/Exception.h"
 
-extern "C" void* cling_ThrowIfInvalidPointer(void*, void*, const void*);
+#include "clang/AST/Type.h"
 
 namespace cling {
 namespace internal {
