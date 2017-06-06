@@ -177,6 +177,8 @@ extern "C" {
 
 #endif // __cplusplus
 
+// From "cling-c/Exception.h"
+
 ///\brief a function that throws InvalidDerefException. This allows to 'hide'
 /// the definition of the exceptions from the RuntimeUniverse and allows us to
 /// run cling in -no-rtti mode.

@@ -13,12 +13,13 @@
 #include "cling/Interpreter/InterpreterCallbacks.h"
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Utils/Validation.h"
+#include "cling-c/Exception.h"
 
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaDiagnostic.h"
 
-extern "C" {
+CLING_EXTERN_C_
 /// Throw an InvalidDerefException if the Arg pointer is invalid.
 ///\param Interp: The interpreter that has compiled the code.
 ///\param Expr: The expression corresponding determining the pointer value.
@@ -50,7 +51,7 @@ void* cling_ThrowIfInvalidPointer(void* Interp, void* Expr, const void* Arg) {
   }
   return const_cast<void*>(Arg);
 }
-}
+_CLING_EXTERN_C
 
 namespace cling {
   InterpreterException::InterpreterException(const std::string& What) :
