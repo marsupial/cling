@@ -712,8 +712,8 @@ namespace cling {
 
     Sema& S = getCI()->getSema();
 
-    const CompilationOptions& CO
-       = m_Consumer->getTransaction()->getCompilationOpts();
+    Transaction *T = m_Consumer->getTransaction();
+    const CompilationOptions& CO = T->getCompilationOpts();
 
     assert(!(S.getLangOpts().Modules
              && CO.CodeGenerationForModule)
@@ -771,7 +771,7 @@ namespace cling {
 
     // NewLoc only used for diags.
     PP.EnterSourceFile(FID, /*DirLookup*/0, NewLoc);
-    m_Consumer->getTransaction()->setBufferFID(FID);
+    T->setBufferFID(FID);
 
     DiagnosticsEngine& Diags = getCI()->getDiagnostics();
 
@@ -786,13 +786,13 @@ namespace cling {
       // is due to a top-level semicolon, an action override, or a parse error
       // skipping something.
       if (Trap.hasErrorOccurred())
-        m_Consumer->getTransaction()->setIssuedDiags(Transaction::kErrors);
+        T->setIssuedDiags(Transaction::kErrors);
       if (ADecl)
         m_Consumer->HandleTopLevelDecl(ADecl.get());
     };
     // If never entered the while block, there's a chance an error occured
     if (Trap.hasErrorOccurred())
-      m_Consumer->getTransaction()->setIssuedDiags(Transaction::kErrors);
+      T->setIssuedDiags(Transaction::kErrors);
 
     if (CO.CodeCompletionOffset != -1) {
       assert((int)SM.getFileOffset(PP.getCodeCompletionLoc())
@@ -802,7 +802,7 @@ namespace cling {
              && "Code completion set but not reached!");
 
       // Let's ignore this transaction:
-      m_Consumer->getTransaction()->setIssuedDiags(Transaction::kErrors);
+      T->setIssuedDiags(Transaction::kErrors);
 
       return kSuccess;
     }
