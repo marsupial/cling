@@ -26,8 +26,7 @@ extern "C" {
 ///\returns void*, const-cast from Arg, to reduce the complexity in the
 /// calling AST nodes, at the expense of possibly doing a
 /// T* -> const void* -> const_cast<void*> -> T* round trip.
-void* cling_runtime_internal_throwIfInvalidPointer(void* Interp, void* Expr,
-                                                   const void* Arg) {
+void* cling_ThrowIfInvalidPointer(void* Interp, void* Expr, const void* Arg) {
 
   const clang::Expr* const E = (const clang::Expr*)Expr;
 
