@@ -731,7 +731,7 @@ namespace cling {
     PP.enableIncrementalProcessing();
 
     std::ostringstream source_name;
-    source_name << "input_line_" << (m_MemoryBuffers.size() + 1);
+    source_name << CO.LineName << "_" (m_MemoryBuffers.size() + 1);
 
     // Create an uninitialized memory buffer, copy code in and append "\n"
     size_t InputSize = input.size(); // don't include trailing 0

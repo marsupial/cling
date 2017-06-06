@@ -72,13 +72,17 @@ namespace cling {
     ///
     int CodeCompletionOffset = -1;
 
-    CompilationOptions()
+    ///\brief Line name for DiagnosticsEngine report.
+    ///
+    const char* LineName;
+
+    CompilationOptions(const char* Name = "input_line")
         : DeclarationExtraction(0), ValuePrinting(VPDisabled),
           ResultEvaluation(0), DynamicScoping(0), Debug(0), CodeGeneration(1),
           CodeGenerationForModule(0), IgnorePromptDiags(0),
-          CheckPointerValidity(1), OptLevel(2) {}
+          CheckPointerValidity(1), OptLevel(2), LineName(Name) {}
 
-    CompilationOptions(const Interpreter* Interp);
+    CompilationOptions(const Interpreter* Interp, const char* N = "input_line");
 
     bool operator != (const CompilationOptions& Other) const {
       return
@@ -93,6 +97,7 @@ namespace cling {
         CheckPointerValidity  != Other.CheckPointerValidity ||
         OptLevel              != Other.OptLevel ||
         CodeCompletionOffset  != Other.CodeCompletionOffset;
+        // Ignore LineName for equivalence
     }
 
     bool operator == (const CompilationOptions& Other) const {

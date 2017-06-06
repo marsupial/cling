@@ -106,13 +106,13 @@ namespace {
 
 namespace cling {
 
-  CompilationOptions::CompilationOptions(const Interpreter* I)
+  CompilationOptions::CompilationOptions(const Interpreter* I, const char* Name)
       : DeclarationExtraction(0), ValuePrinting(VPDisabled),
         ResultEvaluation(0), DynamicScoping(I->isDynamicLookupEnabled()),
         Debug(I->isPrintingDebug()), CodeGeneration(!I->isInSyntaxOnlyMode()),
         CodeGenerationForModule(0), IgnorePromptDiags(!I->isRawInputEnabled()),
         CheckPointerValidity(!I->isRawInputEnabled()),
-        OptLevel(I->getDefaultOptLevel()) {}
+        OptLevel(I->getDefaultOptLevel()), LineName(Name) {}
 
   Interpreter::PushTransactionRAII::PushTransactionRAII(const Interpreter* I)
     : m_Interpreter(I) {
