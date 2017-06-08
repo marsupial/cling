@@ -107,3 +107,12 @@ void f(std::string) {}
 f // CHECK: (void (*)(std::string)) Function @0x{{[0-9a-f]+}}
 // CHECK: at input_line_{{[0-9].*}}:1:
 // CHECK: void f(std::string) {}
+
+int I[0]
+//      CHECK: (int [0]) {}
+int I2[2][0]
+// CHECK-NEXT: (int [2][0]) {}
+int I204[2][0][4]
+// CHECK-NEXT: (int [2][0][4]) {}
+int ICrazy[20][10][0][3][6]
+// CHECK-NEXT: (int [20][10][0][3][6]) {}
