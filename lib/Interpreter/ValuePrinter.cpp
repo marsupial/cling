@@ -130,19 +130,22 @@ static std::string getTypeString(const Value &V) {
 
 /// RAII object to disable and then re-enable access control in the LangOptions.
 struct AccessCtrlRAII_t {
-  bool savedAccessControl;
   clang::LangOptions& LangOpts;
+  clang::DiagnosticsEngine& Diags;
+  const bool PrevAccess, PrevSupress;
 
-  AccessCtrlRAII_t(cling::Interpreter& Interp):
-    LangOpts(const_cast<clang::LangOptions&>(Interp.getCI()->getLangOpts())) {
-    savedAccessControl = LangOpts.AccessControl;
+  AccessCtrlRAII_t(cling::Interpreter& Interp, bool Supress = false)
+      : LangOpts(Interp.getCI()->getLangOpts()),
+        Diags(Interp.getDiagnostics()), PrevAccess(LangOpts.AccessControl),
+        PrevSupress(Diags.getSuppressAllDiagnostics()) {
     LangOpts.AccessControl = false;
+    if (Supress) Diags.setSuppressAllDiagnostics(true);
   }
 
   ~AccessCtrlRAII_t() {
-    LangOpts.AccessControl = savedAccessControl;
+    LangOpts.AccessControl = PrevAccess;
+    Diags.setSuppressAllDiagnostics(PrevSupress);
   }
-
 };
 
 #ifndef NDEBUG
@@ -603,12 +606,8 @@ static std::string callPrintValue(const Value& V, const void* Val) {
     Strm << ");";
 
     // We really don't care about protected types here (ROOT-7426)
-    AccessCtrlRAII_t AccessCtrlRAII(*Interp);
-    clang::DiagnosticsEngine& Diag = Interp->getDiagnostics();
-    bool oldSuppDiags = Diag.getSuppressAllDiagnostics();
-    Diag.setSuppressAllDiagnostics(true);
+    AccessCtrlRAII_t AccessCtrlRAII(*Interp, true);
     Interp->evaluate(Strm.str(), printValueV);
-    Diag.setSuppressAllDiagnostics(oldSuppDiags);
   }
 
   if (printValueV.isValid() && printValueV.getPtr())
