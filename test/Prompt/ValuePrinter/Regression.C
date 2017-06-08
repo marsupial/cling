@@ -116,3 +116,7 @@ int I204[2][0][4]
 // CHECK-NEXT: (int [2][0][4]) {}
 int ICrazy[20][10][0][3][6]
 // CHECK-NEXT: (int [20][10][0][3][6]) {}
+
+struct ObjA {};
+ObjA Empty[3][0][1]
+// CHECK-NEXT: (ObjA [3][0][1]) {}

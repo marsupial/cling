@@ -870,31 +870,12 @@ static void RecursivePrint(const BuiltinPrintData& Data) {
   --RD->Dims;
 }
 
-static std::string printBuiltinArray(clang::QualType Ty,
-                                     const clang::BuiltinType* BT,
-                                     const cling::Value& V) {
-  using namespace clang;
-  assert(Ty->isConstantArrayType() && "Not an ConstantArray");
+static std::string printBuiltinArray(const clang::BuiltinType* BT,
+                                     const cling::Value& V,
+                                     llvm::SmallVectorImpl<size_t>& Dims) {
   PrintBuiltinValueProc PrintProc = getPrintBuiltinValueProc(BT->getKind());
-  if (!PrintProc) return "";
-
-  bool HasZero = false;
-  clang::ASTContext& Ctx = V.getASTContext();
-  llvm::SmallVector<size_t, 32> Dims;
-  do {
-    const clang::ConstantArrayType* CArrTy = Ctx.getAsConstantArrayType(Ty);
-    Dims.push_back(CArrTy->getSize().getZExtValue());
-    const clang::Type* Elem = Ty->getArrayElementTypeNoTypeQual();
-    Ty = QualType(Elem, 0);
-    HasZero = HasZero || Dims.back() == 0;
-  } while (Ty->isConstantArrayType());
-
-  // int[0] -> (int [0]) {}
-  // int [2][0]  -> (int [2][0]) {}
-  // int [3][0][2]  -> (int [3][0][2]) {}
-  // sizeof all of those is 0
-  if (HasZero)
-    return valuePrinterInternal::kEmptyCollection;
+  if (!PrintProc)
+    return "";
 
   largestream Strm;
   BuiltinPrintData::RecursiveData RD = {&Dims[0], PrintProc, 0};
@@ -903,13 +884,13 @@ static std::string printBuiltinArray(clang::QualType Ty,
     const size_t N = Dims.front();
     // Try for strings first, they are special when full or empty
     switch (BT->getKind()) {
-      case BuiltinType::Char_S:
+      case clang::BuiltinType::Char_S:
         return toUTF8(reinterpret_cast<const char*>(V.getPtr()), N, 1);
-      case BuiltinType::Char16:
+      case clang::BuiltinType::Char16:
         return toUTF8(reinterpret_cast<const char16_t*>(V.getPtr()), N, 'u');
-      case BuiltinType::Char32:
+      case clang::BuiltinType::Char32:
         return toUTF8(reinterpret_cast<const char32_t*>(V.getPtr()), N, 'U');
-      case BuiltinType::WChar_S:
+      case clang::BuiltinType::WChar_S:
         return toUTF8(reinterpret_cast<const wchar_t*>(V.getPtr()), N, 'L');
       default: break;
     }
@@ -1024,9 +1005,25 @@ namespace cling {
           return printValue(&ptr);
         }
       } else if (Ty->isConstantArrayType()) {
+        clang::ASTContext& Ctx = V.getASTContext();
+        llvm::SmallVector<size_t, 32> Dims;
+        do {
+          const clang::ConstantArrayType* ArTy = Ctx.getAsConstantArrayType(Ty);
+          Dims.push_back(ArTy->getSize().getZExtValue());
+          // int[0] -> (int [0]) {}
+          // int [2][0]  -> (int [2][0]) {}
+          // Obj o[3][0][2]  -> (Obj [3][0][2]) {}
+          // sizeof all of those is 0
+          if (Dims.back() == 0)
+            return valuePrinterInternal::kEmptyCollection;
+
+          const clang::Type* Elem = Ty->getArrayElementTypeNoTypeQual();
+          Ty = QualType(Elem, 0);
+        } while (Ty->isConstantArrayType());
+
         if (const BuiltinType* BT =
                 dyn_cast<BuiltinType>(Ty->getBaseElementTypeUnsafe())) {
-          std::string Str = printBuiltinArray(Ty, BT, V);
+          std::string Str = printBuiltinArray(BT, V, Dims);
           if (!Str.empty())
             return Str;
         }
