@@ -356,9 +356,6 @@ namespace cling {
 
     LookupHelper& getLookupHelper() const { return *m_LookupHelper; }
 
-    const clang::Parser& getParser() const;
-    clang::Parser& getParser();
-
     ///\brief Returns the current or last Transactions source location.
     ///
     ///\param[in] skipWrapper - skip the length of a cling wrapper
@@ -663,8 +660,18 @@ namespace cling {
 
     clang::CompilerInstance* getCI() const;
     clang::CompilerInstance* getCIOrNull() const;
+
     clang::Sema& getSema() const;
+    clang::Parser& getParser() const;
     clang::DiagnosticsEngine& getDiagnostics() const;
+
+    ///\brief Useful pattern so that one can access internal items without
+    /// knowing about clang's internal structures: Intrp->get<clang::LangOpts>()
+    ///
+    /// Currently implemented for Sema, ASTContext, Parser, LangOptions,
+    /// DiagnosticsEngine.
+    ///
+    template <typename A> A& get() const;
 
     //FIXME: This must be in InterpreterCallbacks.
     void installLazyFunctionCreator(void* (*fp)(const std::string&));
