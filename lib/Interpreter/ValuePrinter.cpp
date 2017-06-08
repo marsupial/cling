@@ -896,7 +896,7 @@ static std::string printUnpackedClingValue(const Value &V) {
   } else if (Ty->isFunctionType()) {
     // special case function printing, using compiled information
     return printFunctionValue(V, &V, Ty);
-  } else if ((Ty->isPointerType() || Ty->isMemberPointerType()) && Ty->getPointeeType()->isFunctionProtoType()) {
+  } else if ((Ty->isPointerType() || Ty->isMemberPointerType()) && Ty->getPointeeType()->isFunctionType()) {
     // special case function printing, using compiled information
     return printFunctionValue(V, V.getPtr(), Ty->getPointeeType());
   } else if (clang::CXXRecordDecl *CXXRD = Ty->getAsCXXRecordDecl()) {
