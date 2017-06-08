@@ -1342,9 +1342,12 @@ namespace cling {
     //
     //  Lookup the function name in the given class now.
     //
+    const Sema::LookupNameKind LookupKind = isa<TranslationUnitDecl>(foundDC)
+                                                ? Sema::LookupOrdinaryName
+                                                : Sema::LookupMemberName;
     DeclarationName FuncName = FuncNameInfo.getName();
     SourceLocation FuncNameLoc = FuncNameInfo.getLoc();
-    LookupResult Result(S, FuncName, FuncNameLoc, Sema::LookupMemberName,
+    LookupResult Result(S, FuncName, FuncNameLoc, LookupKind,
                         Sema::NotForRedeclaration);
     Result.suppressDiagnostics();
     if (!S.LookupQualifiedName(Result, foundDC)) {
@@ -1671,6 +1674,14 @@ namespace cling {
                                      objectIsConst,
                                      findAnyFunctionSelector,
                                      diagOnOff);
+  }
+
+  const FunctionDecl* LookupHelper::findAnyFunction(llvm::StringRef Name,
+                                                    DiagSetting Diag) const {
+
+    return findAnyFunction(
+        m_Interpreter->getSema().getASTContext().getTranslationUnitDecl(), Name,
+        Diag);
   }
 
   const FunctionDecl*

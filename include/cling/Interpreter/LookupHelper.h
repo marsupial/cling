@@ -142,6 +142,15 @@ namespace cling {
     findAnyFunction(const clang::Decl* scopeDecl, llvm::StringRef funcName,
                     DiagSetting diagOnOff, bool objectIsConst = false) const;
 
+    ///\brief Lookup a function based in the TransaltionUnitDecl, and return
+    ///function that matches the name (and constness if requested).
+    ///
+    ///\param [in] funcName  - the name of the function to find.
+    ///\param [in] diagOnOff - whether to diagnose lookup failures.
+    ///\returns The function found or null.
+    const clang::FunctionDecl*
+    findAnyFunction(llvm::StringRef funcName, DiagSetting diagOnOff) const;
+
     ///\brief Lookup a function based on its Decl(Context), name and parameters.
     ///
     ///\param [in] scopeDecl - the scope (namespace or tag) that is searched for
