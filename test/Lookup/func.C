@@ -49,6 +49,7 @@ printf("G: 0x%lx\n", (unsigned long) G);
 //
 
 .rawInput 1
+extern "C" void E_f() { int x = 2; }
 void G_f() { int x = 1; }
 void G_a(int v) { int x = v; }
 void G_b(int vi, double vd) { int x = vi; double y = vd; }
@@ -175,7 +176,7 @@ const clang::FunctionDecl* G_f_args = lookup.findFunctionArgs(G, "G_f", "", diag
 const clang::FunctionDecl* G_f_proto = lookup.findFunctionProto(G, "G_f", "", diags);
 
 printf("G_f_args: 0x%lx\n", (unsigned long) G_f_args);
-//CHECK-NEXT: G_f_args: 0x{{[1-9a-f][0-9a-f]*$}}
+//CHECK: G_f_args: 0x{{[1-9a-f][0-9a-f]*$}}
 G_f_args->print(cling::outs());
 //CHECK-NEXT: void G_f() {
 //CHECK-NEXT:     int x = 1;
@@ -188,7 +189,25 @@ G_f_proto->print(cling::outs());
 //CHECK-NEXT:     int x = 1;
 //CHECK-NEXT: }
 
+const clang::FunctionDecl* G_f_ = lookup.findAnyFunction("G_f", diags);
+printf("G_f_: 0x%lx\n", (unsigned long) G_f_);
+//CHECK: G_f_: 0x{{[1-9a-f][0-9a-f]*$}}
+G_f_->print(cling::outs());
+//CHECK-NEXT: void G_f() {
+//CHECK-NEXT:     int x = 1;
+//CHECK-NEXT: }
 
+//
+//  Test finding a global function in Translation Unit scope.
+//
+
+const clang::FunctionDecl* E_f_ = lookup.findAnyFunction("E_f", diags);
+printf("E_f_: 0x%lx\n", (unsigned long) E_f_);
+//CHECK: E_f_: 0x{{[1-9a-f][0-9a-f]*$}}
+E_f_->print(cling::outs());
+//CHECK-NEXT: void E_f() {
+//CHECK-NEXT:     int x = 2;
+//CHECK-NEXT: }
 
 //
 //  Test finding a global function taking a single int argument.
