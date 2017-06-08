@@ -148,11 +148,44 @@ namespace cling {
     m_IncrParser.mergeTransactionsAfter(m_T);
   }
 
-  const Parser& Interpreter::getParser() const {
+  CompilerInstance* Interpreter::getCI() const {
+    return m_IncrParser->getCI();
+  }
+
+  CompilerInstance* Interpreter::getCIOrNull() const {
+    return m_IncrParser ? m_IncrParser->getCI() : nullptr;
+  }
+  
+  template <> Sema& Interpreter::get<Sema>() const {
+    return getCI()->getSema();
+  }
+
+  template <> ASTContext& Interpreter::get<ASTContext>() const {
+    return getCI()->getSema().getASTContext();
+  }
+
+  template <> Parser& Interpreter::get<Parser>() const {
     return *m_IncrParser->getParser();
   }
 
-  Parser& Interpreter::getParser() {
+  template <>
+  DiagnosticsEngine& Interpreter::get<DiagnosticsEngine>() const {
+    return getCI()->getDiagnostics();
+  }
+
+  template <> LangOptions& Interpreter::get<LangOptions>() const {
+    return getCI()->getLangOpts();
+  }
+
+  clang::Sema& Interpreter::getSema() const {
+      return get<clang::Sema>();
+  }
+
+  clang::DiagnosticsEngine& Interpreter::getDiagnostics() const {
+      return get<clang::DiagnosticsEngine>();
+  }
+
+  clang::Parser& Interpreter::getParser() const {
     return *m_IncrParser->getParser();
   }
 
@@ -569,22 +602,6 @@ namespace cling {
                                    bool withSystem, bool withFlags) {
     utils::CopyIncludePaths(getCI()->getHeaderSearchOpts(), incpaths,
                             withSystem, withFlags);
-  }
-
-  CompilerInstance* Interpreter::getCI() const {
-    return m_IncrParser->getCI();
-  }
-
-  CompilerInstance* Interpreter::getCIOrNull() const {
-    return m_IncrParser ? m_IncrParser->getCI() : nullptr;
-  }
-
-  Sema& Interpreter::getSema() const {
-    return getCI()->getSema();
-  }
-
-  DiagnosticsEngine& Interpreter::getDiagnostics() const {
-    return getCI()->getDiagnostics();
   }
 
   CompilationOptions Interpreter::makeDefaultCompilationOpts() const {

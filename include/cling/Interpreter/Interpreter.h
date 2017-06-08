@@ -356,9 +356,6 @@ namespace cling {
 
     LookupHelper& getLookupHelper() const { return *m_LookupHelper; }
 
-    const clang::Parser& getParser() const;
-    clang::Parser& getParser();
-
     ///\brief Returns the current or last Transactions source location.
     ///
     ///\param[in] skipWrapper - skip the length of a cling wrapper
@@ -663,7 +660,15 @@ namespace cling {
 
     clang::CompilerInstance* getCI() const;
     clang::CompilerInstance* getCIOrNull() const;
+
+    ///\brief Useful pattern so that one can access internal items without
+    /// knowing about clang's internal structures.
+    ///   Interp->get<clang::LangOpts>()
+    ///
+    template <typename A> A& get() const;
+
     clang::Sema& getSema() const;
+    clang::Parser& getParser() const;
     clang::DiagnosticsEngine& getDiagnostics() const;
 
     ///\brief Create suitable default compilation options.
