@@ -771,76 +771,165 @@ static std::string printStringType(const Value &V, const clang::Type* Type) {
   return "";
 }
 
+typedef void (*PrintBuiltinValueProc)(const struct BuiltinPrintData& Data);
+
+struct BuiltinPrintData {
+  const cling::Value& Val;
+  llvm::raw_ostream& Strm;
+
+  struct RecursiveData {
+    size_t* Dims; // Pointer to dimensions, *Dims == 0 means end of line
+    PrintBuiltinValueProc Printer; // Prints the elements of last dimension
+    size_t Offset;                 // Flat offset/index into element buffer
+  } * Recursive; // Pointer to recursive data or null for single element
+
+  BuiltinPrintData(const cling::Value& V, llvm::raw_ostream& S,
+                   RecursiveData* R = nullptr)
+      : Val(V), Strm(S), Recursive(R) {}
+};
+
 template <class T>
-static std::string printBuiltinValues(const cling::Value& V, size_t N) {
+static void printBuiltinValues(const BuiltinPrintData& Data) {
   // When N == 0, not an array but single value
-  if (N == 0) {
-    const T Value = V.simplisticCastAs<T>();
-    return cling::printValue(&Value);
+  if (!Data.Recursive) {
+    const T Value = Data.Val.simplisticCastAs<T>();
+    Data.Strm << cling::printValue(&Value);
+  } else {
+    const T* Array = reinterpret_cast<const T*>(Data.Val.getPtr());
+    // Handle offsets for multi-dimensional arrays
+    const size_t N = Data.Recursive->Dims[0];
+    Array += Data.Recursive->Offset;
+    Data.Recursive->Offset += N;
+
+    Data.Strm << printValue(&Array[0]);
+    for (size_t I = 1; I < N; ++I)
+      Data.Strm << ", " << cling::printValue(&Array[I]);
   }
+}
 
-  smallstream Strm;
-  const T* Array = reinterpret_cast<const T*>(V.getPtr());
-  Strm << printValue(&Array[0]);
-  for (size_t i = 1; i < N; ++i)
-    Strm << ", " << cling::printValue(&Array[i]);
+static void printBuiltinNull(const BuiltinPrintData& Data) {
+  Data.Strm << kNullPtrStr;
+}
 
-  return Strm.str();
+static PrintBuiltinValueProc
+getPrintBuiltinValueProc(const clang::BuiltinType::Kind Kind) {
+  switch (Kind) {
+    case clang::BuiltinType::NullPtr:  return printBuiltinNull;
+    case clang::BuiltinType::Bool:     return printBuiltinValues<bool>;
+
+    case clang::BuiltinType::Char_S:   return printBuiltinValues<char>;
+    case clang::BuiltinType::SChar:    return printBuiltinValues<signed char>;
+    case clang::BuiltinType::Short:    return printBuiltinValues<short>;
+    case clang::BuiltinType::Int:      return printBuiltinValues<int>;
+    case clang::BuiltinType::Long:     return printBuiltinValues<long>;
+    case clang::BuiltinType::LongLong: return printBuiltinValues<long long>;
+
+    case clang::BuiltinType::Char_U: return printBuiltinValues<unsigned char>;
+    case clang::BuiltinType::UChar:  return printBuiltinValues<unsigned char>;
+    case clang::BuiltinType::UShort: return printBuiltinValues<unsigned short>;
+    case clang::BuiltinType::UInt:   return printBuiltinValues<unsigned int>;
+    case clang::BuiltinType::ULong:  return printBuiltinValues<unsigned long>;
+    case clang::BuiltinType::ULongLong:
+      return printBuiltinValues<unsigned long long>;
+
+    case clang::BuiltinType::Float:      return printBuiltinValues<float>;
+    case clang::BuiltinType::Double:     return printBuiltinValues<double>;
+    case clang::BuiltinType::LongDouble: return printBuiltinValues<long double>;
+
+    case clang::BuiltinType::Char16:  return printBuiltinValues<char16_t>;
+    case clang::BuiltinType::Char32:  return printBuiltinValues<char32_t>;
+    case clang::BuiltinType::WChar_S: return printBuiltinValues<wchar_t>;
+
+    default: break;
+  }
+  return nullptr;
 }
 
 static std::string printBuiltinValues(const clang::BuiltinType::Kind Kind,
-                                      const cling::Value& V,
-                                      size_t N = 0 /* 0 means not an array */) {
-  switch (Kind) {
-    case clang::BuiltinType::NullPtr:
-      return kNullPtrStr;
-    case clang::BuiltinType::Bool:
-      return printBuiltinValues<bool>(V, N);
-
-    case clang::BuiltinType::Char_S:
-      return printBuiltinValues<char>(V, N);
-    case clang::BuiltinType::SChar:
-      return printBuiltinValues<signed char>(V, N);
-    case clang::BuiltinType::Short:
-      return printBuiltinValues<short>(V, N);
-    case clang::BuiltinType::Int:
-      return printBuiltinValues<int>(V, N);
-    case clang::BuiltinType::Long:
-      return printBuiltinValues<long>(V, N);
-    case clang::BuiltinType::LongLong:
-      return printBuiltinValues<long long>(V, N);
-
-    case clang::BuiltinType::Char_U:
-      return printBuiltinValues<unsigned char>(V, N);
-    case clang::BuiltinType::UChar:
-      return printBuiltinValues<unsigned char>(V, N);
-    case clang::BuiltinType::UShort:
-      return printBuiltinValues<unsigned short>(V, N);
-    case clang::BuiltinType::UInt:
-      return printBuiltinValues<unsigned int>(V, N);
-    case clang::BuiltinType::ULong:
-      return printBuiltinValues<unsigned long>(V, N);
-    case clang::BuiltinType::ULongLong:
-      return printBuiltinValues<unsigned long long>(V, N);
-
-    case clang::BuiltinType::Float:
-      return printBuiltinValues<float>(V, N);
-    case clang::BuiltinType::Double:
-      return printBuiltinValues<double>(V, N);
-    case clang::BuiltinType::LongDouble:
-      return printBuiltinValues<long double>(V, N);
-
-    case clang::BuiltinType::Char16:
-      return printBuiltinValues<char16_t>(V, N);
-    case clang::BuiltinType::Char32:
-      return printBuiltinValues<char32_t>(V, N);
-    case clang::BuiltinType::WChar_S:
-      return printBuiltinValues<wchar_t>(V, N);
-      
-    default:
-      break;
+                                      const cling::Value& V) {
+  if (PrintBuiltinValueProc PrintProc = getPrintBuiltinValueProc(Kind)) {
+    ostrstream Strm;
+    PrintProc(BuiltinPrintData(V, Strm));
+    return Strm.str();
   }
   return "";
+}
+
+static void RecursivePrint(const BuiltinPrintData& Data) {
+  assert(Data.Recursive && "RecursivePrint without data.");
+  BuiltinPrintData::RecursiveData* RD = Data.Recursive;
+  const size_t Dim = *(RD->Dims++);
+  if (RD->Dims[0] == 0) {
+    // Last dimension, restore RD->Dims and dump the elements
+    --RD->Dims;
+    return RD->Printer(Data);
+  }
+
+  Data.Strm << "{ ";
+  RecursivePrint(Data);
+  Data.Strm << " }";
+  for (size_t I = 1; I < Dim; ++I) {
+    Data.Strm << ", { ";
+    RecursivePrint(Data);
+    Data.Strm << " }";
+  }
+  // Return Dims as prior dimension will likely call this again.
+  --RD->Dims;
+}
+
+static std::string printBuiltinArray(clang::QualType Ty,
+                                     const clang::BuiltinType* BT,
+                                     const cling::Value& V) {
+  using namespace clang;
+  assert(Ty->isConstantArrayType() && "Not an ConstantArray");
+  PrintBuiltinValueProc PrintProc = getPrintBuiltinValueProc(BT->getKind());
+  if (!PrintProc) return "";
+
+  bool HasZero = false;
+  clang::ASTContext& Ctx = V.getASTContext();
+  llvm::SmallVector<size_t, 32> Dims;
+  do {
+    const clang::ConstantArrayType* CArrTy = Ctx.getAsConstantArrayType(Ty);
+    Dims.push_back(CArrTy->getSize().getZExtValue());
+    const clang::Type* Elem = Ty->getArrayElementTypeNoTypeQual();
+    Ty = QualType(Elem, 0);
+    HasZero = HasZero || Dims.back() == 0;
+  } while (Ty->isConstantArrayType());
+
+  // int[0] -> (int [0]) {}
+  // int [2][0]  -> (int [2][0]) {}
+  // int [3][0][2]  -> (int [3][0][2]) {}
+  // sizeof all of those is 0
+  if (HasZero)
+    return valuePrinterInternal::kEmptyCollection;
+
+  largestream Strm;
+  BuiltinPrintData::RecursiveData RD = {&Dims[0], PrintProc, 0};
+
+  if (Dims.size() == 1) {
+    const size_t N = Dims.front();
+    // Try for strings first, they are special when full or empty
+    switch (BT->getKind()) {
+      case BuiltinType::Char_S:
+        return toUTF8(reinterpret_cast<const char*>(V.getPtr()), N, 1);
+      case BuiltinType::Char16:
+        return toUTF8(reinterpret_cast<const char16_t*>(V.getPtr()), N, 'u');
+      case BuiltinType::Char32:
+        return toUTF8(reinterpret_cast<const char32_t*>(V.getPtr()), N, 'U');
+      case BuiltinType::WChar_S:
+        return toUTF8(reinterpret_cast<const wchar_t*>(V.getPtr()), N, 'L');
+      default: break;
+    }
+  } else {
+    // Terminate the dimensions
+    Dims.push_back(0);
+    PrintProc = RecursivePrint;
+  }
+
+  Strm << " { ";
+  PrintProc(BuiltinPrintData(V, Strm, &RD));
+  Strm << " }";
+  return Strm.str();
 }
 
 static std::string printUnpackedClingValue(const Value &V) {
@@ -945,30 +1034,11 @@ namespace cling {
           return printValue(&ptr);
         }
       } else if (Ty->isConstantArrayType()) {
-        const clang::Type* Te = Ty->getArrayElementTypeNoTypeQual();
-        if (const BuiltinType *BT = dyn_cast<BuiltinType>(Te)) {
-          const void *ptr = V.getPtr();
-          clang::ASTContext& C = V.getASTContext();
-          const clang::ConstantArrayType *CArrTy = C.getAsConstantArrayType(Ty);
-          const size_t N = CArrTy->getSize().getZExtValue();
-          switch (BT->getKind()) {
-            case BuiltinType::Char_S:
-              return toUTF8(reinterpret_cast<const char*>(ptr), N, 1);
-            case BuiltinType::Char16:
-              return toUTF8(reinterpret_cast<const char16_t*>(ptr), N, 'u');
-            case BuiltinType::Char32:
-              return toUTF8(reinterpret_cast<const char32_t*>(ptr), N, 'U');
-            case BuiltinType::WChar_S:
-              return toUTF8(reinterpret_cast<const wchar_t*>(ptr), N, 'L');
-            default:
-              break;
-          }
-          // early out to "{}" as printBuiltinValues with 'N=0' is special
-          if (N==0)
-            return kEmptyCollection;
-
-          return enclose(printBuiltinValues(BT->getKind(), V, N),
-                                            " { ", " }");
+        if (const BuiltinType* BT =
+                dyn_cast<BuiltinType>(Ty->getBaseElementTypeUnsafe())) {
+          std::string Str = printBuiltinArray(Ty, BT, V);
+          if (!Str.empty())
+            return Str;
         }
       }
 
