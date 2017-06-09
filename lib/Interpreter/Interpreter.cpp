@@ -91,9 +91,17 @@ namespace {
 
 namespace cling {
 
-  Interpreter::PushTransactionRAII::PushTransactionRAII(const Interpreter* i)
-    : m_Interpreter(i) {
-    CompilationOptions CO = m_Interpreter->makeDefaultCompilationOpts();
+  CompilationOptions::CompilationOptions(const Interpreter* I)
+      : DeclarationExtraction(0), ValuePrinting(VPDisabled),
+        ResultEvaluation(0), DynamicScoping(I->isDynamicLookupEnabled()),
+        Debug(I->isPrintingDebug()), CodeGeneration(!I->isInSyntaxOnlyMode()),
+        CodeGenerationForModule(0), IgnorePromptDiags(!I->isRawInputEnabled()),
+        CheckPointerValidity(!I->isRawInputEnabled()),
+        OptLevel(I->getDefaultOptLevel()) {}
+
+  Interpreter::PushTransactionRAII::PushTransactionRAII(const Interpreter* I)
+    : m_Interpreter(I) {
+    CompilationOptions CO(I);
     CO.ResultEvaluation = 0;
     CO.DynamicScoping = 0;
 
@@ -570,19 +578,6 @@ namespace cling {
     return getCI()->getDiagnostics();
   }
 
-  CompilationOptions Interpreter::makeDefaultCompilationOpts() const {
-    CompilationOptions CO;
-    CO.DeclarationExtraction = 0;
-    CO.ValuePrinting = CompilationOptions::VPDisabled;
-    CO.CodeGeneration = m_IncrParser->hasCodeGenerator();
-    CO.DynamicScoping = isDynamicLookupEnabled();
-    CO.Debug = isPrintingDebug();
-    CO.IgnorePromptDiags = !isRawInputEnabled();
-    CO.CheckPointerValidity = !isRawInputEnabled();
-    CO.OptLevel = getDefaultOptLevel();
-    return CO;
-  }
-
   const MacroInfo* Interpreter::getMacro(llvm::StringRef Macro) const {
     clang::Preprocessor& PP = getCI()->getPreprocessor();
     if (IdentifierInfo* II = PP.getIdentifierInfo(Macro)) {
@@ -627,14 +622,14 @@ namespace cling {
       wrapPoint = utils::getWrapPoint(wrapReadySource, getCI()->getLangOpts());
 
     if (isRawInputEnabled() || wrapPoint == std::string::npos) {
-      CompilationOptions CO = makeDefaultCompilationOpts();
+      CompilationOptions CO(this);
       CO.DeclarationExtraction = 0;
       CO.ValuePrinting = 0;
       CO.ResultEvaluation = 0;
       return DeclareInternal(input, CO, T);
     }
 
-    CompilationOptions CO = makeDefaultCompilationOpts();
+    CompilationOptions CO(this);
     CO.DeclarationExtraction = 1;
     CO.ValuePrinting = disableValuePrinting ? CompilationOptions::VPDisabled
       : CompilationOptions::VPAuto;
@@ -651,7 +646,7 @@ namespace cling {
 
   Interpreter::CompilationResult
   Interpreter::parse(const std::string& input, Transaction** T /*=0*/) const {
-    CompilationOptions CO = makeDefaultCompilationOpts();
+    CompilationOptions CO(this);
     CO.CodeGeneration = 0;
     CO.DeclarationExtraction = 0;
     CO.ValuePrinting = 0;
@@ -708,7 +703,7 @@ namespace cling {
 
   Interpreter::CompilationResult
   Interpreter::parseForModule(const std::string& input) {
-    CompilationOptions CO = makeDefaultCompilationOpts();
+    CompilationOptions CO(this);
     CO.CodeGenerationForModule = 1;
     CO.DeclarationExtraction = 0;
     CO.ValuePrinting = 0;
@@ -731,7 +726,7 @@ namespace cling {
   Interpreter::CompilationResult
   Interpreter::CodeCompleteInternal(const std::string& input, unsigned offset) {
 
-    CompilationOptions CO = makeDefaultCompilationOpts();
+    CompilationOptions CO(this);
     CO.DeclarationExtraction = 0;
     CO.ValuePrinting = 0;
     CO.ResultEvaluation = 0;
@@ -754,7 +749,7 @@ namespace cling {
 
   Interpreter::CompilationResult
   Interpreter::declare(const std::string& input, Transaction** T/*=0 */) {
-    CompilationOptions CO = makeDefaultCompilationOpts();
+    CompilationOptions CO(this);
     CO.DeclarationExtraction = 0;
     CO.ValuePrinting = 0;
     CO.ResultEvaluation = 0;
@@ -769,7 +764,7 @@ namespace cling {
     // ExprStmt can be evaluated and etc. Such enforcement cannot happen in the
     // worker, because it is used from various places, where there is no such
     // rule
-    CompilationOptions CO = makeDefaultCompilationOpts();
+    CompilationOptions CO(this);
     CO.DeclarationExtraction = 0;
     CO.ValuePrinting = 0;
     CO.ResultEvaluation = 1;
@@ -833,7 +828,7 @@ namespace cling {
 
   Interpreter::CompilationResult
   Interpreter::echo(const std::string& input, Value* V /* = 0 */) {
-    CompilationOptions CO = makeDefaultCompilationOpts();
+    CompilationOptions CO(this);
     CO.DeclarationExtraction = 0;
     CO.ValuePrinting = CompilationOptions::VPEnabled;
     CO.ResultEvaluation = (bool)V;
@@ -843,7 +838,7 @@ namespace cling {
 
   Interpreter::CompilationResult
   Interpreter::execute(const std::string& input) {
-    CompilationOptions CO = makeDefaultCompilationOpts();
+    CompilationOptions CO(this);
     CO.DeclarationExtraction = 0;
     CO.ValuePrinting = 0;
     CO.ResultEvaluation = 0;
@@ -1257,7 +1252,7 @@ namespace cling {
     std::string code;
     code += "#include \"" + filename + "\"";
 
-    CompilationOptions CO = makeDefaultCompilationOpts();
+    CompilationOptions CO(this);
     CO.DeclarationExtraction = 0;
     CO.ValuePrinting = 0;
     CO.ResultEvaluation = 0;
@@ -1537,7 +1532,7 @@ namespace cling {
                                     fwdGenPP.getTargetInfo().getTriple());
 
 
-    CompilationOptions CO = makeDefaultCompilationOpts();
+    CompilationOptions CO(this);
     CO.DeclarationExtraction = 0;
     CO.ValuePrinting = 0;
     CO.ResultEvaluation = 0;
