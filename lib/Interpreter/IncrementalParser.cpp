@@ -205,7 +205,7 @@ namespace cling {
     if (hasCodeGenerator())
       getCodeGenerator()->Initialize(getCI()->getASTContext());
 
-    CompilationOptions CO = m_Interpreter->makeDefaultCompilationOpts();
+    CompilationOptions CO(m_Interpreter);
     Transaction* CurT = beginTransaction(CO);
     Preprocessor& PP = m_CI->getPreprocessor();
     DiagnosticsEngine& Diags = m_CI->getSema().getDiagnostics();
