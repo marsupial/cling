@@ -11,6 +11,7 @@
 #define CLING_COMPILATION_OPTIONS
 
 namespace cling {
+  class Interpreter;
 
   ///\brief Options controlling the incremental compilation. Describe the set of
   /// custom AST consumers to be enabled/disabled.
@@ -71,35 +72,15 @@ namespace cling {
     ///
     int CodeCompletionOffset = -1;
 
-    CompilationOptions() {
-      DeclarationExtraction = 0;
-      ValuePrinting = VPDisabled;
-      ResultEvaluation = 0;
-      DynamicScoping = 0;
-      Debug = 0;
-      CodeGeneration = 1;
-      CodeGenerationForModule = 0;
-      IgnorePromptDiags = 0;
-      OptLevel = 2;
-      CheckPointerValidity = 1;
-    }
+    CompilationOptions()
+        : DeclarationExtraction(0), ValuePrinting(VPDisabled),
+          ResultEvaluation(0), DynamicScoping(0), Debug(0), CodeGeneration(1),
+          CodeGenerationForModule(0), IgnorePromptDiags(0),
+          CheckPointerValidity(1), OptLevel(2) {}
 
-    bool operator==(CompilationOptions Other) const {
-      return
-        DeclarationExtraction == Other.DeclarationExtraction &&
-        ValuePrinting         == Other.ValuePrinting &&
-        ResultEvaluation      == Other.ResultEvaluation &&
-        DynamicScoping        == Other.DynamicScoping &&
-        Debug                 == Other.Debug &&
-        CodeGeneration        == Other.CodeGeneration &&
-        CodeGenerationForModule == Other.CodeGenerationForModule &&
-        IgnorePromptDiags     == Other.IgnorePromptDiags &&
-        CheckPointerValidity  == Other.CheckPointerValidity &&
-        OptLevel              == Other.OptLevel &&
-        CodeCompletionOffset  == Other.CodeCompletionOffset;
-    }
+    CompilationOptions(const Interpreter* Interp);
 
-    bool operator!=(CompilationOptions Other) const {
+    bool operator != (const CompilationOptions& Other) const {
       return
         DeclarationExtraction != Other.DeclarationExtraction ||
         ValuePrinting         != Other.ValuePrinting ||
@@ -112,6 +93,10 @@ namespace cling {
         CheckPointerValidity  != Other.CheckPointerValidity ||
         OptLevel              != Other.OptLevel ||
         CodeCompletionOffset  != Other.CodeCompletionOffset;
+    }
+
+    bool operator == (const CompilationOptions& Other) const {
+      return (*this != Other);
     }
   };
 } // end namespace cling
