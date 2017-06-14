@@ -472,7 +472,21 @@ add_subdirectory(lib)
 add_subdirectory(tools)
 
 if( CLING_INCLUDE_TESTS )
+  function(cling_list_directories DIRECTORIES CUR FORCMAKE)
+    file(GLOB children RELATIVE ${CUR} ${CUR}/*)
+    set(dirlist "")
+    foreach (child ${children})
+      if(IS_DIRECTORY ${CUR}/${child})
+        if(NOT ${FORCMAKE} OR EXISTS ${CUR}/${child}/CMakeLists.txt)
+          list(APPEND dirlist ${child})
+        endif()
+      endif()
+    endforeach()
+    set(${DIRECTORIES} ${dirlist} PARENT_SCOPE)
+  endfunction()
+
   add_subdirectory(test)
+  add_subdirectory(unittests)
 
   if(CLING_BUILT_STANDALONE)
     # Add a global check rule now that all subdirectories have been traversed
