@@ -947,12 +947,9 @@ static void stringifyPreprocSetting(PreprocessorOptions& PPOpts,
       CI->setASTConsumer(
           std::unique_ptr<clang::ASTConsumer>(new IgnoreConsumer()));
     } else {
-      std::unique_ptr<cling::DeclCollector>
-        stateCollector(new cling::DeclCollector());
-
       // Add the callback keeping track of the macro definitions
-      PP.addPPCallbacks(stateCollector->MakePPAdapter());
-      CI->setASTConsumer(std::move(stateCollector));
+      CI->setASTConsumer(
+          std::unique_ptr<ASTConsumer>(new cling::DeclCollector(PP)));
     }
 
     // Set up Sema
