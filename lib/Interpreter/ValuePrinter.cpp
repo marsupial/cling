@@ -601,7 +601,7 @@ static std::string toUTF8(clang::QualType RT, clang::ASTContext& Ctx,
 }
 
 static std::string callCPrintValue(const Value& V, const void* Val,
-                                   Interpreter* Interp,
+                                   Interpreter& Interp,
                                    const clang::QualType& Ty) {
   clang::TagDecl* Tg = Ty->getAsTagDecl();
   if (!Tg)
@@ -611,7 +611,7 @@ static std::string callCPrintValue(const Value& V, const void* Val,
   const llvm::StringRef Name = Tg->getName();
   Strm << "clingPrint_" << Name;
 
-  LookupHelper& LH = Interp->getLookupHelper();
+  LookupHelper& LH = Interp.getLookupHelper();
   const clang::FunctionDecl* FD =
       LH.findAnyFunction(Strm.str(), LookupHelper::WithDiagnostics);
   if (!FD)
@@ -642,8 +642,8 @@ static std::string callCPrintValue(const Value& V, const void* Val,
   Strm << ");";
 
   Value CallReturn;
-  AccessCtrlRAII_t AccessCtrlRAII(*Interp, true);
-  Interp->evaluate(Strm.str(), CallReturn);
+  AccessCtrlRAII_t AccessCtrlRAII(Interp, true);
+  Interp.evaluate(Strm.str(), CallReturn);
 
   clang::QualType RT = FD->getReturnType();
   if (RT->isPointerType() && CallReturn.isValid()) {
@@ -674,8 +674,8 @@ static std::string callCPrintValue(const Value& V, const void* Val,
 static std::string callPrintValue(const Value& V, const void* Val,
                                   const char* Cast = nullptr,
                                   const clang::QualType* Ty = nullptr) {
-  Interpreter *Interp = V.getInterpreter();
-  if (LLVM_UNLIKELY(!Interp->getSema().getLangOpts().CPlusPlus)) {
+  Interpreter& Interp = V.getInterpreter()->ancestor();
+  if (LLVM_UNLIKELY(!Interp.getSema().getLangOpts().CPlusPlus)) {
     assert(Ty && "C language printing requires a type.");
     return callCPrintValue(V, Val, Interp, *Ty);
   }
@@ -692,8 +692,8 @@ static std::string callPrintValue(const Value& V, const void* Val,
     Strm << getTypeString(V) << &Val << Closer[!Cast] << ");";
 
     // We really don't care about protected types here (ROOT-7426)
-    AccessCtrlRAII_t AccessCtrlRAII(*Interp, true);
-    Interp->evaluate(Strm.str(), printValueV);
+    AccessCtrlRAII_t AccessCtrlRAII(Interp, true);
+    Interp.evaluate(Strm.str(), printValueV);
   }
 
   if (printValueV.isValid() && printValueV.getPtr())
@@ -705,7 +705,7 @@ static std::string callPrintValue(const Value& V, const void* Val,
   // Check that the issue comes from an unparsable type name: lambdas, unnamed
   // namespaces, types declared inside functions etc. Assert on everything
   // else.
-  assert(!canParseTypeName(*Interp, getTypeString(V))
+  assert(!canParseTypeName(Interp, getTypeString(V))
          && "printValue failed on a valid type name.");
 
   return valuePrinterInternal::kUndefined;
@@ -860,7 +860,7 @@ static std::string printFunctionValue(const Value &V, const void *ptr, clang::Qu
 
 static std::string printStringType(const Value& V, const clang::Type* Type,
                                    bool Conv = false) {
-  switch (V.getInterpreter()->getLookupHelper().isStringType(Type)) {
+  switch (V.getInterpreter()->ancestor().getLookupHelper().isStringType(Type)) {
     case LookupHelper::kStdString:
       return convertPrint<std::string>(V, Conv ? "std::string" : nullptr);
     case LookupHelper::kWCharString:
@@ -1166,8 +1166,8 @@ namespace cling {
         }
       }
 
-      Interpreter* Interp = V.getInterpreter();
-      if (LLVM_UNLIKELY(!Interp->getSema().getLangOpts().CPlusPlus))
+      Interpreter& Interp = V.getInterpreter()->ancestor();
+      if (LLVM_UNLIKELY(!Interp.getSema().getLangOpts().CPlusPlus))
         return cling_PrintValue(V);
 
       // Include "RuntimePrintValue.h" only on the first printing.
@@ -1180,12 +1180,12 @@ namespace cling {
       // CLING_RUNTIME_PRINT_VALUE_H is defined.
       // FIXME: Relying on this macro isn't the best, but what's another way?
 
-      Interpreter::TransactionMerge M(Interp, true);
-      const Transaction*& T = Interp->printValueTransaction();
-      if (!T && !Interp->getMacro("CLING_RUNTIME_PRINT_VALUE_H")) {
-        // DiagnosticErrorTrap Trap(Interp->getSema().getDiagnostics());
-        Interp->declare("#include \"cling/Interpreter/RuntimePrintValue.h\"",
-                        const_cast<Transaction**>(&T));
+      Interpreter::TransactionMerge M(&Interp, true);
+      const Transaction*& T = Interp.printValueTransaction();
+      if (!T && !Interp.getMacro("CLING_RUNTIME_PRINT_VALUE_H")) {
+        // DiagnosticErrorTrap Trap(Interp.getSema().getDiagnostics());
+        Interp.declare("#include \"cling/Interpreter/RuntimePrintValue.h\"",
+                       const_cast<Transaction**>(&T));
 
         if (!T) {
           // Should also check T->getIssuedDiags() == Transaction::kErrors)?
