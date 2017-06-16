@@ -254,6 +254,27 @@ namespace cling {
       return m_DeserializedDeclQueue.rend();
     }
 
+    llvm::iterator_range<iterator> decls() {
+      return llvm::make_range(m_DeclQueue.begin(), m_DeclQueue.end());
+    }
+    llvm::iterator_range<const_iterator> decls() const {
+      return llvm::make_range(m_DeclQueue.begin(), m_DeclQueue.end());
+    }
+    llvm::iterator_range<iterator> decl() {
+      return llvm::make_range(m_DeclQueue.begin(), m_DeclQueue.end());
+    }
+    llvm::iterator_range<const_reverse_iterator> rdecls() const {
+      return llvm::make_range(m_DeclQueue.rbegin(), m_DeclQueue.rend());
+    }
+    llvm::iterator_range<iterator> deserialized_decls() {
+      return llvm::make_range(m_DeserializedDeclQueue.begin(),
+                              m_DeserializedDeclQueue.end());
+    }
+    llvm::iterator_range<const_iterator> deserialized_decls() const {
+      return llvm::make_range(m_DeserializedDeclQueue.begin(),
+                              m_DeserializedDeclQueue.end());
+    }
+
     typedef NestedTransactions::const_iterator const_nested_iterator;
     typedef NestedTransactions::const_reverse_iterator const_reverse_nested_iterator;
     const_nested_iterator nested_begin() const {
