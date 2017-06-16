@@ -31,6 +31,14 @@ namespace runtime {
     Value EvaluateDynamicExpression(Interpreter* interp, DynamicExprInfo* DEI,
                                     clang::DeclContext* DC);
 
+    /// \brief Some of clang's routines rely on valid source locations and
+    /// source ranges. This member can be looked up and source locations and
+    /// ranges can be passed in as parameters to these routines.
+    ///
+    /// Use instead of SourceLocation() and SourceRange(). This might help,
+    /// when clang emits diagnostics on artificially inserted AST node.
+    int InterpreterGeneratedCodeDiagnosticsMaybeIncorrect;
+
     /// \brief EvaluateT is used to replace all invalid source code that
     /// occurs, when cling's dynamic extensions are enabled.
     ///

@@ -39,15 +39,6 @@ namespace cling {
     extern Interpreter* gCling;
 
     namespace internal {
-      /// \brief Some of clang's routines rely on valid source locations and
-      /// source ranges. This member can be looked up and source locations and
-      /// ranges can be passed in as parameters to these routines.
-      ///
-      /// Use instead of SourceLocation() and SourceRange(). This might help,
-      /// when clang emits diagnostics on artificially inserted AST node.
-      int InterpreterGeneratedCodeDiagnosticsMaybeIncorrect;
-
-
       ///\brief Set the type of a void expression evaluated at the prompt.
       ///\param [in] vpI - The cling::Interpreter for Value.
       ///\param [in] vpQT - The opaque ptr for the clang::QualType of value.
