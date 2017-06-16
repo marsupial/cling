@@ -80,7 +80,7 @@ namespace cling {
 
     /// \brief Determine the underlying, canonical, desugared, unqualified type:
     /// the element of Storage to be used.
-    static EStorageType determineStorageType(clang::QualType QT);
+    static EStorageType determineStorageType(clang::QualType QT, bool ArrayPtr);
 
     /// \brief Determine the underlying, canonical, desugared, unqualified type:
     /// the element of Storage to be used.
@@ -182,7 +182,7 @@ namespace cling {
     /// \brief Construct a valid but uninitialized Value. After this call the
     ///   value's storage can be accessed; i.e. calls ManagedAllocate() if
     ///   needed.
-    Value(clang::QualType Ty, Interpreter& Interp);
+    Value(clang::QualType Ty, Interpreter& Interp, bool ArrayPtr = true);
 
     /// \brief Destruct the value; calls ManagedFree() if needed.
     ~Value();

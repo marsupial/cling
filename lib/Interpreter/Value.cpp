@@ -245,8 +245,8 @@ namespace cling {
       AllocatedValue::Retain(m_Storage.m_Ptr);
   }
 
-  Value::Value(clang::QualType clangTy, Interpreter& Interp):
-    m_StorageType(determineStorageType(clangTy)),
+  Value::Value(clang::QualType clangTy, Interpreter& Interp, bool ArrayPtr) :
+    m_StorageType(determineStorageType(clangTy, ArrayPtr)),
     m_Type(clangTy.getAsOpaquePtr()),
     m_Interpreter(&Interp) {
     if (needsManagedAllocation())
@@ -318,7 +318,7 @@ namespace cling {
     return 1;
   }
 
-  Value::EStorageType Value::determineStorageType(clang::QualType QT) {
+  Value::EStorageType Value::determineStorageType(clang::QualType QT, bool AP) {
     const clang::Type* desugCanon = QT.getCanonicalType().getTypePtr();
     if (desugCanon->isSignedIntegerOrEnumerationType())
       return kSignedIntegerOrEnumerationType;
@@ -334,7 +334,8 @@ namespace cling {
         return kLongDoubleType;
     } else if (desugCanon->isPointerType() || desugCanon->isObjectType()
                || desugCanon->isReferenceType()) {
-      if (desugCanon->isRecordType() || desugCanon->isMemberPointerType())
+      if (desugCanon->isRecordType() || desugCanon->isMemberPointerType()
+          || (!AP && desugCanon->isConstantArrayType()))
         return kManagedAllocation;
       return kPointerType;
     }

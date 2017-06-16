@@ -1246,6 +1246,9 @@ namespace cling {
 
   void*
   Interpreter::compileDtorCallFor(const clang::RecordDecl* RD) {
+    if (!getSema().getLangOpts().CPlusPlus)
+      return nullptr;
+
     void* &addr = m_DtorWrappers[RD];
     if (addr)
       return addr;

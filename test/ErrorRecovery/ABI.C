@@ -6,19 +6,10 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: %cling -C -E -P  %s > %t
+// RUN: %cling -C -E -P %s > %t
 // RUN: cat %t | %cling -nostdinc++ -Xclang -verify 2>&1 | FileCheck %t
 
 // RUN: %cling -C -E -P -DCLING_VALEXTRACT_ERR %s > %t
-// RUN: cat %t | %cling -nostdinc++ -nobuiltininc -Xclang -verify 2>&1 | FileCheck %t
-
-// RUN: %cling -C -E -P -DCLING_VALEXTRACT_ERR2 %s > %t
-// RUN: cat %t | %cling -nostdinc++ -nobuiltininc -Xclang -verify 2>&1 | FileCheck %t
-
-// RUN: %cling -C -E -P -DCLING_VALEXTRACT_ERR3 %s > %t
-// RUN: cat %t | %cling -nostdinc++ -nobuiltininc -Xclang -verify 2>&1 | FileCheck %t
-
-// RUN: %cling -C -E -P -DCLING_VALEXTRACT_ERR4 %s > %t
 // RUN: cat %t | %cling -nostdinc++ -nobuiltininc -Xclang -verify 2>&1 | FileCheck %t
 
 // RUN: %cling -C -E -P -DCLING_RTIME_PRNT_ERR %s > %t
@@ -31,37 +22,13 @@
 // CHECK-NEXT:  Possible C++ standard library mismatch, compiled with {{.*$}}
 #endif
 
-#if defined(CLING_VALEXTRACT_ERR) || defined(CLING_VALEXTRACT_ERR2) || \
-    defined(CLING_VALEXTRACT_ERR3) || defined(CLING_VALEXTRACT_ERR4) || \
-    defined(CLING_RTIME_PRNT_ERR)
-
 struct Trigger {} Tr;
 
 // Try to print twice too make sure not to crash on subsequent attempts
 
 #ifdef CLING_VALEXTRACT_ERR
-Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling namespace'.}}
-Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling namespace'.}}
-#endif
-
-#ifdef CLING_VALEXTRACT_ERR2
-namespace cling {}
-Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling::runtime namespace'.}}
-Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling::runtime namespace'.}}
-#endif
-
-#ifdef CLING_VALEXTRACT_ERR3
-namespace cling { namespace runtime {} }
-Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling::runtime::internal namespace'.}}
-Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling::runtime::internal namespace'.}}
-#endif
-
-#ifdef CLING_VALEXTRACT_ERR4
-namespace cling { namespace runtime { void* gCling; namespace internal { void* setValueWithAlloc; void* setValueNoAlloc; } } }
-Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling::runtime::internal::copyArray'.}}
-Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling::runtime::internal::copyArray'.}}
-#endif
-
+Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling_ValueExtraction'.}}
+Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling_ValueExtraction'.}}
 #endif
 
 #ifdef CLING_RTIME_PRNT_ERR

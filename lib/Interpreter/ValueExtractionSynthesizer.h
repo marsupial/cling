@@ -13,8 +13,11 @@
 #include "ASTTransformer.h"
 
 namespace clang {
+  class ASTContext;
   class Decl;
   class Expr;
+  class Sema;
+  class VarDecl;
 }
 
 namespace cling {
@@ -25,13 +28,9 @@ namespace cling {
     ///
     Interpreter& m_Interp;
 
-    ///\brief cling::runtime::internal::setValueNoAlloc cache.
+    ///\brief Cached reference to cling_ValueExtraction function.
     ///
-    clang::Expr* m_UnresolvedNoAlloc;
-
-    ///\brief cling::runtime::internal::setValueWithAlloc cache.
-    ///
-    clang::Expr* m_UnresolvedWithAlloc;
+    clang::Expr* m_ValueSynth;
 
 public:
     ///\ brief Constructs the return synthesizer.
@@ -47,34 +46,13 @@ public:
   private:
 
     ///\brief
-    /// Here we don't want to depend on the JIT runFunction, because of its
-    /// limitations, when it comes to return value handling. There it is
-    /// not clear who provides the storage and who cleans it up in a
-    /// platform independent way.
-    //
-    /// Depending on the type we need to synthesize a call to cling:
-    /// 0) void : do nothing;
-    /// 1) enum, integral, float, double, referece, pointer types :
-    ///      call to cling::internal::setValueNoAlloc(...);
-    /// 2) object type (alloc on the stack) :
-    ///      cling::internal::setValueWithAlloc
-    ///   2.1) constant arrays:
-    ///          call to cling::runtime::internal::copyArray(...)
-    ///
-    /// We need to synthesize later:
-    /// Wrapper has signature: void w(cling::Value V)
-    /// case 1):
-    ///   setValueNoAlloc(gCling, &SVR, lastExprTy, lastExpr())
-    /// case 2):
-    ///   new (setValueWithAlloc(gCling, &SVR, lastExprTy)) (lastExpr)
-    /// case 2.1):
-    ///   copyArray(src, placement, N)
+    /// Transform the expression to allow for printing and/or transfer of
+    /// ownership to the calling code.
     ///
     clang::Expr* SynthesizeSVRInit(clang::Expr* E);
 
-    // Find and cache cling::runtime::gCling, setValueNoAlloc,
-    // setValueWithAlloc on first request.
-    bool FindAndCacheRuntimeDecls();
+    // Find and cache [cling::runtime::] gCling and cling_ValueExtraction,
+    bool FindAndCacheRuntimeDecls(clang::Expr*);
   };
 
 } // namespace cling
