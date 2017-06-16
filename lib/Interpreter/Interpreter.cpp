@@ -472,13 +472,6 @@ namespace cling {
     m_IncrParser.reset(0);
   }
 
-  static void AssignIfValue(llvm::raw_ostream& Strm, const void* Value,
-                            const char* Type, const char* Close = "") {
-    if (Value)
-      Strm << "=(" << Type << ")" << Value;
-    Strm << ";" << Close << "\n";
-  }
-
   Transaction* Interpreter::Initialize(bool NoRuntime, const Interpreter* Pnt) {
     largestream Strm;
     const clang::LangOptions& LangOpts = getCI()->getLangOpts();
@@ -486,16 +479,19 @@ namespace cling {
 
     // FIXME: gCling should be const so assignment is a compile time error.
     if (!NoRuntime) {
+      Strm << "#include \"cling/Interpreter/RuntimeUniverse.h\"\n";
+      std::pair<const char*, const char*> Close;
       if (LangOpts.CPlusPlus) {
-        Strm << "#include \"cling/Interpreter/RuntimeUniverse.h\"\n"
-                "namespace cling { class Interpreter; namespace runtime { "
+        Strm << "namespace cling { class Interpreter; namespace runtime { "
                 "Interpreter* gCling";
-        AssignIfValue(Strm, ThisP, "Interpreter*", " }}");
+        Close = std::make_pair("Interpreter*", " }}\nusing namespace cling::runtime;\n");
       } else {
-        Strm << "#include \"cling-c/ValuePrinter.h\"\n"
-                "void* gCling";
-        AssignIfValue(Strm, ThisP, "void*");
+        Strm << "void* gCling";
+        Close = std::make_pair("void*", "");
       }
+      if (ThisP)
+        Strm << "=(" << Close.first << ")" << ThisP;
+      Strm << ";" << Close.second << "\n";
     }
     // Make all Interpreter accessible via thisCling pointer
     if (!NoRuntime || (Pnt && !m_Opts.NoRuntime)) {
@@ -1129,6 +1125,9 @@ namespace cling {
 
   void*
   Interpreter::compileDtorCallFor(const clang::RecordDecl* RD) {
+    if (!getSema().getLangOpts().CPlusPlus)
+      return nullptr;
+
     void* &addr = m_DtorWrappers[RD];
     if (addr)
       return addr;
