@@ -23,6 +23,25 @@ namespace utils {
       clang::DiagnosticConsumer& m_PrevClient;
       const unsigned m_PrevOwn : 1;
 
+      ///\brief Get the text at the line that caused the error
+      ///
+      ///\param[in] Info - The diagnostics to retrieve the line from.
+      ///\param[in] MinLen - Validate data is at least this many characters.
+      ///\param[in] Column - Get the text at line or column start.
+      ///
+      ///\returns The line or nullptr if error or not of sufficient length.
+      ///
+      static const char* GetData(const clang::Diagnostic& Info, size_t MinLen,
+                                 bool Column);
+
+      static const char* GetLine(const clang::Diagnostic& Info, size_t ML = 0) {
+        return GetData(Info, ML, false);
+      }
+
+      static const char* GetText(const clang::Diagnostic& Info, size_t ML = 0) {
+        return GetData(Info, ML, true);
+      }
+
     public:
       ///\brief ReplaceDiagnostics constructor
       ///
