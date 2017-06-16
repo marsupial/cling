@@ -123,21 +123,25 @@ namespace {
     void HandleDiagnostic(DiagnosticsEngine::Level DiagLevel,
                           const Diagnostic &Info) override {
       if (Ignoring()) {
-        if (Info.getID() == diag::warn_unused_expr
-            || Info.getID() == diag::warn_unused_call
-            || Info.getID() == diag::warn_unused_comparison)
-          return; // ignore!
-        if (Info.getID() == diag::warn_falloff_nonvoid_function) {
-          DiagLevel = DiagnosticsEngine::Error;
-        }
-        if (Info.getID() == diag::ext_return_has_expr) {
-          // An error that we need to suppress.
-          auto Diags = const_cast<DiagnosticsEngine*>(Info.getDiags());
-          assert(Diags->hasErrorOccurred() && "Expected ErrorOccurred");
-          if (m_PrevClient.getNumErrors() == 0) { // first error
-            Diags->Reset(true /*soft - only counts, not mappings*/);
-          } // else we had other errors, too.
-          return; // ignore!
+        switch (Info.getID()) {
+          // Silence
+          case diag::ext_return_has_expr:
+            assert(m_Diags.hasErrorOccurred() && "Expected ErrorOccurred");
+            // Reset only if this is the first error that occured
+            if (m_PrevClient.getNumErrors() == 0)
+              m_Diags.Reset(true /*soft - only counts, not mappings*/);
+            return;
+
+          // Ignore, can be done with DiagnosticsEngine::setMapping
+          case diag::warn_unused_expr:
+          case diag::warn_unused_call:
+          case diag::warn_unused_comparison:
+            return;
+
+          // Make it an error, can be done with DiagnosticsEngine::setMapping
+          case diag::warn_falloff_nonvoid_function:
+            DiagLevel = DiagnosticsEngine::Error;
+            break;
         }
       }
       m_PrevClient.HandleDiagnostic(DiagLevel, Info);
