@@ -23,7 +23,6 @@ if(BUILD_SHARED_LIBS)
   )
 else()
   set(LIBS
-    LLVMSupport
     clangFrontendTool
     clingUserInterface
   )
