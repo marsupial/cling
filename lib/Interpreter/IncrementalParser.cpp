@@ -874,7 +874,7 @@ namespace cling {
       WrapperTransformers.emplace_back(new ValuePrinterSynthesizer(TheSema));
     WrapperTransformers.emplace_back(new DeclExtractor(TheSema));
     if (!m_Interpreter->getOptions().NoRuntime)
-      WrapperTransformers.emplace_back(new ValueExtractionSynthesizer(TheSema));
+      WrapperTransformers.emplace_back(new ValueExtractionSynthesizer(TheSema, m_Interpreter));
     WrapperTransformers.emplace_back(new CheckEmptyTransactionTransformer(TheSema));
 
     m_Consumer->SetTransformers(std::move(ASTTransformers),
