@@ -9,6 +9,8 @@
 
 #include "cling/Utils/Diagnostics.h"
 
+#include "clang/Basic/SourceManager.h"
+
 namespace cling {
 namespace utils {
 
@@ -22,6 +24,29 @@ ReplaceDiagnostics::ReplaceDiagnostics(clang::DiagnosticsEngine& D,
   D.takeClient().release();
   // Set the new client / consumer
   D.setClient(&Replace, Own);
+}
+
+const char* ReplaceDiagnostics::GetData(const clang::Diagnostic& Info,
+                                        size_t MinLength, bool Column) {
+  if (!Info.getLocation().isValid() || !Info.hasSourceManager())
+    return nullptr;
+
+  clang::SourceManager& SM = Info.getSourceManager();
+  clang::SourceLocation Loc = SM.getFileLoc(Info.getLocation());
+  const auto LocInfo = SM.getDecomposedLoc(Loc);
+
+  bool Invalid = false;
+  llvm::StringRef BufData = SM.getBufferData(LocInfo.first, &Invalid);
+  if (Invalid)
+    return nullptr;
+
+  const char* LinePos = BufData.data() + LocInfo.second;
+  if (!Column)
+    LinePos = LinePos - SM.getColumnNumber(LocInfo.first, LocInfo.second) + 1;
+  if (LinePos + MinLength >= (const char*)BufData.bytes_end())
+    return nullptr;
+    
+  return LinePos;
 }
 
 namespace {
