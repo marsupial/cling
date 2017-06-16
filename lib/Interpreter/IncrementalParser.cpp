@@ -38,6 +38,7 @@
 #include "clang/Basic/FileManager.h"
 #include "clang/CodeGen/ModuleBuilder.h"
 #include "clang/Frontend/CompilerInstance.h"
+#include "clang/Lex/LexDiagnostic.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Lex/PreprocessorOptions.h"
 #include "clang/Parse/Parser.h"
@@ -125,6 +126,13 @@ namespace {
       if (Ignoring()) {
         switch (Info.getID()) {
           // Silence
+          case diag::err_pp_invalid_directive: {
+            // Test for shebang: #! so can include run-able scripts
+            const char* Line = GetLine(Info, 2);
+            if (!Line || strncmp(Line, "#!", 2) != 0)
+              break;
+            // Fall-through to reset
+          }
           case diag::ext_return_has_expr:
             assert(m_Diags.hasErrorOccurred() && "Expected ErrorOccurred");
             // Reset only if this is the first error that occured

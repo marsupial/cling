@@ -1,4 +1,3 @@
-#!/bin/cling
 //------------------------------------------------------------------------------
 // CLING - the C++ LLVM-based InterpreterG :)
 //
@@ -7,26 +6,14 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: %cling %s -Xclang -verify 2>&1 | FileCheck %s
-// RUN: cat %s | %cling -Xclang -verify 2>&1 | FileCheck %s
+// RUN: cat %s | %cling -I%S -Xclang -verify 2>&1 | FileCheck %S/Shebang.C
 
-float shebang = 1.0;
-extern "C" int printf(const char* fmt, ...);
+#define CLING_WRAP_FUNC_ static void WrappedFunc() {
+#define _CLING_WRAP_FUNC }
 
-#ifndef CLING_WRAP_FUNC_
- #define CLING_WRAP_FUNC_
- #define _CLING_WRAP_FUNC
- shebang
-#endif
-// CHECK: (float) 1
+#include "Shebang.C"
 
-CLING_WRAP_FUNC_
-
-if(shebang == 1.0) {
-  printf("I am executed\n");
-  // CHECK-NEXT: I am executed
-}
-
-_CLING_WRAP_FUNC
+shebang
+WrappedFunc()
 
 // expected-no-diagnostics
