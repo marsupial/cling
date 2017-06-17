@@ -14,6 +14,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTDiagnostic.h"
 #include "clang/AST/ASTImporter.h"
+#include "clang/AST/DeclContextInternals.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/Sema.h"
 
@@ -103,6 +104,7 @@ namespace cling {
     // supports their import.
     if ((declToImport->isFunctionOrFunctionTemplate()
          && declToImport->isTemplateDecl()) || dyn_cast<UsingDecl>(declToImport)
+         || dyn_cast<UsingDirectiveDecl>(declToImport)
          || dyn_cast<UsingShadowDecl>(declToImport)) {
 #ifndef NDEBUG
       utils::DiagnosticsStore DS(
@@ -189,6 +191,17 @@ namespace cling {
     assert(childCurrentDeclContext->hasExternalVisibleStorage() &&
            "DeclContext has no visible decls in storage");
 
+    // Search in the map of the stored Decl Contexts for this
+    // Decl Context.
+    std::map<const clang::DeclContext *, clang::DeclContext *>::iterator
+          IDeclContext = m_ImportedDeclContexts.find(childCurrentDeclContext);
+    // If childCurrentDeclContext was found before and is already in the map,
+    // then do the lookup using the stored pointer.
+    if (IDeclContext == m_ImportedDeclContexts.end())
+      return false;
+
+    DeclContext *parentDeclContext = IDeclContext->second;
+
     //Check if we have already found this declaration Name before
     DeclarationName parentDeclName;
     std::map<clang::DeclarationName,
@@ -199,35 +212,43 @@ namespace cling {
     } else {
       // Get the identifier info from the parent interpreter
       // for this Name.
-      std::string name = childDeclName.getAsString();
+      const std::string name = childDeclName.getAsString();
       IdentifierTable &parentIdentifierTable =
                             m_ParentInterpreter->get<ASTContext>().Idents;
       IdentifierInfo &parentIdentifierInfo =
                             parentIdentifierTable.get(name);
       parentDeclName = DeclarationName(&parentIdentifierInfo);
+
+      // Make sure then lookup name is right, this is an issue looking to import
+      // a constructor,  where lookup_result can hold the injected class name.
+      // FIXME: Pre-filter childDeclName.getNameKind() and just drop import
+      // of any unsupported types (i.e. CXXUsingDirective)
+      if (parentDeclName.getNameKind() != childDeclName.getNameKind()) {
+        (void)parentDeclContext->lookup(parentDeclName);
+        const StoredDeclsMap* DM =
+            parentDeclContext->getPrimaryContext()->getLookupPtr();
+        assert(DM && "No lookup map");
+        for (auto&& Entry : *DM) {
+          const DeclarationName& DN = Entry.first;
+          if (DN.getNameKind() == childDeclName.getNameKind()) {
+            if (DN.getAsString() == name) {
+              parentDeclName = DN;
+              break;
+            }
+          }
+        }
+      }
     }
-
-    // Search in the map of the stored Decl Contexts for this
-    // Decl Context.
-    std::map<const clang::DeclContext *, clang::DeclContext *>::iterator
-          IDeclContext = m_ImportedDeclContexts.find(childCurrentDeclContext);
-    // If childCurrentDeclContext was found before and is already in the map,
-    // then do the lookup using the stored pointer.
-    if (IDeclContext == m_ImportedDeclContexts.end()) return false;
-
-    DeclContext *parentDeclContext = IDeclContext->second;
 
     DeclContext::lookup_result lookup_result =
                                     parentDeclContext->lookup(parentDeclName);
 
     // Check if we found this Name in the parent interpreter
-    if (!lookup_result.empty()) {
-      if (Import(lookup_result,
-                 childCurrentDeclContext, childDeclName, parentDeclName))
-        return true;
-    }
+    if (lookup_result.empty())
+      return false;
 
-    return false;
+    return Import(lookup_result, childCurrentDeclContext, childDeclName,
+                  parentDeclName);
   }
 
   ///\brief Make available to child all decls in parent's decl context
