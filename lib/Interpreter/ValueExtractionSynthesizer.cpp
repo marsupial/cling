@@ -274,14 +274,21 @@ namespace {
           // or deleted copy and/or move constructors
           //
           if (VarDecl* VD = dyn_cast<VarDecl>(DRefEnd->getDecl())) {
-            if (!dyn_cast_or_null<CXXNewExpr>(VD->getInit())) {
+            // FIXME: Handle case when child evaluating a variable that already
+            // exists in parent better (VD->isInvalidDecl()).
+            if (!VD->isInvalidDecl() &&
+                !dyn_cast_or_null<CXXNewExpr>(VD->getInit())) {
               if (CompoundStmt* CS =
                       dyn_cast_or_null<CompoundStmt>(FD->getBody())) {
-                if (DeclStmt* DS = dyn_cast_or_null<DeclStmt>(CS->body_front())) {
-                  if (DS->getSingleDecl() &&
-                      dyn_cast<VarDecl>(DS->getSingleDecl()) == VD) {
-                    VDecl = VD;
-                    Placement = true;
+                if (DeclStmt* DS =
+                        dyn_cast_or_null<DeclStmt>(CS->body_front())) {
+                  // FIXME: Is this really necessary?
+                  for (Decl* D : DS->getDeclGroup()) {
+                    if (dyn_cast<VarDecl>(D) == VD) {
+                      VDecl = VD;
+                      Placement = true;
+                      break;
+                    }
                   }
                 }
               }
