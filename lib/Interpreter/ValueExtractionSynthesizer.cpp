@@ -512,8 +512,7 @@ namespace {
       }
 
       if (Call.isInvalid()) {
-        m_Sema->Diag(E->getLocStart(), diag::err_undeclared_var_use)
-          << "operator new";
+        m_Sema->Diag(E->getLocStart(), diag::err_unsupported_unknown_any_expr);
         return Call.get();
       }
 
