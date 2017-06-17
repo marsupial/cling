@@ -618,8 +618,7 @@ def runSingleTest(test, Idx = 2, Recurse = True):
 def test_cling():
     box_draw("Run Cling test suite")
     # Run single tests on CI with this
-    # runSingleTest('Prompt/ValuePrinter/Regression.C')
-    # runSingleTest('Prompt/ValuePrinter')
+    runSingleTest('Prompt/ValuePrinter/ExplicitInclude.C')
     build = Build('check-cling')
 
 def tarball():
