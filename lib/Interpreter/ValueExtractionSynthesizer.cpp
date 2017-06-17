@@ -408,7 +408,7 @@ namespace {
 
     // Pass the Intepreter
     CallArgs.push_back(utils::Synthesize::CStyleCastPtrExpr(m_Sema,
-                       AST.VoidPtrTy, uintptr_t(m_Parent)));
+                       AST.VoidPtrTy, uintptr_t(&m_Parent->ancestor())));
 
     // Pass on the action to take (assign, dump, etc).
     CallArgs.push_back(new (AST) IntegerLiteral(AST, llvm::APInt(32, Action),
