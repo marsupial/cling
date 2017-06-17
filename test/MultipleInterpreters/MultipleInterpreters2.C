@@ -58,7 +58,7 @@ cling::Value Vals[4];
 
   Child.evaluate("InParent P", Vals[0]);
   Vals[0].dump();
-  // CHECK: (InParent &) @0x{{.*}}
+  // CHECK: (InParent) @0x{{.*}}
 
   Child.evaluate("new InParent", Vals[1]);
   Vals[1].dump();
@@ -88,7 +88,7 @@ cling::Value Vals[4];
 
   Child.evaluate("struct B {} b", Vals[3]);
   Vals[3].dump();
-  // CHECK-NEXT: (struct B &) @0x{{.*}}
+  // CHECK-NEXT: (struct B) @0x{{.*}}
 }
 
 // SIGSEGV
