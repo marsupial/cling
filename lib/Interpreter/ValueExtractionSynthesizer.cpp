@@ -274,15 +274,16 @@ namespace {
           // or deleted copy and/or move constructors
           //
           if (VarDecl* VD = dyn_cast<VarDecl>(DRefEnd->getDecl())) {
-            // FIXME: Handle case when child evaluating a variable that already
-            // exists in parent better (VD->isInvalidDecl()).
-            if (!VD->isInvalidDecl() &&
-                !dyn_cast_or_null<CXXNewExpr>(VD->getInit())) {
+            // Invalid decl, code won't run
+            if (VD->isInvalidDecl())
+              return E;
+            if (!dyn_cast_or_null<CXXNewExpr>(VD->getInit())) {
               if (CompoundStmt* CS =
                       dyn_cast_or_null<CompoundStmt>(FD->getBody())) {
                 if (DeclStmt* DS =
                         dyn_cast_or_null<DeclStmt>(CS->body_front())) {
                   // FIXME: Is this really necessary?
+                  // Should be checking isInvalidDecl to exit early?
                   for (Decl* D : DS->getDeclGroup()) {
                     if (dyn_cast<VarDecl>(D) == VD) {
                       VDecl = VD;
