@@ -79,8 +79,8 @@ static std::string enclose(std::string Mid, const char* Begin,
 
 static std::string enclose(const clang::QualType& Ty, clang::ASTContext& C,
                            const char* Begin = "(", const char* End = "*)",
-                           size_t Hint = 3) {
-  return enclose(cling::utils::TypeName::GetFullyQualifiedName(Ty, C),
+                           size_t Hint = 3, bool WithTag = false) {
+  return enclose(cling::utils::TypeName::GetFullyQualifiedName(Ty, C, WithTag),
                  Begin, End, Hint);
 }
 
@@ -127,7 +127,7 @@ static std::string getTypeString(const Value &V) {
   // In other cases, dereference the address of the object.
   // If no overload or specific template matches,
   // the general template will be used which only prints the address.
-  return enclose(Ty, C, "*(", "**)", 5);
+  return enclose(Ty, C, "*(", "**)", 5, true);
 }
 
 static std::string printDeclType(const clang::QualType& QT,

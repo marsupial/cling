@@ -274,8 +274,10 @@ namespace utils {
     ///\param[in] QT - the type for which the fully qualified name will be
     /// returned.
     ///\param[in] Ctx - the ASTContext to be used.
+    ///\param[in] IncludeTagKeyord - preface with struct/class keyword   
     std::string GetFullyQualifiedName(clang::QualType QT,
-                                      const clang::ASTContext &Ctx);
+                                      const clang::ASTContext &Ctx,
+                                      bool IncludeTagKeyord = false);
 
     ///\brief Create a NestedNameSpecifier for Namesp and its enclosing
     /// scopes.

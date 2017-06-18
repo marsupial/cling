@@ -1721,11 +1721,13 @@ namespace utils {
   }
 
   std::string TypeName::GetFullyQualifiedName(QualType QT,
-                                              const ASTContext &Ctx) {
+                                              const ASTContext &Ctx,
+                                              bool IncludeTag) {
     QualType FQQT = GetFullyQualifiedType(QT, Ctx);
     PrintingPolicy Policy(Ctx.getPrintingPolicy());
     Policy.SuppressScope = false;
     Policy.AnonymousTagLocations = false;
+    Policy.SuppressTagKeyword = !IncludeTag;
     return FQQT.getAsString(Policy);
   }
 
