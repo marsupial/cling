@@ -28,7 +28,7 @@ namespace textinput {
     enum {
       kPruneLengthDefault = -1 // Prune length equals 80% of fMaxDepth
     };
-    History(const char* filename, bool linematch = false);
+    History(const char* filename, bool linematch = true);
     ~History();
 
     // If fMaxDepth == 0, do not create history output.
