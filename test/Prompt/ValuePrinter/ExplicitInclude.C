@@ -19,10 +19,5 @@ struct Trigger2 { } trgr
 // CHECK-NEXT: (struct Trigger2 &) @0x{{.*}}
 .undo
 
-.undo // #include "cling/Interpreter/RuntimePrintValue.h"
-
-struct Trigger3 { } trgr
-// CHECK-NEXT: (struct Trigger3 &) @0x{{.*}}
-
 // expected-no-diagnostics
 .q
