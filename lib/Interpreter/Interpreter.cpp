@@ -509,7 +509,9 @@ namespace cling {
       cling::errs() << Strm.str();
 
     Transaction *T;
-    declare(Strm.str(), &T);
+    CompilationOptions CO(this, "cling_Interpreter_initialization");
+    CO.CheckPointerValidity = 0;
+    DeclareInternal(Strm.str(), CO, &T);
     return T;
   }
 

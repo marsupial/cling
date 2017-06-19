@@ -220,7 +220,7 @@ namespace cling {
                                 result, bool isChildInterpreter) {
     m_TransactionPool.reset(new TransactionPool);
 
-    CompilationOptions CO(m_Interpreter);
+    CompilationOptions CO(m_Interpreter, "cling_Interpreter_initialization");
     Transaction* CurT = beginTransaction(CO);
     Preprocessor& PP = m_CI->getPreprocessor();
     DiagnosticsEngine& Diags = m_CI->getSema().getDiagnostics();
