@@ -17,6 +17,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <assert.h>
 
 #ifdef WIN32
 # include <stdio.h>
@@ -26,19 +27,22 @@ extern "C" unsigned long __stdcall GetCurrentProcessId(void);
 #endif
 
 namespace textinput {
-  History::History(const char* filename):
+  History::History(const char* filename, bool linematch):
     fHistFileName(filename ? filename : ""), fMaxDepth((size_t) -1),
-    fPruneLength(0), fNumHistFileLines(0) {
+    fPruneLength(0), fNumHistFileLines(0), LineSearch(nullptr) {
     // Create a history object, initialize from filename if the file
     // exists. Append new lines to filename taking into account the
     // maximal number of lines allowed by SetMaxDepth().
     if (filename) ReadFile(filename);
+    if (linematch) EnableLineMatching(linematch);
   }
 
   History::~History() {}
 
   void
   History::AddLine(const std::string& line) {
+    // Standard history search until text entered
+    if (LineSearch) LineSearch->Enabled = false;
     // Add a line to entries and file.
     if (line.empty()) return;
     fEntries.push_back(line);
@@ -135,5 +139,100 @@ namespace textinput {
       out << fEntries.back() << '\n';
       ++fNumHistFileLines;
     }
+  }
+
+
+  void History::EnableLineMatching(bool B) {
+    if (LineSearch) {
+      if (!B)
+        delete LineSearch;
+    } else if (B)
+      LineSearch = new LineSearcher;
+  }
+
+  void History::TextEntered(size_t& SearchStart) {
+    if (LineSearch) {
+      LineSearch->Enabled = true;
+      SearchStart = 0;
+    }
+  }
+    
+  static size_t IncrWithOverflow(size_t Idx, int Incr, size_t Max, bool& Over) {
+    const size_t Val = Idx + Incr;
+    if (Incr < 0) {
+      if (Val > Idx || Val >= Max) {
+        Over = true;
+        return 0;
+      }
+    } else if (Val < Idx || Val>= Max) {
+      Over = true;
+      return Max;
+    }
+    Over = false;
+    return Idx + Incr;
+  }
+
+  static size_t IncrWithOverflow(size_t Idx, int Incr, size_t Max) {
+    bool Drop;
+    return IncrWithOverflow(Idx, Incr, Max, Drop);
+  }
+
+  const std::string& History::GetLine(size_t& InOuIdx, int Incr,
+                                      const std::string& InStr) {
+    assert(Incr != 0 && "Choose a direction!");
+    const size_t LastEntry = fEntries.empty() ? 0 : fEntries.size() - 1;
+    if (!LineSearch || !LineSearch->Enabled || InStr.empty() ||
+        fEntries.empty()) {
+      if (LineSearch) {
+        // Free the string buffer
+        if (!LineSearch->Match.empty())
+          std::string().swap(LineSearch->Match);
+        // Disable filtering until text entered
+        LineSearch->Enabled = false;
+      }
+      InOuIdx = IncrWithOverflow(InOuIdx, Incr, LastEntry);
+      return GetLine(InOuIdx);
+    }
+
+    assert(InOuIdx != (size_t) -1 && InOuIdx <= LastEntry);
+    size_t Idx = InOuIdx;
+    std::string& Search = LineSearch->Match;
+
+    // Set the Search to InStr when:
+    //   Search.empty(), first search
+    //   InStr doesn't begin with previous Search, new search
+    //   InStr doesn't match last hit, characters added or deleted
+    if (Search.empty() || InStr.find(Search) != 0 ||
+        InStr != fEntries[LastEntry - Idx]) {
+      Search = InStr;
+      if (fEntries[LastEntry - Idx].find(Search) == 0) {
+        // Edited a previos match 'A' -> 'AB', drop the first match (a repeat)
+        Idx = IncrWithOverflow(Idx, Incr, LastEntry);
+      } else {
+        // Restart from end or beginning of history
+        Idx = Incr > 0 ? 0 : LastEntry;
+      }
+    } else
+      Idx = IncrWithOverflow(Idx, Incr, LastEntry);
+
+    bool Wrapped = false;
+    const size_t StartIdx = Idx;
+
+    while (!Wrapped && (Incr < 0 ? Idx <= StartIdx : Idx >= StartIdx)) {
+      const std::string& Line = fEntries[LastEntry - Idx];
+      if (Line.find(Search) == 0) {
+        InOuIdx = Idx;
+        return Line;
+      }
+
+      Idx = IncrWithOverflow(Idx, Incr, LastEntry, Wrapped);
+    }
+    if (false) {
+      // Block history to matches only
+      return InStr;
+    }
+    // When hits exhausted switch to regular mode
+    InOuIdx = IncrWithOverflow(InOuIdx, Incr, LastEntry);
+    return GetLine(InOuIdx);
   }
 }
