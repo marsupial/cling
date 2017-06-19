@@ -47,8 +47,9 @@ namespace textinput {
     size_t GetSize() const { return fEntries.size(); }
 
     void AddLine(const std::string& line);
-    void ModifyLine(size_t Idx, const char* line) {
-      fEntries[fEntries.size() - 1 - Idx] = line;
+    void ModifyLine(size_t Idx, const std::string& Line) {
+      if (!LineSearch)
+        fEntries[fEntries.size() - 1 - Idx] = Line;
       // Does not sync to file!
     }
 

@@ -396,7 +396,7 @@ namespace textinput {
           return kPRError;
         }
         if (fCurHistEntry == 0) {
-          Hist->ModifyLine(fCurHistEntry, Line.GetText().c_str());
+          Hist->ModifyLine(fCurHistEntry, Line.GetText());
           Line = fLineNotInHist;
           fLineNotInHist.clear();
           fCurHistEntry = (size_t)-1; // not in hist
@@ -417,7 +417,7 @@ namespace textinput {
           fLineNotInHist = Line.GetText();
           fCurHistEntry = 0;
         } else {
-          Hist->ModifyLine(fCurHistEntry, Line.GetText().c_str());
+          Hist->ModifyLine(fCurHistEntry, Line.GetText());
           ++fCurHistEntry;
         }
         Line = Hist->GetLine(fCurHistEntry);
