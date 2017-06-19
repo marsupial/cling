@@ -29,7 +29,6 @@ TEST
 
 .undo //print
 .undo //include
-.undo // FIXME: REMOVE once print unloading is merged
 
 TEST // expected-error@2 {{use of undeclared identifier 'TEST'}}
 
@@ -40,7 +39,6 @@ TEST
 // CHECK: (const char [8]) "DEFINED"
 .undo // print
 .undo // define
-.undo // FIXME: REMOVE once print unloading is merged
 
 TEST // expected-error@2 {{use of undeclared identifier 'TEST'}}
 
