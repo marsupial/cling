@@ -28,7 +28,7 @@ namespace textinput {
     enum {
       kPruneLengthDefault = -1 // Prune length equals 80% of fMaxDepth
     };
-    History(const char* filename);
+    History(const char* filename, bool linematch = false);
     ~History();
 
     // If fMaxDepth == 0, do not create history output.
@@ -44,6 +44,10 @@ namespace textinput {
       }
       return fEntries[fEntries.size() - 1 - Idx];
     }
+
+    const std::string& GetLine(size_t& InOutIdx, int Increment,
+                               const std::string& Search);
+
     size_t GetSize() const { return fEntries.size(); }
 
     void AddLine(const std::string& line);
@@ -56,12 +60,21 @@ namespace textinput {
     void AppendToFile();
     void ReadFile(const char* FileName);
 
+    void EnableLineMatching(bool B);
+    void TextEntered(size_t& HistoryLocStart);
+
   private:
     std::string fHistFileName; // History file name
     size_t fMaxDepth; // Max number of entries before pruning
     size_t fPruneLength; // Remaining entries after pruning
     size_t fNumHistFileLines; // Hist file's number of lines at previous access
     std::vector<std::string> fEntries; // Previous input lines
+
+    struct LineSearcher { // Provide ine level filtering of the history
+      std::string Match;
+      bool Enabled;
+      LineSearcher() : Enabled(false) {}
+    } * LineSearch;
   };
 }
 

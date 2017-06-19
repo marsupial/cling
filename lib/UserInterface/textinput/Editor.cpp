@@ -177,6 +177,8 @@ namespace textinput {
 
     Text& Line = fContext->GetLine();
     size_t Cursor = fContext->GetCursor();
+    // Enable history filtering
+    if (Line.length() == 0) fContext->GetHistory()->TextEntered(fCurHistEntry);
 
     if (fOverwrite) {
       if (Cursor < Line.length()) {
@@ -401,8 +403,7 @@ namespace textinput {
           fLineNotInHist.clear();
           fCurHistEntry = (size_t)-1; // not in hist
         } else {
-          --fCurHistEntry;
-          Line = Hist->GetLine(fCurHistEntry);
+          Line = Hist->GetLine(fCurHistEntry, -1, Line.GetText());
         }
         R.fEdit.Extend(Range::AllText());
         R.fDisplay.Extend(Range::AllText());
@@ -418,9 +419,8 @@ namespace textinput {
           fCurHistEntry = 0;
         } else {
           Hist->ModifyLine(fCurHistEntry, Line.GetText());
-          ++fCurHistEntry;
         }
-        Line = Hist->GetLine(fCurHistEntry);
+        Line = Hist->GetLine(fCurHistEntry, 1, Line.GetText());
         R.fEdit.Extend(Range::AllText());
         R.fDisplay.Extend(Range::AllText());
         ProcessMove(kMoveEnd, R);
