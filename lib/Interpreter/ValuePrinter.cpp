@@ -14,6 +14,7 @@
 #include "cling/Interpreter/Transaction.h"
 #include "cling/Interpreter/Value.h"
 #include "cling/Utils/AST.h"
+#include "cling/Utils/Diagnostics.h"
 #include "cling/Utils/Output.h"
 #include "cling/Utils/Validation.h"
 
@@ -666,6 +667,7 @@ static std::string callPrintValue(const Value& V, const void* Val,
   }
 
   Value printValueV;
+  utils::DiagnosticsStore SavedDiags(Interp->getDiagnostics(), false, false);
   {
     // Use an llvm::raw_ostream to prepend '0x' in front of the pointer value.
 
@@ -677,7 +679,7 @@ static std::string callPrintValue(const Value& V, const void* Val,
     Strm << getTypeString(V) << &Val << Closer[bool(Cast)] << ");";
 
     // We really don't care about protected types here (ROOT-7426)
-    AccessCtrlRAII_t AccessCtrlRAII(*Interp, true);
+    AccessCtrlRAII_t AccessCtrlRAII(*Interp);
     Interp->evaluate(Strm.str(), printValueV);
   }
 
@@ -686,11 +688,14 @@ static std::string callPrintValue(const Value& V, const void* Val,
 
   // Probably diagnosed the issue as part of evaluate(), but make sure to
   // mark the Sema with an error if not.
-  clang::DiagnosticsEngine& Diag = Interp->getDiagnostics();
-  const unsigned ID = Diag.getCustomDiagID(
-                             clang::DiagnosticsEngine::Level::Error,
-                             "Could not execute cling::printValue with '%0'");
-  Diag.Report(Interp->getSourceLocation(), ID) << getTypeString(V);
+  if (SavedDiags.empty()) {
+    clang::DiagnosticsEngine& Diag = Interp->getDiagnostics();
+    const unsigned ID = Diag.getCustomDiagID(
+                               clang::DiagnosticsEngine::Level::Error,
+                               "Could not execute cling::printValue with '%0'");
+    Diag.Report(Interp->getSourceLocation(), ID) << getTypeString(V);
+  } else
+    SavedDiags.Report();
 
   return valuePrinterInternal::kUndefined;
 }
