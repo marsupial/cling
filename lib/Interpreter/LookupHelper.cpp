@@ -1293,7 +1293,8 @@ namespace cling {
                                        DeclarationNameInfo &FuncNameInfo,
                               const TemplateArgumentListInfo* FuncTemplateArgs,
                                        ASTContext& Context, Parser &P, Sema &S),
-                 LookupHelper::DiagSetting diagOnOff
+                 LookupHelper::DiagSetting diagOnOff,
+                 Sema::LookupNameKind LookupKind = Sema::LookupMemberName
                  ) {
     // Given the correctly types arguments, etc. find the function itself.
 
@@ -1342,9 +1343,6 @@ namespace cling {
     //
     //  Lookup the function name in the given class now.
     //
-    const Sema::LookupNameKind LookupKind = isa<TranslationUnitDecl>(foundDC)
-                                                ? Sema::LookupOrdinaryName
-                                                : Sema::LookupMemberName;
     DeclarationName FuncName = FuncNameInfo.getName();
     SourceLocation FuncNameLoc = FuncNameInfo.getLoc();
     LookupResult Result(S, FuncName, FuncNameLoc, LookupKind,
@@ -1398,7 +1396,8 @@ namespace cling {
                                               DeclarationNameInfo &FuncNameInfo,
                                const TemplateArgumentListInfo* FuncTemplateArgs,
                                        ASTContext& Context, Parser &P, Sema &S),
-                              LookupHelper::DiagSetting diagOnOff
+                              LookupHelper::DiagSetting diagOnOff,
+                        Sema::LookupNameKind LookupKind = Sema::LookupMemberName
                               )
   {
 
@@ -1427,7 +1426,7 @@ namespace cling {
     return findFunction(foundDC,
                         funcName, GivenArgs, objectIsConst,
                         Context, Interp, functionSelector,
-                        diagOnOff);
+                        diagOnOff, LookupKind);
   }
 
   struct NoParse {
@@ -1681,7 +1680,7 @@ namespace cling {
 
     return findAnyFunction(
         m_Interpreter->getSema().getASTContext().getTranslationUnitDecl(), Name,
-        Diag);
+        Diag, Sema::LookupOrdinaryName);
   }
 
   const FunctionDecl*
