@@ -106,6 +106,11 @@ namespace utils {
     RawStr.flush();
   }
 
+  void Analyze::maybeMangleDeclName(const FunctionDecl *FD,
+                                    std::string& mangledName) {
+    return maybeMangleDeclName(GlobalDecl(FD), mangledName);
+  }
+
   Expr* Analyze::GetOrCreateLastExpr(FunctionDecl* FD,
                                      int* FoundAt /*=0*/,
                                      bool omitDeclStmts /*=true*/,
