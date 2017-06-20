@@ -7,7 +7,6 @@
 //------------------------------------------------------------------------------
 
 // RUN: cat %s | %cling -Xclang -verify 2>&1 | FileCheck %s
-// XFAIL: *
 
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/Value.h"
@@ -91,5 +90,4 @@ barrier();
 // CHECK-NEXT: ~Thrower-0
 //  CHECK-NOT: ~Thrower-1
 
-// expected-no-diagnostics
 .q

@@ -386,9 +386,14 @@ namespace {
 
     llvm::SmallVector<Expr*, 6> CallArgs;
 
+    // Get a (DeclRef) reference to the cling::Value pointer
+    ExprResult ValueDecl =
+        m_Sema->BuildDeclRefExpr(FD->getParamDecl(0), AST.VoidPtrTy, VK_LValue,
+                                 Start);
+    Expr* ValueP = ValueDecl.get();
+
     // Pass the cling::Value pointer
-    CallArgs.push_back(m_Sema->BuildDeclRefExpr(FD->getParamDecl(0),
-                       AST.VoidPtrTy, VK_RValue, Start).get());
+    CallArgs.push_back(ValueP);
 
     // Pass the QualType as a void*
     if (IsVoid) {
@@ -484,7 +489,6 @@ namespace {
         // call new (Ptr) (Init)
         assert(!Call.isInvalid() && "Invalid Call before building new");
 
-        Expr* PlacementArgs = Call.get();
         TypeSourceInfo* ETSI = AST.getTrivialTypeSourceInfo(ElemTy, Loc);
         SourceRange InitRange;
         if (Init && !isa<InitListExpr>(Init) && !isa<CXXConstructExpr>(Init))
@@ -494,10 +498,16 @@ namespace {
                                              SourceLocation())
                   : nullptr;
 
+        // Reuse the void* function parameter.
+        // vpValue = cling_ValueExtraction()
+        ExprResult Alloc =
+            m_Sema->CreateBuiltinBinOp(Loc, BO_Assign, ValueP, Call.get());
+
+        // call new(vpValue) Object(Args)
         Call = m_Sema->BuildCXXNew(E->getSourceRange(),
                                    /*useGlobal ::*/ true,
                                    /*placementLParen*/ Loc,
-                                   /*placementArgs*/MultiExprArg(PlacementArgs),
+                                   /*placementArgs*/MultiExprArg(ValueP),
                                    /*placementRParen*/ Loc,
                                    /*TypeIdParens*/ SourceRange(),
                                    /*allocType*/ ETSI->getType(),
@@ -505,8 +515,44 @@ namespace {
                                    /*arraySize*/ ArraySize,
                                    /*directInitRange*/ InitRange,
                                    /*initializer*/Init);
-      }
 
+        // Mark the constructor as succeeding. This is tied to cling::Value
+        // AllocatedValue that delivers a pointer to a char buffer with the
+        // element -1 as part of the object.
+        //
+        // ((char*)vpValue)[-1] = -1;
+
+        Expr* Payload = utils::Synthesize::CStyleCastPtrExpr(
+            m_Sema, AST.getPointerType(AST.CharTy), ValueP);
+
+        IntegerLiteral* NegOne =
+            new (AST) IntegerLiteral(AST, llvm::APInt(8, -1), AST.CharTy, Loc);
+
+        ArraySubscriptExpr* Subscript =
+            new (AST) ArraySubscriptExpr(Payload, NegOne, AST.CharTy,
+                                         VK_LValue, OK_Ordinary, Loc);
+
+        ExprResult Done = m_Sema->CreateBuiltinBinOp(
+            Loc, BO_OrAssign, Subscript,
+            new (AST) IntegerLiteral(AST, llvm::APInt(8, 1), AST.CharTy, Loc));
+
+        llvm::SmallVector<Stmt*, 4> Mark;
+        Mark.push_back(Alloc.get());
+        Mark.push_back(Call.get());
+        Mark.push_back(Done.get());
+        if (!DRefEnd) {
+          Mark.push_back(utils::Synthesize::CStyleCastPtrExpr(
+            m_Sema, AST.getPointerType(ElemTy), ValueP));
+        } else
+          Mark.push_back(DRefEnd);
+
+        m_Sema->ActOnStartOfCompoundStmt();
+        Stmt* Stmt = m_Sema->ActOnCompoundStmt(Loc, Loc, Mark, false).get();
+        m_Sema->ActOnFinishOfCompoundStmt();
+        m_Sema->ActOnStartStmtExpr();
+        Call  = m_Sema->ActOnStmtExpr(Loc, Stmt, Loc);
+
+      }
       if (Call.isInvalid()) {
         m_Sema->Diag(E->getLocStart(), diag::err_unsupported_unknown_any_expr);
         return Call.get();

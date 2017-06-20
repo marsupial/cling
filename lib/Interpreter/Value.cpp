@@ -137,10 +137,6 @@ namespace {
     AllocatedValue(char Info) {
       m_Count = 0;
       m_Bytes[FlagsByte] = Info;
-#if 1
-      // FIXME: Set this properly in ValueExtractionSynthesizer::Transform.
-      m_Bytes[FlagsByte] |= kConstructorRan;
-#endif
       UpdateRefCount(1);
     }
 
