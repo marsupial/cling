@@ -994,9 +994,32 @@ namespace cling {
     return ConvertExecutionResult(ExeRes);
   }
 
-  const FunctionDecl* Interpreter::DeclareCFunction(StringRef name,
-                                                    StringRef code,
-                                                    bool withAccessControl) {
+  static const clang::FunctionDecl* IsNamedFunction(StringRef Name, Decl* D) {
+    if (const FunctionDecl* FD = dyn_cast<FunctionDecl>(D)) {
+      const IdentifierInfo* II = FD->getDeclName().getAsIdentifierInfo();
+      if (II && II->getName() == Name)
+        return FD;
+    }
+    return nullptr;
+  }
+
+  template <class CtxType>
+  static const clang::FunctionDecl* FindFunction(StringRef Name, Decl* D) {
+    while (const CtxType* CtxDecl = dyn_cast<CtxType>(D)) {
+      DeclContext::decl_iterator DeclBegin = CtxDecl->decls_begin();
+      if (DeclBegin == CtxDecl->decls_end())
+        return nullptr;
+      D = *DeclBegin;
+      if (const FunctionDecl* FD = IsNamedFunction(Name, D))
+        return FD;
+    }
+    return nullptr;
+  }
+
+  const FunctionDecl* Interpreter::DeclareFunction(StringRef name,
+                                                   StringRef code,
+                                                   bool withAccessControl,
+                                                   bool ExtrnC) {
     /*
     In CallFunc we currently always (intentionally and somewhat necessarily)
     always fully specify member function template, however this can lead to
@@ -1095,20 +1118,25 @@ namespace cling {
     if (CR != cling::Interpreter::kSuccess)
       return 0;
 
-    for (cling::Transaction::const_iterator I = T->decls_begin(),
-           E = T->decls_end(); I != E; ++I) {
-      if (I->m_Call != cling::Transaction::kCCIHandleTopLevelDecl)
-        continue;
-      if (const LinkageSpecDecl* LSD
-          = dyn_cast<LinkageSpecDecl>(*I->m_DGR.begin())) {
-        DeclContext::decl_iterator DeclBegin = LSD->decls_begin();
-        if (DeclBegin == LSD->decls_end())
-          continue;
-        if (const FunctionDecl* D = dyn_cast<FunctionDecl>(*DeclBegin)) {
-          const IdentifierInfo* II = D->getDeclName().getAsIdentifierInfo();
-          if (II && II->getName() == name)
-            return D;
-        }
+    if (!ExtrnC) {
+      code = code.ltrim();
+      if (code.startswith("extern ")) {
+        code = code.ltrim("extern ");
+        if (code.startswith("\"C\""))
+          ExtrnC = true;
+      }
+    }
+
+    for (auto&& DCI : T->decls()) {
+      if (DCI.m_Call == cling::Transaction::kCCIHandleTopLevelDecl) {
+        Decl* D = *DCI.m_DGR.begin();
+        const FunctionDecl* FD = IsNamedFunction(name, D);
+        if (FD && (ExtrnC ? FD->getLanguageLinkage() == CLanguageLinkage : true))
+          return FD;
+        FD = ExtrnC ? FindFunction<LinkageSpecDecl>(name, D)
+                    : FindFunction<NamespaceDecl>(name, D);
+        if (FD)
+          return FD;
       }
     }
     return 0;
@@ -1116,7 +1144,7 @@ namespace cling {
 
   void*
   Interpreter::compileFunction(llvm::StringRef name, llvm::StringRef code,
-                               bool ifUnique, bool withAccessControl) {
+                               bool ifUnique, bool accessCtrl, bool externC) {
     //
     //  Compile the wrapper code.
     //
@@ -1130,7 +1158,7 @@ namespace cling {
       }
     }
 
-    const FunctionDecl* FD = DeclareCFunction(name, code, withAccessControl);
+    const FunctionDecl* FD = DeclareFunction(name, code, accessCtrl, externC);
     if (!FD)
       return 0;
     //
@@ -1141,6 +1169,15 @@ namespace cling {
         = getLastTransaction()->getModule()->getNamedValue(name))
       return m_Executor->getPointerToGlobalFromJIT(*GV);
 
+    if (!externC) {
+      std::string mangledName;
+      utils::Analyze::maybeMangleDeclName(FD, mangledName);
+      if (!mangledName.empty()) {
+        if (const llvm::GlobalValue* GV =
+                getLastTransaction()->getModule()->getNamedValue(mangledName))
+          return m_Executor->getPointerToGlobalFromJIT(*GV);
+      }
+    }
     return 0;
   }
 
