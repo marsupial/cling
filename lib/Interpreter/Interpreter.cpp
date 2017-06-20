@@ -621,9 +621,7 @@ namespace cling {
       wrapPoint = utils::getWrapPoint(wrapReadySource, getCI()->getLangOpts());
 
     if (isRawInputEnabled() || wrapPoint == std::string::npos) {
-      CompilationOptions CO(this, CompilationOptions::VPDisabled);
-      assert(CO.DeclarationExtraction == 0 && CO.ResultEvaluation == 0);
-
+      const CompilationOptions CO(this, CompilationOptions::VPDisabled);
       return DeclareInternal(input, CO, T);
     }
 
@@ -644,7 +642,6 @@ namespace cling {
   Interpreter::CompilationResult
   Interpreter::parse(const std::string& input, Transaction** T /*=0*/) const {
     CompilationOptions CO(this, CompilationOptions::VPDisabled);
-    assert(CO.DeclarationExtraction == 0 && CO.ResultEvaluation == 0);
     CO.CodeGeneration = 0;
 
     return DeclareInternal(input, CO, T);
@@ -699,7 +696,6 @@ namespace cling {
   Interpreter::CompilationResult
   Interpreter::parseForModule(const std::string& input) {
     CompilationOptions CO(this, CompilationOptions::VPDisabled);
-    assert(CO.DeclarationExtraction == 0 && CO.ResultEvaluation == 0);
     CO.CodeGenerationForModule = 1;
 
     // When doing parseForModule avoid warning about the user code
@@ -720,7 +716,6 @@ namespace cling {
   Interpreter::CodeCompleteInternal(const std::string& input, unsigned offset) {
 
     CompilationOptions CO(this, CompilationOptions::VPDisabled);
-    assert(CO.DeclarationExtraction == 0 && CO.ResultEvaluation == 0);
     CO.CheckPointerValidity = 0;
 
     std::string wrapped = input;
@@ -741,7 +736,6 @@ namespace cling {
   Interpreter::CompilationResult
   Interpreter::declare(const std::string& input, Transaction** T/*=0 */) {
     CompilationOptions CO(this, CompilationOptions::VPDisabled);
-    assert(CO.DeclarationExtraction == 0 && CO.ResultEvaluation == 0);
     CO.CheckPointerValidity = 0;
 
     return DeclareInternal(input, CO, T);
@@ -815,18 +809,14 @@ namespace cling {
 
   Interpreter::CompilationResult
   Interpreter::echo(const std::string& input, Value* V /* = 0 */) {
-    CompilationOptions CO(this, CompilationOptions::VPEnabled,
-                          /*ResultEvaluation*/ V);
-
+    const CompilationOptions CO(this, CompilationOptions::VPEnabled,
+                                /*ResultEvaluation*/ V);
     return EvaluateInternal(input, CO, V);
   }
 
   Interpreter::CompilationResult
   Interpreter::execute(const std::string& input) {
-    CompilationOptions CO(this, CompilationOptions::VPDisabled);
-    assert(CO.DeclarationExtraction == 0 && CO.ResultEvaluation == 0 &&
-           CO.DynamicScoping == 0);
-
+    const CompilationOptions CO(this, CompilationOptions::VPDisabled);
     return EvaluateInternal(input, CO);
   }
 
@@ -1237,7 +1227,6 @@ namespace cling {
     code += "#include \"" + filename + "\"";
 
     CompilationOptions CO(this, CompilationOptions::VPDisabled);
-    assert(CO.DeclarationExtraction == 0 && CO.ResultEvaluation == 0);
     CO.CheckPointerValidity = 1;
 
     CompilationResult res = DeclareInternal(code, CO, T);
@@ -1508,7 +1497,6 @@ namespace cling {
 
 
     CompilationOptions CO(this, CompilationOptions::VPDisabled);
-    assert(CO.DeclarationExtraction == 0 && CO.ResultEvaluation == 0);
     CO.DynamicScoping = 0;
 
     std::string includeFile = std::string("#include \"") + inFile.str() + "\"";
