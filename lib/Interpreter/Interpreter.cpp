@@ -100,6 +100,16 @@ namespace cling {
         CheckPointerValidity(!I->isRawInputEnabled()),
         OptLevel(I->getDefaultOptLevel()) {}
 
+  CompilationOptions::CompilationOptions(const Interpreter* I,
+                                         enum ValuePrinting VP, bool RsltEval,
+                                         bool DeclExtrct)
+      : DeclarationExtraction(DeclExtrct), ValuePrinting(VP),
+        ResultEvaluation(RsltEval), DynamicScoping(I->isDynamicLookupEnabled()),
+        Debug(I->isPrintingDebug()), CodeGeneration(!I->isInSyntaxOnlyMode()),
+        CodeGenerationForModule(0), IgnorePromptDiags(!I->isRawInputEnabled()),
+        CheckPointerValidity(!I->isRawInputEnabled()),
+        OptLevel(I->getDefaultOptLevel()) {}
+
   Interpreter::PushTransactionRAII::PushTransactionRAII(const Interpreter* I)
     : m_Interpreter(I) {
     CompilationOptions CO(I);
@@ -604,25 +614,23 @@ namespace cling {
   Interpreter::CompilationResult
   Interpreter::process(const std::string& input, Value* V /* = 0 */,
                        Transaction** T /* = 0 */,
-                       bool disableValuePrinting /* = false*/) {
+                       bool NoValuePrint /* = false*/) {
     std::string wrapReadySource = input;
     size_t wrapPoint = std::string::npos;
     if (!isRawInputEnabled())
       wrapPoint = utils::getWrapPoint(wrapReadySource, getCI()->getLangOpts());
 
     if (isRawInputEnabled() || wrapPoint == std::string::npos) {
-      CompilationOptions CO(this);
-      CO.DeclarationExtraction = 0;
-      CO.ValuePrinting = 0;
-      CO.ResultEvaluation = 0;
+      CompilationOptions CO(this, CompilationOptions::VPDisabled);
+      assert(CO.DeclarationExtraction == 0 && CO.ResultEvaluation == 0);
+
       return DeclareInternal(input, CO, T);
     }
 
-    CompilationOptions CO(this);
-    CO.DeclarationExtraction = 1;
-    CO.ValuePrinting = disableValuePrinting ? CompilationOptions::VPDisabled
-      : CompilationOptions::VPAuto;
-    CO.ResultEvaluation = (bool)V;
+    CompilationOptions CO(this, NoValuePrint ? CompilationOptions::VPDisabled
+                                             : CompilationOptions::VPAuto,
+                          /*ResultEvaluation*/ V,
+                          /*DeclarationExtraction*/ true);
     // CO.IgnorePromptDiags = 1; done by EvaluateInternal().
     CO.CheckPointerValidity = 1;
     if (EvaluateInternal(wrapReadySource, CO, V, T, wrapPoint)
@@ -635,11 +643,9 @@ namespace cling {
 
   Interpreter::CompilationResult
   Interpreter::parse(const std::string& input, Transaction** T /*=0*/) const {
-    CompilationOptions CO(this);
+    CompilationOptions CO(this, CompilationOptions::VPDisabled);
+    assert(CO.DeclarationExtraction == 0 && CO.ResultEvaluation == 0);
     CO.CodeGeneration = 0;
-    CO.DeclarationExtraction = 0;
-    CO.ValuePrinting = 0;
-    CO.ResultEvaluation = 0;
 
     return DeclareInternal(input, CO, T);
   }
@@ -692,11 +698,9 @@ namespace cling {
 
   Interpreter::CompilationResult
   Interpreter::parseForModule(const std::string& input) {
-    CompilationOptions CO(this);
+    CompilationOptions CO(this, CompilationOptions::VPDisabled);
+    assert(CO.DeclarationExtraction == 0 && CO.ResultEvaluation == 0);
     CO.CodeGenerationForModule = 1;
-    CO.DeclarationExtraction = 0;
-    CO.ValuePrinting = 0;
-    CO.ResultEvaluation = 0;
 
     // When doing parseForModule avoid warning about the user code
     // being loaded ... we probably might as well extend this to
@@ -715,10 +719,8 @@ namespace cling {
   Interpreter::CompilationResult
   Interpreter::CodeCompleteInternal(const std::string& input, unsigned offset) {
 
-    CompilationOptions CO(this);
-    CO.DeclarationExtraction = 0;
-    CO.ValuePrinting = 0;
-    CO.ResultEvaluation = 0;
+    CompilationOptions CO(this, CompilationOptions::VPDisabled);
+    assert(CO.DeclarationExtraction == 0 && CO.ResultEvaluation == 0);
     CO.CheckPointerValidity = 0;
 
     std::string wrapped = input;
@@ -738,10 +740,8 @@ namespace cling {
 
   Interpreter::CompilationResult
   Interpreter::declare(const std::string& input, Transaction** T/*=0 */) {
-    CompilationOptions CO(this);
-    CO.DeclarationExtraction = 0;
-    CO.ValuePrinting = 0;
-    CO.ResultEvaluation = 0;
+    CompilationOptions CO(this, CompilationOptions::VPDisabled);
+    assert(CO.DeclarationExtraction == 0 && CO.ResultEvaluation == 0);
     CO.CheckPointerValidity = 0;
 
     return DeclareInternal(input, CO, T);
@@ -753,10 +753,8 @@ namespace cling {
     // ExprStmt can be evaluated and etc. Such enforcement cannot happen in the
     // worker, because it is used from various places, where there is no such
     // rule
-    CompilationOptions CO(this);
-    CO.DeclarationExtraction = 0;
-    CO.ValuePrinting = 0;
-    CO.ResultEvaluation = 1;
+    CompilationOptions CO(this, CompilationOptions::VPDisabled,
+                          /*ResultEvaluation*/ true);
 
     return EvaluateInternal(input, CO, &V);
   }
@@ -817,21 +815,18 @@ namespace cling {
 
   Interpreter::CompilationResult
   Interpreter::echo(const std::string& input, Value* V /* = 0 */) {
-    CompilationOptions CO(this);
-    CO.DeclarationExtraction = 0;
-    CO.ValuePrinting = CompilationOptions::VPEnabled;
-    CO.ResultEvaluation = (bool)V;
+    CompilationOptions CO(this, CompilationOptions::VPEnabled,
+                          /*ResultEvaluation*/ V);
 
     return EvaluateInternal(input, CO, V);
   }
 
   Interpreter::CompilationResult
   Interpreter::execute(const std::string& input) {
-    CompilationOptions CO(this);
-    CO.DeclarationExtraction = 0;
-    CO.ValuePrinting = 0;
-    CO.ResultEvaluation = 0;
-    CO.DynamicScoping = 0;
+    CompilationOptions CO(this, CompilationOptions::VPDisabled);
+    assert(CO.DeclarationExtraction == 0 && CO.ResultEvaluation == 0 &&
+           CO.DynamicScoping == 0);
+
     return EvaluateInternal(input, CO);
   }
 
@@ -1241,11 +1236,10 @@ namespace cling {
     std::string code;
     code += "#include \"" + filename + "\"";
 
-    CompilationOptions CO(this);
-    CO.DeclarationExtraction = 0;
-    CO.ValuePrinting = 0;
-    CO.ResultEvaluation = 0;
+    CompilationOptions CO(this, CompilationOptions::VPDisabled);
+    assert(CO.DeclarationExtraction == 0 && CO.ResultEvaluation == 0);
     CO.CheckPointerValidity = 1;
+
     CompilationResult res = DeclareInternal(code, CO, T);
     return res;
   }
@@ -1513,12 +1507,9 @@ namespace cling {
                                     fwdGenPP.getTargetInfo().getTriple());
 
 
-    CompilationOptions CO(this);
-    CO.DeclarationExtraction = 0;
-    CO.ValuePrinting = 0;
-    CO.ResultEvaluation = 0;
+    CompilationOptions CO(this, CompilationOptions::VPDisabled);
+    assert(CO.DeclarationExtraction == 0 && CO.ResultEvaluation == 0);
     CO.DynamicScoping = 0;
-
 
     std::string includeFile = std::string("#include \"") + inFile.str() + "\"";
     IncrementalParser::ParseResultTransaction PRT

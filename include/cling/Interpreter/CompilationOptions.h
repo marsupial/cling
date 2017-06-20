@@ -78,6 +78,10 @@ namespace cling {
           CodeGenerationForModule(0), IgnorePromptDiags(0),
           CheckPointerValidity(1), OptLevel(2) {}
 
+    CompilationOptions(const Interpreter* Interp, enum ValuePrinting VP,
+                       bool ResultEvaluation = false,
+                       bool DeclarationExtraction = false);
+
     CompilationOptions(const Interpreter* Interp);
 
     bool operator != (const CompilationOptions& Other) const {
