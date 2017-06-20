@@ -7,11 +7,16 @@
 //------------------------------------------------------------------------------
 
 // RUN: %cling -C -E -P  %s | %cling -nostdinc++ -Xclang -verify 2>&1 | FileCheck %s
-// RUN: %cling -C -E -P -DCLING_NO_BUILTIN %s | %cling -nostdinc++ -nobuiltininc -Xclang -verify 2>&1 | FileCheck %s
+// RUN: %cling -C -E -P -DCLING_VALEXTRACT_ERR %s | %cling -nostdinc++ -nobuiltininc -Xclang -verify 2>&1 | FileCheck %s
 
 // expected-error@cling_Interpreter_initialization_1:1 {{'new' file not found}}
 
 //      CHECK: Warning in cling::IncrementalParser::CheckABICompatibility():
 // CHECK-NEXT:  Possible C++ standard library mismatch, compiled with {{.*$}}
+
+#ifdef CLING_VALEXTRACT_ERR
+struct Trigger {} Tr // expected-error {{ValueExtractionSynthesizer could not find: 'cling_ValueExtraction'.}}
+// FIX-WITH-TMP-FILE-CHECK-NOT: (struct Trigger &) <undefined>
+#endif
 
 .q
