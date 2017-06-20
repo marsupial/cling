@@ -58,6 +58,13 @@ namespace utils {
     void maybeMangleDeclName(const clang::GlobalDecl& GD,
                              std::string& mangledName);
 
+    ///\brief Get the mangled name of a FunctionDecl.
+    ///
+    ///\param [in]  FD - try to mangle this decl's name.
+    ///\param [out] mangledName - put the mangled name in here.
+    ///
+    void maybeMangleDeclName(const clang::FunctionDecl* FD,
+                             std::string& mangledName);
 
     ///\brief Retrieves the last expression of a function body. If it was a
     /// DeclStmt with a variable declaration, creates DeclRefExpr and adds it to
