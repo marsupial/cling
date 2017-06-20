@@ -502,12 +502,11 @@ namespace {
             NElem ? new (AST) IntegerLiteral(AST, *NElem, AST.getSizeType(),
                                              SourceLocation())
                   : nullptr;
-        
-        SourceLocation ALoc;
+
         // Reuse the void* function parameter.
         // vpValue = cling_ValueExtraction()
         ExprResult Alloc =
-            m_Sema->CreateBuiltinBinOp(ALoc, BO_Assign, ValueP, Call.get());
+            m_Sema->CreateBuiltinBinOp(Loc, BO_Assign, ValueP, Call.get());
 
         // call new(vpValue) Object(Args)
         Call = m_Sema->BuildCXXNew(E->getSourceRange(),
@@ -530,13 +529,17 @@ namespace {
 
         Expr* Payload = utils::Synthesize::CStyleCastPtrExpr(
             m_Sema, AST.getPointerType(AST.CharTy), ValueP);
+
         IntegerLiteral* NegOne =
-            new (AST) IntegerLiteral(AST, llvm::APInt(8, -1), AST.CharTy, ALoc);
+            new (AST) IntegerLiteral(AST, llvm::APInt(8, -1), AST.CharTy, Loc);
+
         ArraySubscriptExpr* Subscript =
             new (AST) ArraySubscriptExpr(Payload, NegOne, AST.CharTy,
-                                         VK_LValue, OK_Ordinary, ALoc);
-        ExprResult Done =
-            m_Sema->CreateBuiltinBinOp(ALoc, BO_Assign, Subscript, NegOne);
+                                         VK_LValue, OK_Ordinary, Loc);
+
+        ExprResult Done = m_Sema->CreateBuiltinBinOp(
+            Loc, BO_OrAssign, Subscript,
+            new (AST) IntegerLiteral(AST, llvm::APInt(8, 1), AST.CharTy, Loc));
 
         llvm::SmallVector<Stmt*, 4> Mark;
         Mark.push_back(Alloc.get());
@@ -549,10 +552,10 @@ namespace {
           Mark.push_back(DRefEnd);
 
         m_Sema->ActOnStartOfCompoundStmt();
-        Stmt* Stmt = m_Sema->ActOnCompoundStmt(ALoc, ALoc, Mark, false).get();
+        Stmt* Stmt = m_Sema->ActOnCompoundStmt(Loc, Loc, Mark, false).get();
         m_Sema->ActOnFinishOfCompoundStmt();
         m_Sema->ActOnStartStmtExpr();
-        Call  = m_Sema->ActOnStmtExpr(ALoc, Stmt, ALoc);
+        Call  = m_Sema->ActOnStmtExpr(Loc, Stmt, Loc);
 
       }
       if (Call.isInvalid()) {
