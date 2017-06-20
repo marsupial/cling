@@ -647,6 +647,7 @@ static std::string callPrintValue(const Value& V, const void* Val,
   }
 
   Value printValueV;
+  utils::DiagnosticsStore SavedDiags(Interp->getDiagnostics(), false, false);
   {
     // Use an llvm::raw_ostream to prepend '0x' in front of the pointer value.
 
@@ -669,11 +670,14 @@ static std::string callPrintValue(const Value& V, const void* Val,
 
   // Probably diagnosed the issue as part of evaluate(), but make sure to
   // mark the Sema with an error if not.
-  clang::DiagnosticsEngine& Diag = Interp->getDiagnostics();
-  const unsigned ID = Diag.getCustomDiagID(
-                             clang::DiagnosticsEngine::Level::Error,
-                             "Could not execute cling::printValue with '%0'");
-  Diag.Report(Interp->getSourceLocation(), ID) << getTypeString(V);
+  if (SavedDiags.empty()) {
+    clang::DiagnosticsEngine& Diag = Interp->getDiagnostics();
+    const unsigned ID = Diag.getCustomDiagID(
+                               clang::DiagnosticsEngine::Level::Error,
+                               "Could not execute cling::printValue with '%0'");
+    Diag.Report(Interp->getSourceLocation(), ID) << getTypeString(V);
+  } else
+    SavedDiags.Report();
 
   return valuePrinterInternal::kUndefined;
 }
