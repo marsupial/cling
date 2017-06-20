@@ -303,6 +303,18 @@ namespace cling {
     ///
     bool addSymbol(const char* symbolName,  void* symbolAddress);
 
+
+    ///\brief Compile the function definition and return its Decl.
+    ///
+    ///\param[in] name - name of the function, used to find its Decl.
+    ///\param[in] code - function definition
+    ///\param[in] withAccessControl - whether to enforce access restrictions.
+    ///\param[in] withCLinkage - function is declared as 'extern "C"'
+    const clang::FunctionDecl* DeclareFunction(llvm::StringRef name,
+                                               llvm::StringRef code,
+                                               bool withAccessControl,
+                                               bool withCLinkage = false);
+
     ///\brief Compile the function definition and return its Decl.
     ///
     ///\param[in] name - name of the function, used to find its Decl.
@@ -310,7 +322,9 @@ namespace cling {
     ///\param[in] withAccessControl - whether to enforce access restrictions.
     const clang::FunctionDecl* DeclareCFunction(llvm::StringRef name,
                                                 llvm::StringRef code,
-                                                bool withAccessControl);
+                                                bool withAccessControl) {
+      return DeclareFunction(name, code, withAccessControl, true);
+    }
 
     ///\brief Initialize runtime and C/C++ level overrides
     ///
@@ -753,10 +767,12 @@ namespace cling {
     ///\param[in] ifUniq - only compile this function if no function
     /// with the same name exists, else return the existing address
     ///\param[in] withAccessControl - whether to enforce access restrictions
+    ///\param[in] withCLinkage - function is declared as 'extern "C"'
     ///
     ///\returns the address of the function or 0 if the compilation failed.
     void* compileFunction(llvm::StringRef name, llvm::StringRef code,
-                          bool ifUniq = true, bool withAccessControl = true);
+                          bool ifUniq = true, bool withAccessControl = true,
+                          bool withCLinkage = true);
 
     ///\brief Compile (and cache) destructor calls for a record decl. Used by ~Value.
     /// They are of type extern "C" void()(void* pObj).
