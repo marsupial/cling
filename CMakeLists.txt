@@ -221,7 +221,7 @@ endif ()
 include(CMakeParseArguments)
 
 option(CLING_OBJC_SUPPORT "Cling Objective-C support enabled in clang." OFF)
-if(CLING_OBJC_SUPPORT)
+if(0)
  if (UNIX)
   message(STATUS "Cling Objective-C support enabled in cling")
   add_definitions(-DCLING_OBJC_SUPPORT)
