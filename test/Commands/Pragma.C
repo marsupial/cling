@@ -15,17 +15,28 @@
 using namespace cling;
 using namespace cling::meta;
 
+llvm::raw_ostream* Outs;
+
+static void DumpArgs(llvm::StringRef Str, llvm::raw_ostream& Out,
+                     unsigned F = CommandHandler::kPopFirstArgument |
+                     CommandHandler::kSplitWithGrouping) {
+  CommandHandler::SplitArguments Args;
+  Out << "<" << CommandHandler::Split(Str, Args, F) << ">\n";
+  for (auto&& A : Args)
+    Out << "  '" << A.first << "'\n";  	
+}
+
 class TestImpl : public CommandHandler {
 public:
   TestImpl() {}
   ~TestImpl() {}
 
   virtual CommandResult Execute(const Invocation& I) {
+    Outs = &I.Out;
     I.Out << "'" << I.Args << "'\n";
-    llvm::SmallVector<llvm::StringRef, 8> Args;
-    I.Out << "<" << CommandHandler::Split(I.Args, Args) << ">\n";
-    for (auto&& A : Args)
-      I.Out << "  '" << A << "'\n";
+
+	DumpArgs(I.Args, I.Out);
+
     return kCmdSuccess;
   }
 };
@@ -54,6 +65,23 @@ gCling->setCommandHandler(&T);
 // CHECK-NEXT:   'Arg0'
 // CHECK-NEXT:   'Arg1'
 // CHECK-NEXT:   'Arg2'
+
+#pragma cling   groups   <0 1 2 3>   { 4 "" 5 6} [ 7 () 8 9 ]
+// CHECK-NEXT: 'groups   <0 1 2 3>   { 4 "" 5 6} [ 7 () 8 9 ]'
+// CHECK-NEXT: <groups>
+// CHECK-NEXT:   '0 1 2 3'
+// CHECK-NEXT:   ' 4 "" 5 6'
+// CHECK-NEXT:   ' 7 () 8 9 '
+
+// Unclosed groups
+DumpArgs("nocmd [ < \" {", *Outs, CommandHandler::kSplitWithGrouping);
+// CHECK-NEXT: <>
+// CHECK-NEXT: 'nocmd'
+// CHECK-NEXT: '[ < " {'
+	  
+DumpArgs("cmd [ < \" {", *Outs);
+// CHECK-NEXT: <cmd>
+// CHECK-NEXT: '[ < " {'
 
 // expected-no-diagnostics
 .q

@@ -81,15 +81,26 @@ namespace cling {
       ///\brief Convenience type for when 8 or less arguemnts expected.
       typedef llvm::SmallVector<SplitArgument, 8> SplitArguments;
 
+      ///\brief Control how the string is split
+      enum SplitFlags {
+        ///\brief Don't include the first 'argument' in the output, return it
+        kPopFirstArgument = 1,
+        ///\brief Group items by <>, {}, [], (), '', and "" as well
+        kSplitWithGrouping = 2,
+      };
+
       ///\brief Split the given string into a command-name and list of arguments
       ///
       ///\param[in] Str - String to operate on
       ///\param[out] Out - Where to store the arguments
+      ///\param[in] Flags - The SplitFlags to use while building the output
       ///\param[in] Separators - Separators to split on
       ///
-      ///\returns The first string of Str before any Separators
+      ///\returns An empty string when kPopFirstArgument is not set, otherwise
+      /// the first sequence in Str before any Separators occured.
       ///
       static llvm::StringRef Split(llvm::StringRef Str, SplitArgumentsImpl& Out,
+                                   unsigned Flags = 0,
                                    llvm::StringRef Separators = " \t\n\v\f\r");
 
       ///\brief Execute the given command
