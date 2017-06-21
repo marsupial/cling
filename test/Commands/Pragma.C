@@ -20,8 +20,12 @@ public:
   TestImpl() {}
   ~TestImpl() {}
 
-  CommandResult Execute(ParmBlock& PB) final {
-    PB.Out << PB.CmdStr << "\n";
+  virtual CommandResult Execute(const Invocation& I) {
+    I.Out << "'" << I.Args << "'\n";
+    llvm::SmallVector<llvm::StringRef, 8> Args;
+    I.Out << "<" << CommandHandler::Split(I.Args, Args) << ">\n";
+    for (auto&& A : Args)
+      I.Out << "  '" << A << "'\n";
     return kCmdSuccess;
   }
 };
@@ -29,16 +33,27 @@ TestImpl T;
 gCling->setCommandHandler(&T);
 
 #pragma cling custom0
-//      CHECK: custom0
+//      CHECK: 'custom0'
+// CHECK-NEXT: <custom0>
 
-#pragma cling custom1
-// CHECK-NEXT: custom1
+#pragma cling custom1 Arg0
+// CHECK-NEXT: 'custom1 Arg0'
+// CHECK-NEXT: <custom1>
+// CHECK-NEXT:   'Arg0'
 
-#pragma cling custom2
-// CHECK-NEXT: custom2
+#pragma cling custom2 Arg0   Arg1
+// CHECK-NEXT: 'custom2 Arg0   Arg1'
+// CHECK-NEXT: <custom2>
+// CHECK-NEXT:   'Arg0'
+// CHECK-NEXT:   'Arg1'
 
-#pragma cling custom3
-// CHECK-NEXT: custom3
+// Intentional trailing space on the next line
+#pragma cling   custom3   Arg0   Arg1        Arg2        
+// CHECK-NEXT: 'custom3   Arg0   Arg1        Arg2'
+// CHECK-NEXT: <custom3>
+// CHECK-NEXT:   'Arg0'
+// CHECK-NEXT:   'Arg1'
+// CHECK-NEXT:   'Arg2'
 
 // expected-no-diagnostics
 .q

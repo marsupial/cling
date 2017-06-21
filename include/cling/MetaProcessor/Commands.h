@@ -10,6 +10,11 @@
 #ifndef CLING_META_COMMANDS_H
 #define CLING_META_COMMANDS_H
 
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
+
+#include <utility>
+
 namespace llvm {
   class raw_ostream;
   class StringRef;
@@ -20,6 +25,8 @@ namespace cling {
   class Value;
 
   namespace meta {
+    class CommandHandler;
+
     ///\brief Result of invoking a command via Commands::execute
     ///
     enum CommandResult {
@@ -35,29 +42,63 @@ namespace cling {
       kCmdInvalidSyntax = 4,
     };
 
+
+    struct Invocation {
+      typedef llvm::StringRef StringRef;
+      ///\brief Command arguments.
+      StringRef Args;
+
+      ///\brief Interpreter to operate on
+      Interpreter& Interp;
+
+      ///\brief Stream the command should write to
+      llvm::raw_ostream& Out;
+      
+      ///\brief Reference to the CommandHandler that invoked this command.
+      CommandHandler& CmdHandler;
+
+      ///\brief Value the command may create
+      Value* Val;
+
+      ///\brief Executes antother command
+      ///
+      ///\param[in] Capture - Capture output into this instead of Out.
+      ///
+      ///\returns CommandResult of the command
+      ///
+      CommandResult Execute(StringRef Cmd, llvm::raw_ostream* O = nullptr);
+    };
+
+
     class CommandHandler {
+      typedef llvm::SmallVectorImpl<llvm::StringRef> SplitArgumentsImpl;
     public:
       virtual ~CommandHandler();
 
-      struct ParmBlock {
-        ///\brief Command and arguments to invoke.
-        const llvm::StringRef& CmdStr;
+      ///\brief The argument string type.
+      typedef llvm::StringRef SplitArgument;
 
-        ///\brief Interpreter to operate on
-        Interpreter& Interp;
+      ///\brief Convenience type for when 8 or less arguemnts expected.
+      typedef llvm::SmallVector<SplitArgument, 8> SplitArguments;
 
-        ///\brief Stream the command should write to
-        llvm::raw_ostream& Out;
-
-        ///\brief Value the command may create
-        Value* Val;
-      };
+      ///\brief Split the given string into a command-name and list of arguments
+      ///
+      ///\param[in] Str - String to operate on
+      ///\param[out] Out - Where to store the arguments
+      ///\param[in] Separators - Separators to split on
+      ///
+      ///\returns The first string of Str before any Separators
+      ///
+      static llvm::StringRef Split(llvm::StringRef Str, SplitArgumentsImpl& Out,
+                                   llvm::StringRef Separators = " \t\n\v\f\r");
 
       ///\brief Execute the given command
       ///
+      ///\param[in] I - Invocation data for this command.
+      ///
       ///\returns CommandResult of the execution
       ///
-      virtual CommandResult Execute(ParmBlock& Params) = 0;
+      virtual CommandResult Execute(const Invocation& I) = 0;
     };
   }
 }

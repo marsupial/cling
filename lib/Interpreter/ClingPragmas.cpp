@@ -60,6 +60,122 @@ namespace {
       kInvalidCommand,
     };
 
+    llvm::StringRef GetName(Preprocessor& PP, Token& Tok, std::string& Buf) const {
+      if (Tok.is(tok::identifier))
+        return Tok.getIdentifierInfo()->getName();
+
+      llvm::SmallString<64> Buffer;
+      Buf = PP.getSpelling(Tok, Buffer).str();
+      return Buf;
+    }
+
+    static llvm::StringRef GetString(const SourceManager& SM, SourceRange SR,
+                                     bool& Invalid) {
+      const char* CStart = SM.getCharacterData(SR.getBegin(), &Invalid);
+      if (Invalid)
+        return "";
+
+      const char* CEnd = SM.getCharacterData(SR.getEnd(), &Invalid);
+      if (Invalid)
+        return "";
+
+      return llvm::StringRef(CStart, CEnd - CStart);
+    }
+
+    static llvm::StringRef GetString(Preprocessor& PP, Token& Tok, bool& Invalid,
+                                     tok::TokenKind K2 = tok::eof) {
+      const SourceLocation Begin = Tok.getLocation();
+      while (!Tok.isOneOf(tok::eod, K2))
+        PP.LexUnexpandedToken(Tok);
+
+      const SourceLocation End = Tok.getLocation();
+      return GetString(PP.getSourceManager(), SourceRange(Begin, End), Invalid);
+    }
+
+    static bool GetArgument(Preprocessor& PP, const Token& Tok,
+                            SourceRange& Range, std::string& Flat) {
+      Range.setEnd(Tok.getLocation());
+      bool Err;
+      const llvm::StringRef Str = GetString(PP.getSourceManager(), Range, Err);
+      Range.setBegin(Tok.getLocation().getLocWithOffset(1));
+      if (!Err) Flat += " " + Str.str();
+      return Err;
+    }
+
+    static bool FlattenArgs(Preprocessor& PP, Token& Tok, size_t Paren,
+                            std::string& Flat) {
+      // CommentHandler subclass to append comments into the flat arguments.
+      class AppendComment : public clang::CommentHandler {
+        Preprocessor& PP;
+        std::string* Out;
+      public:
+        AppendComment(Preprocessor& P, std::string& S) : PP(P), Out(&S) {
+          P.addCommentHandler(this);
+        }
+        ~AppendComment() { PP.removeCommentHandler(this); }
+
+        bool HandleComment(Preprocessor& PP, SourceRange Comment) {
+          if (Out) {
+            bool Err;
+            const auto Str = GetString(PP.getSourceManager(), Comment, Err);
+            if (!Err) *Out += " " + Str.str();
+          }
+          return false;
+        }
+        void operator() (std::string* S) { Out = S; }
+      } AC(PP, Flat);
+
+      PP.Lex(Tok);
+      if (Paren) {
+        if (Tok.is(tok::r_paren)) {
+          // Already reached the end, no need to parse arguments.
+          Paren = false;
+          PP.Lex(Tok);
+        }
+        else if (!Tok.is(tok::comma)) // No comma, no functional arguments
+          Paren = false;
+      } else // #pragma cling CMD(args)
+        Paren = Tok.is(tok::l_paren);
+
+      if (!Paren)
+        return false;
+
+      size_t Group = 0;
+      llvm::SmallString<64> Buffer;
+      SourceRange Range(Tok.getLocation().getLocWithOffset(1));
+
+      // Loop eats chunks of text between commas, so no need to append comments.
+      AC(nullptr);
+      while (Paren) {
+        PP.Lex(Tok);
+        switch (Tok.getKind()) {
+          case tok::l_square:
+          case tok::l_brace: ++Group; break;
+          case tok::r_square:
+          case tok::r_brace: --Group; break;
+          case tok::l_paren: ++Paren; break;
+          case tok::r_paren:
+            if (--Paren == 0)
+              GetArgument(PP, Tok, Range, Flat);
+            break;
+          case tok::comma:
+            if (Paren == 1 && !Group)
+              GetArgument(PP, Tok, Range, Flat);
+            break;
+          case tok::eod:
+          case tok::eof:
+            return true;
+          default: break;
+        }
+      }
+      assert(Tok.is(tok::r_paren));
+
+      // Eat the last relevant token and append any remaining comments.
+      AC(&Flat);
+      PP.Lex(Tok);
+      return false;
+    }
+  
     bool GetNextLiteral(Preprocessor& PP, Token& Tok, std::string& Literal,
                         unsigned Cmd, const char* firstTime = nullptr) const {
       Literal.clear();
@@ -92,6 +208,9 @@ namespace {
             Literal = PP.getSpelling(Tok, Buffer).str();
           }
         }
+      } else {
+        llvm::SmallString<64> Buffer;
+        Literal = PP.getSpelling(Tok, Buffer).str();
       }
 
       if (Literal.empty())
@@ -103,8 +222,8 @@ namespace {
       return true;
     }
 
-    void ReportCommandErr(Preprocessor& PP, const Token& Tok) {
-      PP.Diag(Tok.getLocation(), diag::err_expected)
+    void ReportCommandErr(Preprocessor& PP, SourceLocation Loc) {
+      PP.Diag(Loc, diag::err_expected)
         << "load, add_library_path, or add_include_path";
     }
 
@@ -198,15 +317,14 @@ namespace {
     SmallString<256> Buffer;
     (CommandStr+Lex->getBufferLocation()).toStringRef(Buffer);
 
-    // strip any whitespace before and after
-    const llvm::StringRef Cmd =  Buffer.str().ltrim().rtrim();
-
+    // Just trim the trailing newline spaces, CommandHandler will scan the rest
+    const llvm::StringRef Cmd =  Buffer.str().rtrim();
     if (Cmd.empty())
       return false;
 
     DiagnosticErrorTrap Trap(PP.getDiagnostics());
-    CommandHandler::ParmBlock PBlock = {Cmd, m_Interp, cling::outs(), nullptr};
-    if (Cmds->Execute(PBlock) == meta::kCmdSuccess)
+    meta::Invocation Invok = {Cmd, m_Interp, cling::outs(), *Cmds, nullptr};
+    if (Cmds->Execute(Invok) == meta::kCmdSuccess)
       return true;
 
     // Return if any command has printed diagnostics.
@@ -223,24 +341,40 @@ namespace {
 
       Token Tok;
       PP.Lex(Tok);
-      SkipToEOD OnExit(PP, Tok);
-
-      // #pragma cling(load, "A")
-      if (Tok.is(tok::l_paren))
-        PP.Lex(Tok);
-
-      if (Tok.isNot(tok::identifier)) {
-        ReportCommandErr(PP, Tok);
+      if (Tok.isOneOf(tok::eod, tok::eof)) {
+        ReportCommandErr(PP, FirstToken.getLocation());
         return;
       }
 
-      const StringRef CommandStr = Tok.getIdentifierInfo()->getName();
+      const SourceLocation Start = Tok.getLocation();
+      SkipToEOD OnExit(PP, Tok);
+
+      // #pragma cling(load, "A")
+      bool Paren = Tok.is(tok::l_paren);
+      if (Paren)
+        PP.Lex(Tok);
+
+      std::string StrBuffer;
+      const llvm::StringRef CommandStr = GetName(PP, Tok, StrBuffer);
+      if (CommandStr.empty()) {
+        ReportCommandErr(PP, Start);
+        return;
+      }
+
       const unsigned Command = GetCommand(CommandStr);
       assert(Command != kArgumentsAreLiterals && Command != kExpandEnvCommands);
 
       if (Command == kInvalidCommand) {
-        if (!RunCommand(PP, CommandStr))
-          ReportCommandErr(PP, Tok);
+        std::string Flat = CommandStr.str();
+        bool Invalid = FlattenArgs(PP, Tok, Paren, Flat);
+        // Eat everything until the end and append to Flat.
+        if (!Tok.isOneOf(tok::eod, tok::eof)) {
+          const std::string Next = GetString(PP, Tok, Invalid);
+          if (!Invalid && !Next.empty())
+            Flat += " " + Next;
+        }
+        if (Invalid || !RunCommand(PP, Flat))
+          ReportCommandErr(PP, Start);
         return;
       }
 
