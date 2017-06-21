@@ -118,8 +118,6 @@ namespace cling {
       // }
 
       Successful = unloadModule(T->getModule()) && Successful;
-
-      m_CodeGen->restoreEmittedDeferred(T->getDeferred());
     }
 
     // Clean up the pending instantiations

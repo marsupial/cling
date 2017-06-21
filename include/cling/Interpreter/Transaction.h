@@ -185,10 +185,6 @@ namespace cling {
     ///
     clang::FileID m_BufferFID;
 
-    ///\brief GlobalDecl that were defer emitted in this Transaction.
-    ///
-    std::vector<void*> m_DeferEmitted;
-
     /// TransactionPool needs direct access to m_State as setState asserts
     friend class TransactionPool;
 
@@ -538,8 +534,6 @@ namespace cling {
     void printStructure(size_t nindent = 0) const;
 
     void printStructureBrief(size_t nindent = 0) const;
-
-    std::vector<void*>& getDeferred() { return m_DeferEmitted; }
 
   private:
     bool comesFromASTReader(clang::DeclGroupRef DGR) const;
