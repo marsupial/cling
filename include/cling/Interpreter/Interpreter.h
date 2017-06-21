@@ -68,6 +68,10 @@ namespace cling {
       class LifetimeHandler;
     }
   }
+  namespace meta {
+    class CommandHandler;
+  }
+
   class ClangInternalState;
   class CompilationOptions;
   class DynamicLibraryManager;
@@ -180,6 +184,10 @@ namespace cling {
     ///\brief Cling's reflection information query.
     ///
     std::unique_ptr<LookupHelper> m_LookupHelper;
+
+    ///\brief Command handler, client must ensure it's lifetime or reset to null
+    ///
+    meta::CommandHandler* m_Commands;
 
     ///\brief Cache of compiled destructors wrappers.
     std::unordered_map<const clang::RecordDecl*, void*> m_DtorWrappers;
@@ -746,6 +754,9 @@ namespace cling {
     DynamicLibraryManager* getDynamicLibraryManager() {
       return m_DyLibManager.get();
     }
+
+    meta::CommandHandler* getCommandHandler() { return m_Commands; }
+    void setCommandHandler(meta::CommandHandler* Cmds) { m_Commands = Cmds; }
 
     const Transaction* getFirstTransaction() const;
     const Transaction* getLastTransaction() const;

@@ -11,6 +11,7 @@
 
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/Transaction.h"
+#include "cling/MetaProcessor/Commands.h"
 #include "cling/Utils/Output.h"
 #include "cling/Utils/Paths.h"
 
@@ -184,6 +185,34 @@ namespace {
         CO.OptLevel = OptLevel;
   }
 
+  bool RunCommand(clang::Preprocessor& PP, const StringRef& CommandStr) const {
+    using namespace meta;
+    CommandHandler* Cmds = m_Interp.getCommandHandler();
+    if (!Cmds)
+      return false;
+
+    clang::Lexer* Lex = static_cast<Lexer*>(PP.getCurrentLexer());
+    if (!Lex)
+      return false;
+
+    SmallString<256> Buffer;
+    (CommandStr+Lex->getBufferLocation()).toStringRef(Buffer);
+
+    // strip any whitespace before and after
+    const llvm::StringRef Cmd =  Buffer.str().ltrim().rtrim();
+
+    if (Cmd.empty())
+      return false;
+
+    DiagnosticErrorTrap Trap(PP.getDiagnostics());
+    CommandHandler::ParmBlock PBlock = {Cmd, m_Interp, cling::outs(), nullptr};
+    if (Cmds->Execute(PBlock) == meta::kCmdSuccess)
+      return true;
+
+    // Return if any command has printed diagnostics.
+    return Trap.hasErrorOccurred();
+  }
+
   public:
     ClingPragmaHandler(Interpreter& interp):
       PragmaHandler("cling"), m_Interp(interp) {}
@@ -208,8 +237,10 @@ namespace {
       const StringRef CommandStr = Tok.getIdentifierInfo()->getName();
       const unsigned Command = GetCommand(CommandStr);
       assert(Command != kArgumentsAreLiterals && Command != kExpandEnvCommands);
+
       if (Command == kInvalidCommand) {
-        ReportCommandErr(PP, Tok);
+        if (!RunCommand(PP, CommandStr))
+          ReportCommandErr(PP, Tok);
         return;
       }
 

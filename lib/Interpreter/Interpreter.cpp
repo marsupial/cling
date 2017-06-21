@@ -298,7 +298,7 @@ namespace cling {
   Interpreter::Interpreter(int argc, const char* const *argv,
                            const char* llvmdir /*= 0*/, bool noRuntime,
                            const Interpreter* parentInterp) :
-    m_Opts(argc, argv), m_Parenting(nullptr),
+    m_Opts(argc, argv), m_Parenting(nullptr), m_Commands(nullptr),
     m_UniqueCounter(parentInterp ? parentInterp->m_UniqueCounter + 1 : 0),
     m_PrintDebug(false), m_DynamicLookupDeclared(false),
     m_DynamicLookupEnabled(false), m_RawInputEnabled(false),
