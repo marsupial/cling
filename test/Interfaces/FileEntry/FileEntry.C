@@ -84,15 +84,12 @@ feH.isLibrary()
 // Move file libTest to libTest.h
 Rename renamer(feH.filePath());
 
-// All this because interpreter can't accept ifdefs!
-static cling::Interpreter::CompilationResult loadFile(FileEntry& Fe) {
+gCling->loadFile(feH)
 #ifdef TEST_RELATIVE
-    return gCling->loadFile(Fe); // expected-error-re@1 {{'{{.*}}/DirB/libTest' file not found}}
+  // expected-error-re@input_line_67:1 {{'{{.*}}/DirB/libTest' file not found}}
 #else
-    return gCling->loadFile(Fe); // expected-error-re@1 {{'{{.*}}/DirB/libTest': No such file or directory}}
+  // expected-error-re@input_line_67:1 {{cannot open file '{{.*}}/DirB/libTest': No such file or directory}}
 #endif
-}
-loadFile(feH)
 // CHECK: (cling::Interpreter::CompilationResult) (cling::Interpreter::CompilationResult::kFailure) : (unsigned int) 1
 
 gCling->loadFile("libTest")
