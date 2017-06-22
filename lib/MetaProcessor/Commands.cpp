@@ -69,8 +69,10 @@ CommandHandler::Split(llvm::StringRef Str, SplitArgumentsImpl& Out,
 
         // Make sure the next argument starts after this if the escaped char
         // is also a separator, like a line continuation.
-        if (Separators.find(E) != llvm::StringRef::npos)
+        if (Separators.find(E) != llvm::StringRef::npos) {
           Start = Idx + 1;
+          HadEscape = false;
+        }
         continue;
       }
     }
