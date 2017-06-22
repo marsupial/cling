@@ -107,6 +107,10 @@ namespace cling {
                                    unsigned Flags = 0,
                                    llvm::StringRef Separators = " \t\n\v\f\r");
 
+      ///\brief Un-escape the given string
+      ///
+      static std::string Unescape(llvm::StringRef Str);
+
       ///\brief Execute the given command
       ///
       ///\param[in] I - Invocation data for this command.

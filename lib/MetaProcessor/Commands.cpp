@@ -8,6 +8,7 @@
 //------------------------------------------------------------------------------
 
 #include "cling/MetaProcessor/Commands.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace cling {
@@ -34,6 +35,30 @@ static char IsEscape(char Current, char Next) {
     }
   }
   return 0;
+}
+
+std::string
+CommandHandler::Unescape(llvm::StringRef Str) {
+  const size_t N = Str.size();
+  if (N == 0)
+    return "";
+
+  std::string Out;
+  Out.reserve(N);
+
+  const char* Data = Str.data(), *End = Data + N - 1;
+  while (Data < End) {
+    char E;
+    if (LLVM_UNLIKELY(E = IsEscape(Data[0], Data[1]))) {
+      Out += E;
+      Data += 2;
+    } else
+      Out += *Data++;
+  }
+  if (Data == End)
+    Out += *End;
+
+  return Out;
 }
 
 llvm::StringRef

@@ -135,5 +135,18 @@ arg2
 // CHECK-NEXT:   'arg1'
 // CHECK-NEXT:   'arg2'
 
+std::string TestSeq("1\\n2\\\"3\\\\4\\\'5\\t")
+// CHECK: (std::string &) "1\n2\"3\\4\'5\t"
+const std::string UnEsc = cling::meta::CommandHandler::Unescape(TestSeq)
+// CHECK-NEXT: (const std::string &) "1
+// CHECK-NEXT: 2"3\4'5	"
+UnEsc.size() == 10
+// CHECK-NEXT: (bool) true
+(UnEsc[9] == '\t')
+// CHECK-NEXT: (bool) true
+
+cling::meta::CommandHandler::Unescape("\\tA")
+// CHECK-NEXT: (std::string) "	A"
+
 // expected-no-diagnostics
 .q
