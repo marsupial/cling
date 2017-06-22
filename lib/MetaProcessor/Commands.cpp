@@ -98,21 +98,18 @@ CommandHandler::Split(llvm::StringRef Str, SplitArgumentsImpl& Out,
     }
 
     // Splitting
-    for (const char S : Separators) {
-      if (C != S)
-        continue;
+    if (Separators.find(C) == llvm::StringRef::npos)
+      continue;
 
-      // Make sure this match shouldn't be considered part of the last one.
-      if (Idx > Start) {
-        if (CmdName.empty() && (Flags & kPopFirstArgument))
-          CmdName = Str.slice(Start, Idx);
-        else
-          Out.push_back(std::make_pair(Str.slice(Start, Idx), HadEscape));
-        HadEscape = false;
-      }
-      Start = Idx + 1;
-      break;
+    // Make sure this match shouldn't be considered part of the last one.
+    if (Idx > Start) {
+      if (CmdName.empty() && (Flags & kPopFirstArgument))
+        CmdName = Str.slice(Start, Idx);
+      else
+        Out.push_back(std::make_pair(Str.slice(Start, Idx), HadEscape));
+      HadEscape = false;
     }
+    Start = Idx + 1;
   }
 
   // Unterminated group keep it as it was
