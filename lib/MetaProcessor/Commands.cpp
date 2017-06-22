@@ -56,12 +56,19 @@ CommandHandler::Split(llvm::StringRef Str, SplitArgumentsImpl& Out,
       // argument/group.
       if (const char E = IsEscape(C, Str[Idx+1])) {
         HadEscape = true;
-        // The next character is actually part of this one, and cannot start or
-        // close a group or argument.
+        // The next character is actually part of this one.
         ++Idx;
 
-        // Special case an escaped character who is also a separator, like a
-        // line continuation
+        // It cannot start or close a group, i.e ' \"quoted\" '
+        if (InGroup != llvm::StringRef::npos)
+          continue;
+
+        // But if an argument is open, it can close it out. ' arg1\\\narg2 '
+        if (Start < Idx - 1)
+          continue;
+
+        // Make sure the next argument starts after this if the escaped char
+        // is also a separator, like a line continuation.
         if (Separators.find(E) != llvm::StringRef::npos)
           Start = Idx + 1;
         continue;

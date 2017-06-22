@@ -89,6 +89,30 @@ DumpArgs("escape   \"\\\"\" \"b\\' \\\"e\"  \" <{\\\\} \"", *Outs);
 // CHECK-NEXT:   'b\' \"e'
 // CHECK-NEXT:   ' <{\\} '
 
+DumpArgs("escape2 \"\\\\\narg1\" arg2", *Outs, CommandHandler::kPopFirstArgument);
+// CHECK-NEXT: <escape2>
+// CHECK-NEXT:   '"\\'
+// CHECK-NEXT:   'arg1"'
+// CHECK-NEXT:   'arg2'
+
+DumpArgs("escape3  arg1 \"\\\narg2\"", *Outs, CommandHandler::kPopFirstArgument);
+// CHECK-NEXT: <escape3>
+// CHECK-NEXT:   'arg1'
+// CHECK-NEXT:   '"\
+// CHECK-NEXT: arg2"'
+
+DumpArgs("escape4 \"\\\\\narg1\" arg2", *Outs);
+// CHECK-NEXT: <escape4>
+// CHECK-NEXT:   '\\
+// CHECK-NEXT:   arg1'
+// CHECK-NEXT:   'arg2'
+
+DumpArgs("escape5  arg1 \"\\\narg2\"", *Outs);
+// CHECK-NEXT: <escape5>
+// CHECK-NEXT:   'arg1'
+// CHECK-NEXT:   '\
+// CHECK-NEXT: arg2'
+
 #pragma cling newline  arg1 arg2 \
                        arg3   arg4
 // CHECK-NEXT: 'newline  arg1 arg2 \
