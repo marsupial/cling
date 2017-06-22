@@ -83,5 +83,29 @@ DumpArgs("cmd [ < \" {", *Outs);
 // CHECK-NEXT: <cmd>
 // CHECK-NEXT: '[ < " {'
 
+DumpArgs("escape   \"\\\"\" \"b\\' \\\"e\"  \" <{\\\\} \"", *Outs);
+// CHECK-NEXT: <escape>
+// CHECK-NEXT:   '\"'
+// CHECK-NEXT:   'b\' \"e'
+// CHECK-NEXT:   ' <{\\} '
+
+#pragma cling newline  arg1 arg2 \
+                       arg3   arg4
+// CHECK-NEXT: 'newline  arg1 arg2 \
+// CHECK-NEXT:                        arg3   arg4'
+// CHECK-NEXT: <newline>
+// CHECK-NEXT:   'arg1'
+// CHECK-NEXT:   'arg2'
+// CHECK-NEXT:   'arg3'
+// CHECK-NEXT:   'arg4'
+
+#pragma cling newline2  arg1 \
+arg2
+// CHECK-NEXT: 'newline2  arg1 \
+// CHECK-NEXT: arg2'
+// CHECK-NEXT: <newline2>
+// CHECK-NEXT:   'arg1'
+// CHECK-NEXT:   'arg2'
+
 // expected-no-diagnostics
 .q

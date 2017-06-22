@@ -71,12 +71,16 @@ namespace cling {
 
 
     class CommandHandler {
-      typedef llvm::SmallVectorImpl<llvm::StringRef> SplitArgumentsImpl;
+      typedef llvm::SmallVectorImpl<std::pair<llvm::StringRef, bool>>
+          SplitArgumentsImpl;
     public:
       virtual ~CommandHandler();
 
-      ///\brief The argument string type.
-      typedef llvm::StringRef SplitArgument;
+      ///\brief The argument string and whether it contained an escape sequence.
+      /// The assumtion is more often than not escape sequnces are not
+      /// neccessary and can speed things up by not allocating a new string
+      /// for every argument. 
+      typedef std::pair<llvm::StringRef, bool> SplitArgument;
 
       ///\brief Convenience type for when 8 or less arguemnts expected.
       typedef llvm::SmallVector<SplitArgument, 8> SplitArguments;

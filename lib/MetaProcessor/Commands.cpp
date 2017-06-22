@@ -15,26 +15,67 @@ namespace meta {
 
 CommandHandler::~CommandHandler() {}
 
+static char IsEscape(char Current, char Next) {
+  if (Current == '\\') {
+    switch (Next) {
+      case 'a':  return '\a';
+      case 'b':  return '\b';
+      case 'f':  return '\f';
+      case 'n':  return '\n';
+      case 'r':  return '\r';
+      case 't':  return '\t';
+      case 'v':  return '\v';
+      case '\\': return '\\';
+      case '\'': return '\'';
+      case '\"': return '"';
+      case '\n': return '\n';
+      case '\r': return '\r';
+      default: break;
+    }
+  }
+  return 0;
+}
+
 llvm::StringRef
 CommandHandler::Split(llvm::StringRef Str, SplitArgumentsImpl& Out,
                       unsigned Flags, llvm::StringRef Separators) {
   size_t Start = 0;
-  const size_t Len = Str.size();
+  const size_t Len = Str.size(), LenMinOne = Len -1;
   llvm::StringRef CmdName;
 
+  bool HadEscape = false;
   size_t InGroup = llvm::StringRef::npos;
   const llvm::StringRef GrpBegin("\"'{[<("), GrpEnd("\"'}]>)");
 
   for (size_t Idx = 0; Idx < Len; ++Idx) {
     const char C = Str[Idx];
 
+    // Look ahead
+    if (Idx < LenMinOne) {
+      // Check for escape sequence, which should always be a part of the current
+      // argument/group.
+      if (const char E = IsEscape(C, Str[Idx+1])) {
+        HadEscape = true;
+        // The next character is actually part of this one, and cannot start or
+        // close a group or argument.
+        ++Idx;
+
+        // Special case an escaped character who is also a separator, like a
+        // line continuation
+        if (Separators.find(E) != llvm::StringRef::npos)
+          Start = Idx + 1;
+        continue;
+      }
+    }
+
     // Groups
     if (Flags & kSplitWithGrouping) {
       if (InGroup != llvm::StringRef::npos) {
         // See if the character is the end of the current group type.
         if (GrpEnd.find(C) == InGroup) {
-          Out.push_back(Str.slice(Start, Idx));
+          Out.push_back(std::make_pair(Str.slice(Start, Idx), HadEscape));
           InGroup = llvm::StringRef::npos;
+          HadEscape = false;
           Start = Idx + 1;
         }
         // Already in a group, eat all until the end of it.
@@ -44,6 +85,7 @@ CommandHandler::Split(llvm::StringRef Str, SplitArgumentsImpl& Out,
       InGroup = GrpBegin.find(C);
       if (InGroup != llvm::StringRef::npos) {
         Start = Idx + 1;
+        HadEscape = false;
         continue;
       }
     }
@@ -58,7 +100,8 @@ CommandHandler::Split(llvm::StringRef Str, SplitArgumentsImpl& Out,
         if (CmdName.empty() && (Flags & kPopFirstArgument))
           CmdName = Str.slice(Start, Idx);
         else
-          Out.push_back(Str.slice(Start, Idx));
+          Out.push_back(std::make_pair(Str.slice(Start, Idx), HadEscape));
+        HadEscape = false;
       }
       Start = Idx + 1;
       break;
@@ -73,7 +116,7 @@ CommandHandler::Split(llvm::StringRef Str, SplitArgumentsImpl& Out,
   if (CmdName.empty() && (Flags & kPopFirstArgument))
     CmdName = Str.substr(Start);
   else if (Start != Len)
-    Out.push_back(Str.substr(Start));
+    Out.push_back(std::make_pair(Str.substr(Start), HadEscape));
 
   return CmdName;
 }
