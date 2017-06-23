@@ -60,6 +60,7 @@ namespace cling {
       }
       llvm::StringRef str() { return m_Strm.str(); }
       operator llvm::raw_ostream& () { return m_Strm; }
+      operator llvm::raw_ostream* () { return &m_Strm; }
     };
 
     template <>
@@ -74,6 +75,7 @@ namespace cling {
       }
       std::string& str() { return m_Strm.str(); }
       operator llvm::raw_ostream& () { return m_Strm; }
+      operator llvm::raw_ostream* () { return &m_Strm; }
     };
 
     typedef outstring<512>  ostrstream;
