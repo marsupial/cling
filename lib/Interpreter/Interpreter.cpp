@@ -28,6 +28,7 @@
 #include "cling/Interpreter/LookupHelper.h"
 #include "cling/Interpreter/Transaction.h"
 #include "cling/Interpreter/Value.h"
+#include "cling/MetaProcessor/Commands.h"
 #include "cling/Utils/AST.h"
 #include "cling/Utils/Casting.h"
 #include "cling/Utils/Output.h"
@@ -472,8 +473,11 @@ namespace cling {
   }
 
   Interpreter::~Interpreter() {
-    // Do this first so m_StoredStates will be ignored if Interpreter::unload
-    // is called later on.
+    // 1. So any user added commands can tear down with a valid Interpreter.
+    if (m_Commands)
+      m_Commands->Clear();
+
+    // 2. So m_StoredStates will be ignored if Interpreter::unload called later.
     for (size_t i = 0, e = m_StoredStates.size(); i != e; ++i)
       delete m_StoredStates[i];
     m_StoredStates.clear();

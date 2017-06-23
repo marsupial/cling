@@ -14,6 +14,7 @@
 #include "llvm/ADT/StringRef.h"
 
 #include <utility>
+#include <vector>
 
 namespace llvm {
   class raw_ostream;
@@ -66,13 +67,81 @@ namespace cling {
       ///
       ///\returns CommandResult of the command
       ///
-      CommandResult Execute(StringRef Cmd, llvm::raw_ostream* O = nullptr);
+      CommandResult Execute(StringRef Cmd, llvm::raw_ostream* O = 0) const;
     };
 
 
     class CommandHandler {
+    public:
       typedef llvm::SmallVectorImpl<std::pair<llvm::StringRef, bool>>
-          SplitArgumentsImpl;
+          SplitArgumentsList;
+      typedef llvm::StringRef Argument;
+      typedef const std::string& EscArgument;
+      typedef std::vector<std::string> EscapedArgumentsList;
+      typedef void* CommandID;
+
+    private:
+      template <typename T>
+      struct Supported {
+        template <typename... Types> struct Convertible {
+          typedef void type;
+          enum { value = false, same = false, convert = false };
+        };
+
+        template <typename Current, typename... Types>
+        struct Convertible<Current, Types...> {
+          typedef typename std::is_same<T, Current> Same;
+          typedef typename std::is_convertible<T, Current> Convert;
+          typedef Convertible<Types...> Next;
+
+          // If the type matches, select it. Otherwise check the remaining types
+          // for an exact match and return it if found. If still nothing found
+          // check the remaining types for a conversion operator and return it
+          // if found.  If still nothing found, return if this can convert.
+          //
+          // Should be fairly obvious as to why any exact match is prefered.
+          // Why conversion chooses later entries is so that lambdas will
+          // be converted into std::functions rather than a C function pointer
+          // so that lambda -> std::function -> function pointer won't occur.
+          typedef typename std::conditional<Same::value, Current,
+            typename std::conditional<Next::same, typename Next::type,
+              typename std::conditional<Next::convert, typename Next::type,
+                typename std::conditional<Convert::value, Current,
+                                          typename Next::type
+                >::type
+              >::type
+            >::type
+          >::type type;                                                                      
+
+          enum { same = Same::value ? 1 : Next::same,
+                 convert = Convert::value ? 1 : Next::convert,
+                 value = same || convert };
+        };
+
+        typedef Convertible<
+          CommandResult (*)(const Invocation& I),
+          CommandResult (*)(const Invocation& I, const SplitArgumentsList&),
+          CommandResult (*)(const Invocation& I, Argument),
+          CommandResult (*)(const Invocation& I, Argument, Argument),
+          CommandResult (*)(const Invocation& I, const EscapedArgumentsList&),
+          CommandResult (*)(const Invocation& I, EscArgument),
+          CommandResult (*)(const Invocation& I, EscArgument, EscArgument),
+          std::function<CommandResult(const Invocation&)>,
+          std::function<CommandResult(const Invocation&, const SplitArgumentsList&)>,
+          std::function<CommandResult(const Invocation&, Argument)>,
+          std::function<CommandResult(const Invocation&, Argument, Argument)>,
+          std::function<CommandResult(const Invocation&, const EscapedArgumentsList&)>,
+          std::function<CommandResult(const Invocation&, EscArgument)>,
+          std::function<CommandResult(const Invocation&, EscArgument, EscArgument)>
+        > Converted;
+
+        typedef typename Converted::type type;
+        enum { same = Converted::same,
+               convert = Converted::convert,
+               value = Converted::value };
+      };
+
+
     public:
       virtual ~CommandHandler();
 
@@ -103,7 +172,7 @@ namespace cling {
       ///\returns An empty string when kPopFirstArgument is not set, otherwise
       /// the first sequence in Str before any Separators occured.
       ///
-      static llvm::StringRef Split(llvm::StringRef Str, SplitArgumentsImpl& Out,
+      static llvm::StringRef Split(llvm::StringRef Str, SplitArgumentsList& Out,
                                    unsigned Flags = 0,
                                    llvm::StringRef Separators = " \t\n\v\f\r");
 
@@ -111,13 +180,51 @@ namespace cling {
       ///
       static std::string Unescape(llvm::StringRef Str);
 
+      ///\brief Add a given command
+      ///
+      ///\param[in] Name - The command name.
+      ///\param[in] Function - The callback to invoke.
+      ///\param[in] Help - The help / syntax to be displayed.
+      ///
+      ///\returns A CommandID that can be used to remove the command on success,
+      /// or nullptr on failure.
+      ///
+      template <class T>
+      typename std::enable_if<Supported<T>::same, CommandID>::type
+      AddCommand(std::string Name, T Obj, std::string Help);
+
+      ///\brief Lambda variant of above.
+      ///
+      template <class T>
+      typename std::enable_if<!Supported<T>::same && Supported<T>::convert,
+                              CommandID>::type
+      AddCommand(std::string Name, T Obj, std::string Help) {
+        typename Supported<T>::type F(Obj);
+        return AddCommand(std::move(Name), std::move(F), std::move(Help));
+      }
+
+      ///\brief Remove a previously registered command, and sets it to an
+      //// invalid value.
+      ///
+      void RemoveCommand(CommandID& Key);
+
+      ///\brief Remove all commands with the given name.
+      ///
+      ///\returns The number of commands removed
+      ///
+      size_t RemoveCommand(const std::string& Name);
+
+      ///\brief Remove all registered named commands.
+      ///
+      virtual void Clear();
+
       ///\brief Execute the given command
       ///
       ///\param[in] I - Invocation data for this command.
       ///
       ///\returns CommandResult of the execution
       ///
-      virtual CommandResult Execute(const Invocation& I) = 0;
+      virtual CommandResult Execute(const Invocation& I);
     };
   }
 }
