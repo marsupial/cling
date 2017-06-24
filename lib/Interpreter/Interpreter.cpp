@@ -227,6 +227,14 @@ namespace cling {
       return getCI()->getModuleManager().get();
   }
 
+  template <>
+  std::tuple<DiagnosticsEngine&, LangOptions&>
+  Interpreter::get<DiagnosticsEngine, LangOptions>() const {
+    return std::tuple<DiagnosticsEngine&, LangOptions&>(
+        get<clang::DiagnosticsEngine>(),
+        get<clang::LangOptions>());
+  }
+
   Sema& Interpreter::getSema() const {
     return get<Sema>();
   }

@@ -684,6 +684,9 @@ namespace cling {
     template <typename T>
     typename std::enable_if<std::is_pointer<T>::value, T>::type get() const;
 
+    template <typename A, typename B, typename... Args>
+    std::tuple<A&, B&, Args...> get() const;
+
     //FIXME: This must be in InterpreterCallbacks.
     void installLazyFunctionCreator(void* (*fp)(const std::string&));
 
