@@ -13,7 +13,31 @@
 #include "clang/Basic/Diagnostic.h"
 
 namespace cling {
+  class Interpreter;
+
 namespace utils {
+
+    ///\brief Temporarily disable the Access Control or the entrie Diagnostics
+    //// engine
+    ///
+    class SupressDiagnostics {
+      clang::DiagnosticsEngine& Diags;
+      clang::LangOptions& LangOpts;
+
+      const unsigned PrevAccess : 1;
+      const unsigned PrevDiags : 1;
+
+    public:
+      enum {
+        kAccess = 1,  ///\brief Supress access control
+        kDiagnostics = 2, ///\brief Supress error reporting
+      };
+
+      SupressDiagnostics(
+          std::tuple<clang::DiagnosticsEngine&, clang::LangOptions&>,
+          unsigned What = kDiagnostics);
+      ~SupressDiagnostics();
+    };
 
     ///\brief Temporarily replace the DiagnosticConsumer in a DiagnosticsEngine
     ///

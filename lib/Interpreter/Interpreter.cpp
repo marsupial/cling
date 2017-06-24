@@ -177,6 +177,14 @@ namespace cling {
     return getCI()->getLangOpts();
   }
 
+  template <>
+  std::tuple<DiagnosticsEngine&, LangOptions&>
+  Interpreter::get<DiagnosticsEngine, LangOptions>() const {
+    return std::tuple<DiagnosticsEngine&, LangOptions&>(
+        get<clang::DiagnosticsEngine>(),
+        get<clang::LangOptions>());
+  }
+
   clang::Sema& Interpreter::getSema() const {
       return get<clang::Sema>();
   }

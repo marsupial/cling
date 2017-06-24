@@ -664,8 +664,11 @@ namespace cling {
     ///\brief Useful pattern so that one can access internal items without
     /// knowing about clang's internal structures.
     ///   Interp->get<clang::LangOpts>()
+    ///   Interp->get<clang::DiagnosticsEngine, clang::LangOpts>()
     ///
     template <typename A> A& get() const;
+    template <typename A, typename B, typename... Args>
+    std::tuple<A&, B&, Args...> get() const;
 
     clang::Sema& getSema() const;
     clang::Parser& getParser() const;

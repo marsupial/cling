@@ -9,8 +9,24 @@
 
 #include "cling/Utils/Diagnostics.h"
 
+#include "clang/Basic/LangOptions.h"
+
 namespace cling {
 namespace utils {
+
+SupressDiagnostics::SupressDiagnostics(
+    std::tuple<clang::DiagnosticsEngine&, clang::LangOptions&> D, unsigned What)
+    : Diags(std::get<0>(D)), LangOpts(std::get<1>(D)),
+      PrevAccess(LangOpts.AccessControl),
+      PrevDiags(Diags.getSuppressAllDiagnostics()) {
+  if (What & kAccess) LangOpts.AccessControl = false;
+  if (What & kDiagnostics) Diags.setSuppressAllDiagnostics(true);
+}
+
+SupressDiagnostics::~SupressDiagnostics() {
+  LangOpts.AccessControl = PrevAccess;
+  Diags.setSuppressAllDiagnostics(PrevDiags);
+}
 
 ReplaceDiagnostics::ReplaceDiagnostics(clang::DiagnosticsEngine& D,
                          clang::DiagnosticConsumer& Replace, bool Own) :
