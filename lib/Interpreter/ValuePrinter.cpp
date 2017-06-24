@@ -15,6 +15,7 @@
 #include "cling/Interpreter/Transaction.h"
 #include "cling/Interpreter/Value.h"
 #include "cling/Utils/AST.h"
+#include "cling/Utils/Diagnostics.h"
 #include "cling/Utils/Output.h"
 #include "cling/Utils/Validation.h"
 
@@ -129,23 +130,6 @@ static std::string getTypeString(const Value &V) {
   // the general template will be used which only prints the address.
   return enclose(Ty, C, "*(", "**)", 5);
 }
-
-/// RAII object to disable and then re-enable access control in the LangOptions.
-struct AccessCtrlRAII_t {
-  bool savedAccessControl;
-  clang::LangOptions& LangOpts;
-
-  AccessCtrlRAII_t(cling::Interpreter& Interp):
-    LangOpts(const_cast<clang::LangOptions&>(Interp.getCI()->getLangOpts())) {
-    savedAccessControl = LangOpts.AccessControl;
-    LangOpts.AccessControl = false;
-  }
-
-  ~AccessCtrlRAII_t() {
-    LangOpts.AccessControl = savedAccessControl;
-  }
-
-};
 
 static std::string printDeclType(const clang::QualType& QT,
                                  const clang::NamedDecl* D) {
@@ -589,7 +573,10 @@ static std::string callPrintValue(const Value& V, const void* Val) {
     Strm << ");";
 
     // We really don't care about protected types here (ROOT-7426)
-    AccessCtrlRAII_t AccessCtrlRAII(*Interp);
+    cling::utils::SupressDiagnostics RAAI(
+        Interp->get<clang::DiagnosticsEngine, clang::LangOptions>(),
+        cling::utils::SupressDiagnostics::kAccess);
+
     Interp->evaluate(Strm.str(), printValueV);
   }
 
