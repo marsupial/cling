@@ -23,24 +23,28 @@
 
 struct Trigger {} Tr;
 
+// Try to print twice too make sure not to crash on subsequent attempts
+
 #ifdef CLING_VALEXTRACT_ERR
+Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling namespace'.}}
 Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling namespace'.}}
 #endif
 
 #ifdef CLING_VALEXTRACT_ERR2
 namespace cling {}
 Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling::runtime namespace'.}}
+Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling::runtime namespace'.}}
 #endif
 
 #ifdef CLING_VALEXTRACT_ERR3
 namespace cling { namespace runtime {} }
-Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling::runtime::gCling'.}}
+Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling::runtime::internal namespace'.}}
+Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling::runtime::internal namespace'.}}
 #endif
 
 #ifdef CLING_VALEXTRACT_ERR4
 namespace cling { namespace runtime { void* gCling; namespace internal { void* setValueWithAlloc; void* setValueNoAlloc; } } }
 Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling::runtime::internal::copyArray'.}}
-// Make sure not to crash on subsequent attempts
 Tr // expected-error@2 {{ValueExtractionSynthesizer could not find: 'cling::runtime::internal::copyArray'.}}
 #endif
 

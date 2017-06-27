@@ -800,7 +800,7 @@ namespace cling {
       WrapXform.emplace_back(new ValuePrinterSynthesizer(TheSema));
     WrapXform.emplace_back(new DeclExtractor(TheSema));
     if (!m_Interpreter->getOptions().NoRuntime)
-      WrapXform.emplace_back(new ValueExtractionSynthesizer(TheSema, isChild));
+      WrapXform.emplace_back(new ValueExtractionSynthesizer(*m_Interpreter));
     WrapXform.emplace_back(new CheckEmptyTransactionTransformer(TheSema));
 
     m_Consumer->SetTransformers(std::move(ASTTransformers),
