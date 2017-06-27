@@ -780,7 +780,7 @@ namespace cling {
     }
   }
 
-  void IncrementalParser::SetTransformers(bool isChildInterpreter) {
+  void IncrementalParser::SetTransformers(bool isChild) {
     // Add transformers to the IncrementalParser, which owns them
     Sema* TheSema = &m_CI->getSema();
     // Register the AST Transformers
@@ -795,18 +795,16 @@ namespace cling {
        ASTTransformers.emplace_back(new NullDerefProtectionTransformer(m_Interpreter));
     }
 
-    typedef std::unique_ptr<WrapperTransformer> WTPtr_t;
-    std::vector<WTPtr_t> WrapperTransformers;
+    std::vector<std::unique_ptr<WrapperTransformer>> WrapXform;
     if (!m_Interpreter->getOptions().NoRuntime)
-      WrapperTransformers.emplace_back(new ValuePrinterSynthesizer(TheSema));
-    WrapperTransformers.emplace_back(new DeclExtractor(TheSema));
+      WrapXform.emplace_back(new ValuePrinterSynthesizer(TheSema));
+    WrapXform.emplace_back(new DeclExtractor(TheSema));
     if (!m_Interpreter->getOptions().NoRuntime)
-      WrapperTransformers.emplace_back(new ValueExtractionSynthesizer(TheSema,
-                                                           isChildInterpreter));
-    WrapperTransformers.emplace_back(new CheckEmptyTransactionTransformer(TheSema));
+      WrapXform.emplace_back(new ValueExtractionSynthesizer(TheSema, isChild));
+    WrapXform.emplace_back(new CheckEmptyTransactionTransformer(TheSema));
 
     m_Consumer->SetTransformers(std::move(ASTTransformers),
-                                std::move(WrapperTransformers));
+                                std::move(WrapXform));
   }
 
 
