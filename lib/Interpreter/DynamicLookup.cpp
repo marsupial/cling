@@ -155,8 +155,8 @@ namespace cling {
   EvaluateTSynthesizer::EvaluateTSynthesizer(Sema* S)
     : ASTTransformer(S), m_EvalDecl(0), m_LifetimeHandlerDecl(0),
       m_LHgetMemoryDecl(0), m_DynamicExprInfoDecl(0), m_DeclContextDecl(0),
-      m_gCling(0), m_CurDeclContext(0), m_Context(&S->getASTContext()),
-      m_UniqueNameCounter(0), m_NestedCompoundStmts(0)
+      m_gCling(0), m_CurDeclContext(0), m_UniqueNameCounter(0),
+      m_NestedCompoundStmts(0)
   { }
 
   // pin the vtable here.
@@ -170,8 +170,9 @@ namespace cling {
       = utils::Lookup::Namespace(m_Sema, "runtime", NSD);
     NSD = utils::Lookup::Namespace(m_Sema, "internal", clingRuntimeNSD);
 
+    ASTContext& AST = m_Sema->getASTContext();
     // Find and set up EvaluateT
-    DeclarationName Name = &m_Context->Idents.get("EvaluateT");
+    DeclarationName Name = &AST.Idents.get("EvaluateT");
 
     LookupResult R(*m_Sema, Name, SourceLocation(), Sema::LookupOrdinaryName,
                      Sema::ForRedeclaration);
@@ -185,7 +186,7 @@ namespace cling {
 
     // Find the LifetimeHandler declaration
     R.clear();
-    Name = &m_Context->Idents.get("LifetimeHandler");
+    Name = &AST.Idents.get("LifetimeHandler");
     R.setLookupName(Name);
     m_Sema->LookupQualifiedName(R, NSD);
     m_LifetimeHandlerDecl = R.getAsSingle<CXXRecordDecl>();
@@ -195,7 +196,7 @@ namespace cling {
 
     // Find the LifetimeHandler::getMemory declaration
     R.clear();
-    Name = &m_Context->Idents.get("getMemory");
+    Name = &AST.Idents.get("getMemory");
     R.setLookupName(Name);
     m_Sema->LookupQualifiedName(R, m_LifetimeHandlerDecl);
     m_LHgetMemoryDecl = R.getAsSingle<CXXMethodDecl>();
@@ -203,7 +204,7 @@ namespace cling {
 
     // Find the DynamicExprInfo declaration
     R.clear();
-    Name = &m_Context->Idents.get("DynamicExprInfo");
+    Name = &AST.Idents.get("DynamicExprInfo");
     R.setLookupName(Name);
     m_Sema->LookupQualifiedName(R, NSD);
     m_DynamicExprInfoDecl = R.getAsSingle<CXXRecordDecl>();
@@ -211,7 +212,7 @@ namespace cling {
 
     // Find the DeclContext declaration
     R.clear();
-    Name = &m_Context->Idents.get("DeclContext");
+    Name = &AST.Idents.get("DeclContext");
     R.setLookupName(Name);
     NamespaceDecl* clangNSD = utils::Lookup::Namespace(m_Sema, "clang");
     m_Sema->LookupQualifiedName(R, clangNSD);
@@ -228,9 +229,7 @@ namespace cling {
 
     // Find and set the source locations to valid ones.
     R.clear();
-    Name
-      = &m_Context->Idents.get(
-                               "InterpreterGeneratedCodeDiagnosticsMaybeIncorrect");
+    Name = &AST.Idents.get("InterpreterGeneratedCodeDiagnosticsMaybeIncorrect");
     R.setLookupName(Name);
 
     m_Sema->LookupQualifiedName(R, NSD);
@@ -282,6 +281,7 @@ namespace cling {
   // StmtVisitor
 
   ASTNodeInfo EvaluateTSynthesizer::VisitStmt(Stmt* Node) {
+    const CanQualType VoidTy = m_Sema->getASTContext().VoidTy;
     for (Stmt::child_iterator
            I = Node->child_begin(), E = Node->child_end(); I != E; ++I) {
       if (*I) {
@@ -292,7 +292,7 @@ namespace cling {
         if (NewNode.isForReplacement()) {
           if (Expr* E = NewNode.getAs<Expr>())
             // Assume void if still not escaped
-            *I = SubstituteUnknownSymbol(m_Context->VoidTy, E);
+            *I = SubstituteUnknownSymbol(VoidTy, E);
         }
         else {
           *I = NewNode.getAsSingleNode();
@@ -308,6 +308,8 @@ namespace cling {
   // everything in the condition of IfStmt is implicitly converted into bool
   ASTNodeInfo EvaluateTSynthesizer::VisitIfStmt(IfStmt* Node) {
 
+    ASTContext& AST = m_Sema->getASTContext();
+
     // See whether there is var defined. Eg: if (int i = f->call())
     // It will fall into DeclStmt.
     if (Node->getConditionVariableDeclStmt()) {
@@ -321,22 +323,21 @@ namespace cling {
     ASTNodeInfo IfCondInfo = Visit(Node->getCond());
     if (IfCondInfo.isForReplacement())
       if (Expr* IfCondExpr = IfCondInfo.getAs<Expr>()) {
-        Node->setCond(SubstituteUnknownSymbol(m_Context->BoolTy, IfCondExpr));
+        Node->setCond(SubstituteUnknownSymbol(AST.BoolTy, IfCondExpr));
         //return ASTNodeInfo(Node, /*needs eval*/false);
       }
 
     // Visit the other parts - they will fall naturally into CompoundStmt
     // where we know what to do. For Stmt, though, we need to substitute here,
     // knowing the "target" type.
+    const CanQualType VoidTy = m_Sema->getASTContext().VoidTy;
     ASTNodeInfo thenInfo = Visit(Node->getThen());
     if (thenInfo.isForReplacement())
-      Node->setThen(SubstituteUnknownSymbol(m_Context->VoidTy,
-                                            thenInfo.getAs<Expr>()));
+      Node->setThen(SubstituteUnknownSymbol(VoidTy, thenInfo.getAs<Expr>()));
     if (Stmt* ElseExpr = Node->getElse()) {
       ASTNodeInfo elseInfo = Visit(ElseExpr);
       if (elseInfo.isForReplacement())
-        Node->setElse(SubstituteUnknownSymbol(m_Context->VoidTy,
-                                              elseInfo.getAs<Expr>()));
+        Node->setElse(SubstituteUnknownSymbol(VoidTy, elseInfo.getAs<Expr>()));
     }
 
     return ASTNodeInfo(Node, false);
@@ -346,6 +347,7 @@ namespace cling {
     ++m_NestedCompoundStmts;
     ASTNodes Children;
     ASTNodes NewChildren;
+    ASTContext& AST = m_Sema->getASTContext();
     if (GetChildren(Children, Node)) {
       ASTNodes::iterator it;
       for (it = Children.begin(); it != Children.end(); ++it) {
@@ -358,7 +360,7 @@ namespace cling {
           for(unsigned i = 0; i < NewStmts.size(); ++i)
             NewChildren.push_back(NewStmts[i]);
 
-          Node->setStmts(*m_Context, NewChildren);
+          Node->setStmts(AST, NewChildren);
           // Resolve all 1:n replacements
           Visit(Node);
         }
@@ -377,7 +379,7 @@ namespace cling {
                                                    && !isa<NullStmt>(*(it+1))));
 
               // Assume void if still not escaped
-              NewChildren.push_back(SubstituteUnknownSymbol(m_Context->VoidTy,E,
+              NewChildren.push_back(SubstituteUnknownSymbol(AST.VoidTy, E,
                                                             valuePrinterReq));
             }
           }
@@ -387,7 +389,7 @@ namespace cling {
       }
     }
 
-    Node->setStmts(*m_Context, NewChildren);
+    Node->setStmts(AST, NewChildren);
 
     --m_NestedCompoundStmts;
     return ASTNodeInfo(Node, 0);
@@ -430,11 +432,12 @@ namespace cling {
         DeclContext* OldDC = m_Sema->CurContext;
         m_Sema->CurContext = CuredDecl->getDeclContext();
 
+        ASTContext& AST = m_Sema->getASTContext();
         ASTNodeInfo NewNode;
         // 2.1 Get unique name for the LifetimeHandler instance and
         // initialize it
         std::string UniqueName = createUniqueName();
-        IdentifierInfo& II = m_Context->Idents.get(UniqueName);
+        IdentifierInfo& II = AST.Idents.get(UniqueName);
 
         // Prepare the initialization Exprs.
         // We want to call LifetimeHandler(DynamicExprInfo* ExprInfo,
@@ -449,13 +452,13 @@ namespace cling {
         // Build Arg0 DynamicExprInfo
         Inits.push_back(BuildDynamicExprInfo(InitExpr));
         // Build Arg1 DeclContext* DC
-        QualType DCTy = m_Context->getTypeDeclType(m_DeclContextDecl);
+        QualType DCTy = AST.getTypeDeclType(m_DeclContextDecl);
         Inits.push_back(utils::Synthesize::CStyleCastPtrExpr(m_Sema, DCTy,
                                                      (uintptr_t)m_CurDeclContext)
                         );
         // Build Arg2 llvm::StringRef
         // Get the type of the type without specifiers
-        PrintingPolicy Policy(m_Context->getLangOpts());
+        PrintingPolicy Policy(AST.getLangOpts());
         Policy.SuppressTagKeyword = 1;
         std::string Res;
         CuredDeclTy.getAsStringInternal(Res, Policy);
@@ -470,10 +473,9 @@ namespace cling {
         Inits.push_back(gClingDRE);
 
         // 2.3 Create a variable from LifetimeHandler.
-        QualType HandlerTy = m_Context->getTypeDeclType(m_LifetimeHandlerDecl);
-        TypeSourceInfo* TSI = m_Context->getTrivialTypeSourceInfo(HandlerTy,
-                                                                  m_NoSLoc);
-        VarDecl* HandlerInstance = VarDecl::Create(*m_Context,
+        QualType HandlerTy = AST.getTypeDeclType(m_LifetimeHandlerDecl);
+        TypeSourceInfo* TSI = AST.getTrivialTypeSourceInfo(HandlerTy, m_NoSLoc);
+        VarDecl* HandlerInstance = VarDecl::Create(AST,
                                                    CuredDecl->getDeclContext(),
                                                    m_NoSLoc,
                                                    m_NoSLoc,
@@ -495,7 +497,7 @@ namespace cling {
 
         // 2.5 Register the instance in the enclosing context
         CuredDecl->getDeclContext()->addDecl(HandlerInstance);
-        NewNode.addNode(new (m_Context)
+        NewNode.addNode(new (AST)
                         DeclStmt(DeclGroupRef(HandlerInstance),
                                  m_NoSLoc,
                                  m_NoELoc)
@@ -540,7 +542,7 @@ namespace cling {
         // Cast once more (dereference the cstyle cast)
         Result = m_Sema->BuildUnaryOp(S, m_NoSLoc, UO_Deref, Result).get();
         // 4.
-        CuredDecl->setType(m_Context->getLValueReferenceType(CuredDeclTy));
+        CuredDecl->setType(AST.getLValueReferenceType(CuredDeclTy));
         // 5.
         CuredDecl->setInit(Result);
 
@@ -584,6 +586,7 @@ namespace cling {
   }
 
   ASTNodeInfo EvaluateTSynthesizer::VisitExpr(Expr* Node) {
+    const CanQualType VoidTy = m_Sema->getASTContext().VoidTy;
     for (Stmt::child_iterator
            I = Node->child_begin(), E = Node->child_end(); I != E; ++I) {
       if (*I) {
@@ -593,7 +596,7 @@ namespace cling {
         if (NewNode.isForReplacement()) {
           if (Expr *E = NewNode.getAs<Expr>())
             // Assume void if still not escaped
-            *I = SubstituteUnknownSymbol(m_Context->VoidTy, E);
+            *I = SubstituteUnknownSymbol(VoidTy, E);
         }
         else {
           *I = NewNode.getAsSingleNode();
@@ -675,8 +678,10 @@ namespace cling {
     Expr* Arg0 = BuildDynamicExprInfo(SubTree, ValuePrinterReq);
     CallArgs.push_back(Arg0);
 
+    ASTContext& AST = m_Sema->getASTContext();
+
     // Build Arg1
-    QualType DCTy = m_Context->getTypeDeclType(m_DeclContextDecl);
+    QualType DCTy = AST.getTypeDeclType(m_DeclContextDecl);
     Expr* Arg1 = utils::Synthesize::CStyleCastPtrExpr(m_Sema, DCTy,
                                                     (uintptr_t)m_CurDeclContext);
     CallArgs.push_back(Arg1);
@@ -701,7 +706,8 @@ namespace cling {
     // 1. Get the expression containing @-s and get the variable addresses
     llvm::SmallVector<DeclRefExpr*, 4> Addresses;
     ostrstream OS;
-    const PrintingPolicy& Policy = m_Context->getPrintingPolicy();
+    ASTContext& AST = m_Sema->getASTContext();
+    const PrintingPolicy& Policy = AST.getPrintingPolicy();
 
     StmtPrinterHelper helper(Policy, Addresses, m_Sema);
     // In case when we print non paren inits like int i = h->Draw();
@@ -718,7 +724,7 @@ namespace cling {
     Expr* ExprTemplate = ConstructConstCharPtrExpr(OS.str());
 
     // 3. Build the array of addresses
-    QualType VarAddrTy = m_Sema->BuildArrayType(m_Context->VoidPtrTy,
+    QualType VarAddrTy = m_Sema->BuildArrayType(AST.VoidPtrTy,
                                                 ArrayType::Normal,
                                                 /*ArraySize*/0,
                                                 /*IndexTypeQuals*/0,
@@ -736,14 +742,14 @@ namespace cling {
         // Not good, return what we had.
         cling::errs() << "Error while creating dynamic expression for:\n  ";
         SubTree->printPretty(cling::errs(), 0 /*PrinterHelper*/,
-                             m_Context->getPrintingPolicy(), 2);
+                             AST.getPrintingPolicy(), 2);
         cling::errs() <<
           "\nwith internal representation (look for <dependent type>):\n";
         SubTree->dump(cling::errs(), m_Sema->getSourceManager());
         return SubTree;
       }
       m_Sema->ImpCastExprToType(UnOp,
-                                m_Context->getPointerType(m_Context->VoidPtrTy),
+                                AST.getPointerType(AST.VoidPtrTy),
                                 CK_BitCast);
       Inits.push_back(UnOp);
     }
@@ -753,7 +759,7 @@ namespace cling {
                                               Inits,
                                               m_NoELoc).getAs<InitListExpr>();
     TypeSourceInfo* TSI
-      = m_Context->getTrivialTypeSourceInfo(VarAddrTy, m_NoSLoc);
+      = AST.getTrivialTypeSourceInfo(VarAddrTy, m_NoSLoc);
     Expr* ExprAddresses = m_Sema->BuildCompoundLiteralExpr(m_NoSLoc,
                                                            TSI,
                                                            m_NoELoc,
@@ -763,7 +769,7 @@ namespace cling {
        return SubTree;
 
     m_Sema->ImpCastExprToType(ExprAddresses,
-                              m_Context->getPointerType(m_Context->VoidPtrTy),
+                              AST.getPointerType(AST.VoidPtrTy),
                               CK_ArrayToPointerDecay);
 
     // Is the result of the expression to be printed or not
@@ -779,11 +785,11 @@ namespace cling {
     CtorArgs.push_back(VPReq);
 
     // 4. Call the constructor
-    QualType ExprInfoTy = m_Context->getTypeDeclType(m_DynamicExprInfoDecl);
+    QualType ExprInfoTy = AST.getTypeDeclType(m_DynamicExprInfoDecl);
     ExprResult Initializer = m_Sema->ActOnParenListExpr(m_NoSLoc, m_NoELoc,
                                                         CtorArgs);
     TypeSourceInfo* TrivialTSI
-      = m_Context->getTrivialTypeSourceInfo(ExprInfoTy, SourceLocation());
+      = AST.getTrivialTypeSourceInfo(ExprInfoTy, SourceLocation());
     Expr* Result = m_Sema->BuildCXXNew(m_NoSLoc,
                                        /*UseGlobal=*/false,
                                        m_NoSLoc,
@@ -803,24 +809,25 @@ namespace cling {
   }
 
   Expr* EvaluateTSynthesizer::ConstructConstCharPtrExpr(llvm::StringRef Value) {
-    const QualType CChar = m_Context->CharTy.withConst();
+    ASTContext& AST = m_Sema->getASTContext();
+    const QualType CChar = AST.CharTy.withConst();
 
-    unsigned bitSize = m_Context->getTypeSize(m_Context->VoidPtrTy);
+    unsigned bitSize = AST.getTypeSize(AST.VoidPtrTy);
     llvm::APInt ArraySize(bitSize, Value.size() + 1);
-    const QualType CCArray = m_Context->getConstantArrayType(CChar,
+    const QualType CCArray = AST.getConstantArrayType(CChar,
                                                             ArraySize,
                                                             ArrayType::Normal,
                                                           /*IndexTypeQuals=*/0);
 
     StringLiteral::StringKind Kind = StringLiteral::Ascii;
-    Expr* Result = StringLiteral::Create(*m_Context,
+    Expr* Result = StringLiteral::Create(AST,
                                          Value,
                                          Kind,
                                          /*Pascal=*/false,
                                          CCArray,
                                          m_NoSLoc);
     m_Sema->ImpCastExprToType(Result,
-                              m_Context->getPointerType(CChar),
+                              AST.getPointerType(CChar),
                               CK_ArrayToPointerDecay);
 
     return Result;
@@ -866,11 +873,13 @@ namespace cling {
 
     m_Sema->CurContext = PrevContext;
 
+    ASTContext& AST = m_Sema->getASTContext();
+
     const FunctionProtoType* FPT = Fn->getType()->getAs<FunctionProtoType>();
     FunctionProtoType::ExtProtoInfo EPI = FPT->getExtProtoInfo();
     llvm::ArrayRef<QualType> ArgTypes(FPT->param_type_begin(),
                                       FPT->getNumParams());
-    QualType FnTy = m_Context->getFunctionType(Fn->getReturnType(),
+    QualType FnTy = AST.getFunctionType(Fn->getReturnType(),
                                                ArgTypes,
                                                EPI);
     DeclRefExpr* DRE = m_Sema->BuildDeclRefExpr(Fn,

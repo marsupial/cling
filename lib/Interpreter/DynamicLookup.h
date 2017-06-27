@@ -158,9 +158,6 @@ namespace cling {
     /// \brief Use instead of clang::SourceLocation() as end location.
     clang::SourceLocation m_NoELoc;
 
-    /// \brief Needed for the AST transformations, owned by Sema.
-    clang::ASTContext* m_Context;
-
     /// \brief Counter used when we need unique names.
     unsigned long long m_UniqueNameCounter;
 
