@@ -64,7 +64,7 @@ namespace cling {
 } //end namespace cling
 
 namespace cling {
-
+  class Interpreter;
   typedef llvm::DenseMap<clang::Stmt*, clang::Stmt*> MapTy;
 
   /// \brief In order to implement the runtime type binding and expression
@@ -120,7 +120,9 @@ namespace cling {
                                                          ASTNodeInfo> {
 
   private:
-
+    /// \brief Stores the cling::Interpreter instance that created this.
+    Interpreter& m_Interpreter;
+  
     /// \brief Stores the declaration of the EvaluateT function.
     clang::FunctionDecl* m_EvalDecl;
 
@@ -137,9 +139,9 @@ namespace cling {
     /// in EvaluateT call.
     clang::CXXRecordDecl* m_DeclContextDecl;
 
-    /// \brief Stores the cling::Interpreter (cling::runtime::gCling),
-    /// used in as an parameter LifetimeHandler's ctor.
-    clang::VarDecl* m_gCling;
+    /// \brief Stores the type of a cling::Interpreter, used in as an parameter
+    /// LifetimeHandler's ctor.
+    clang::QualType m_InterpreterType;
 
     /// \brief Keeps track of the replacements being made. If an AST node is
     /// changed with another it should be added to the map (newNode->oldNode).
@@ -172,7 +174,7 @@ namespace cling {
 
     using BaseStmtVisitor::Visit;
 
-    EvaluateTSynthesizer(clang::Sema* S);
+    EvaluateTSynthesizer(Interpreter& I);
 
     ~EvaluateTSynthesizer();
 

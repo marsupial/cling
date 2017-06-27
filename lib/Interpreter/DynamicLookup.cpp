@@ -152,10 +152,10 @@ namespace {
 namespace cling {
 
   // Constructors
-  EvaluateTSynthesizer::EvaluateTSynthesizer(Sema* S)
-    : ASTTransformer(S), m_EvalDecl(0), m_LifetimeHandlerDecl(0),
-      m_LHgetMemoryDecl(0), m_DynamicExprInfoDecl(0), m_DeclContextDecl(0),
-      m_gCling(0), m_CurDeclContext(0), m_UniqueNameCounter(0),
+  EvaluateTSynthesizer::EvaluateTSynthesizer(Interpreter& I)
+    : ASTTransformer(&I.getSema()), m_Interpreter(I), m_EvalDecl(0),
+      m_LifetimeHandlerDecl(0), m_LHgetMemoryDecl(0), m_DynamicExprInfoDecl(0),
+      m_DeclContextDecl(0), m_CurDeclContext(0), m_UniqueNameCounter(0),
       m_NestedCompoundStmts(0)
   { }
 
@@ -165,10 +165,11 @@ namespace cling {
 
   void EvaluateTSynthesizer::Initialize() {
     // Most of the declaration we are looking up are in cling::runtime::internal
-    NamespaceDecl* NSD = utils::Lookup::Namespace(m_Sema, "cling");
-    NamespaceDecl* clingRuntimeNSD
-      = utils::Lookup::Namespace(m_Sema, "runtime", NSD);
-    NSD = utils::Lookup::Namespace(m_Sema, "internal", clingRuntimeNSD);
+    NamespaceDecl* clingNSD = utils::Lookup::Namespace(m_Sema, "cling");
+    NamespaceDecl* clingRuntimeNSD =
+        utils::Lookup::Namespace(m_Sema, "runtime", clingNSD);
+    NamespaceDecl* NSD =
+        utils::Lookup::Namespace(m_Sema, "internal", clingRuntimeNSD);
 
     ASTContext& AST = m_Sema->getASTContext();
     // Find and set up EvaluateT
@@ -219,13 +220,24 @@ namespace cling {
     m_DeclContextDecl = R.getAsSingle<CXXRecordDecl>();
     assert(m_DeclContextDecl && "clang::DeclContext decl could not be found.");
 
-    // Find the gCling declaration
-    R.clear();
-    Name = &m_Context->Idents.get("gCling");
-    R.setLookupName(Name);
-    m_Sema->LookupQualifiedName(R, clingRuntimeNSD);
-    m_gCling = R.getAsSingle<VarDecl>();
-    assert(m_gCling && "gCling decl could not be found.");
+    // Find the cling::Interpreter type from the constructor parameters
+    for (CXXConstructorDecl* Ctor : m_LifetimeHandlerDecl->ctors()) {
+      if (!Ctor->isCopyOrMoveConstructor()) {
+        for (const ParmVarDecl* Parm : llvm::reverse(Ctor->parameters())) {
+          const QualType PType = Parm->getType();
+          const CXXRecordDecl* CxxDecl = PType->getPointeeCXXRecordDecl();
+          if (!CxxDecl || CxxDecl->getName() != "Interpreter")
+            continue;
+          assert(dyn_cast<NamespaceDecl>(CxxDecl->getDeclContext())
+                         ->getCanonicalDecl() == clingNSD->getCanonicalDecl() &&
+                 "Interpreter parameters from wrong namespace!");
+          m_InterpreterType = PType;
+          break;
+        }
+      }
+    }
+    assert(!m_InterpreterType.isNull() && m_InterpreterType->isPointerType() &&
+           "cling::Interpreter type not found.");
 
     // Find and set the source locations to valid ones.
     R.clear();
@@ -465,12 +477,8 @@ namespace cling {
         Inits.push_back(ConstructConstCharPtrExpr(Res.c_str()));
 
         // Build Arg3 cling::Interpreter
-        CXXScopeSpec CXXSS;
-        DeclarationNameInfo NameInfo(m_gCling->getDeclName(),
-                                     m_gCling->getLocStart());
-        Expr* gClingDRE
-          = m_Sema->BuildDeclarationNameExpr(CXXSS, NameInfo ,m_gCling).get();
-        Inits.push_back(gClingDRE);
+        Inits.push_back(utils::Synthesize::CStyleCastPtrExpr(
+            m_Sema, m_InterpreterType, uintptr_t(&m_Interpreter.ancestor())));
 
         // 2.3 Create a variable from LifetimeHandler.
         QualType HandlerTy = AST.getTypeDeclType(m_LifetimeHandlerDecl);
