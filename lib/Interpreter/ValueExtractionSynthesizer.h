@@ -13,7 +13,6 @@
 #include "ASTTransformer.h"
 
 namespace clang {
-  class ASTContext;
   class Decl;
   class Expr;
   class Sema;
@@ -25,10 +24,6 @@ namespace cling {
   class ValueExtractionSynthesizer : public WrapperTransformer {
 
   private:
-    ///\brief Needed for the AST transformations, owned by Sema.
-    ///
-    clang::ASTContext* m_Context;
-
     ///\brief cling::runtime::gCling variable cache.
     ///
     clang::VarDecl* m_gClingVD;

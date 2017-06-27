@@ -25,10 +25,10 @@ using namespace clang;
 
 namespace cling {
   ValueExtractionSynthesizer::ValueExtractionSynthesizer(clang::Sema* S,
-                                                         bool isChildInterpreter)
-    : WrapperTransformer(S), m_Context(&S->getASTContext()), m_gClingVD(0),
-      m_UnresolvedNoAlloc(0), m_UnresolvedWithAlloc(0),
-      m_UnresolvedCopyArray(0), m_isChildInterpreter(isChildInterpreter) { }
+                                                         bool IsChild)
+    : WrapperTransformer(S), m_gClingVD(0), m_UnresolvedNoAlloc(0),
+      m_UnresolvedWithAlloc(0), m_UnresolvedCopyArray(0),
+      m_isChildInterpreter(IsChild) { }
 
   // pin the vtable here.
   ValueExtractionSynthesizer::~ValueExtractionSynthesizer() { }
@@ -133,7 +133,7 @@ namespace cling {
         if (lastExprTy->isFunctionType()) {
           // A return type of function needs to be converted to
           // pointer to function.
-          lastExprTy = m_Context->getPointerType(lastExprTy);
+          lastExprTy = m_Sema->getASTContext().getPointerType(lastExprTy);
           lastExpr = m_Sema->ImpCastExprToType(lastExpr, lastExprTy,
                                                CK_FunctionToPointerDecay,
                                                VK_RValue).get();
@@ -206,10 +206,11 @@ namespace {
     if (!m_gClingVD && !FindAndCacheRuntimeDecls(E))
       return nullptr;
 
+    ASTContext& AST = m_Sema->getASTContext();
     // Build a reference to gCling
-    ExprResult gClingDRE
-      = m_Sema->BuildDeclRefExpr(m_gClingVD, m_Context->VoidPtrTy,
-                                 VK_RValue, SourceLocation());
+    ExprResult gClingDRE =
+        m_Sema->BuildDeclRefExpr(m_gClingVD, AST.VoidPtrTy, VK_RValue,
+                                 SourceLocation());
     // We have the wrapper as Sema's CurContext
     FunctionDecl* FD = cast<FunctionDecl>(m_Sema->CurContext);
 
@@ -225,10 +226,10 @@ namespace {
     SourceLocation locStart = (E) ? E->getLocStart() : FD->getLocStart();
     SourceLocation locEnd = (E) ? E->getLocEnd() : FD->getLocEnd();
     ExprResult wrapperSVRDRE
-      = m_Sema->BuildDeclRefExpr(FD->getParamDecl(0), m_Context->VoidPtrTy,
+      = m_Sema->BuildDeclRefExpr(FD->getParamDecl(0), AST.VoidPtrTy,
                                  VK_RValue, locStart);
-    QualType ETy = (E) ? E->getType() : m_Context->VoidTy;
-    QualType desugaredTy = ETy.getDesugaredType(*m_Context);
+    QualType ETy = (E) ? E->getType() : AST.VoidTy;
+    QualType desugaredTy = ETy.getDesugaredType(AST);
 
     // The expr result is transported as reference, pointer, array, float etc
     // based on the desugared type. We should still expose the typedef'ed
@@ -236,18 +237,18 @@ namespace {
     if (desugaredTy->isRecordType() && E->getValueKind() == VK_LValue) {
       // returning a lvalue (not a temporary): the value should contain
       // a reference to the lvalue instead of copying it.
-      desugaredTy = m_Context->getLValueReferenceType(desugaredTy);
-      ETy = m_Context->getLValueReferenceType(ETy);
+      desugaredTy = AST.getLValueReferenceType(desugaredTy);
+      ETy = AST.getLValueReferenceType(ETy);
     }
     Expr* ETyVP
-      = utils::Synthesize::CStyleCastPtrExpr(m_Sema, m_Context->VoidPtrTy,
+      = utils::Synthesize::CStyleCastPtrExpr(m_Sema, AST.VoidPtrTy,
                                              (uintptr_t)ETy.getAsOpaquePtr());
 
     // Pass whether to Value::dump() or not:
     Expr* EVPOn
-      = new (*m_Context) CharacterLiteral(getCompilationOpts().ValuePrinting,
+      = new (AST) CharacterLiteral(getCompilationOpts().ValuePrinting,
                                           CharacterLiteral::Ascii,
-                                          m_Context->CharTy,
+                                          AST.CharTy,
                                           SourceLocation());
 
     llvm::SmallVector<Expr*, 6> CallArgs;
@@ -265,8 +266,8 @@ namespace {
       // to run E.
 
       // FIXME: Suboptimal: this discards the already created AST nodes.
-      QualType vpQT = m_Context->VoidPtrTy;
-      QualType vQT = m_Context->VoidTy;
+      QualType vpQT = AST.VoidPtrTy;
+      QualType vQT = AST.VoidTy;
       Expr* vpQTVP
         = utils::Synthesize::CStyleCastPtrExpr(m_Sema, vpQT,
                                                (uintptr_t)vQT.getAsOpaquePtr());
@@ -296,10 +297,8 @@ namespace {
         CallArgs.clear();
         CallArgs.push_back(E);
         CallArgs.push_back(placement);
-        size_t arrSize
-          = m_Context->getConstantArrayElementCount(constArray);
-        Expr* arrSizeExpr
-          = utils::Synthesize::IntegerLiteralExpr(*m_Context, arrSize);
+        size_t arrSize = AST.getConstantArrayElementCount(constArray);
+        Expr* arrSizeExpr = utils::Synthesize::IntegerLiteralExpr(AST, arrSize);
 
         CallArgs.push_back(arrSizeExpr);
         // 2.1) arrays:
@@ -314,8 +313,7 @@ namespace {
           // that's what we want. Fail...
           return E;
         }
-        TypeSourceInfo* ETSI
-          = m_Context->getTrivialTypeSourceInfo(ETy, noLoc);
+        TypeSourceInfo* ETSI = AST.getTrivialTypeSourceInfo(ETy, noLoc);
 
         assert(!Call.isInvalid() && "Invalid Call before building new");
 
@@ -349,11 +347,9 @@ namespace {
         //      call to cling::internal::setValueNoAlloc(...);
 
         // force-cast it into uint64 in order to pick up the correct overload.
-        QualType UInt64Ty = m_Context->UnsignedLongLongTy;
-        TypeSourceInfo* TSI
-          = m_Context->getTrivialTypeSourceInfo(UInt64Ty, noLoc);
-        Expr* castedE
-          = m_Sema->BuildCStyleCastExpr(noLoc, TSI, noLoc, E).get();
+        QualType UInt64Ty = AST.UnsignedLongLongTy;
+        TypeSourceInfo* TSI = AST.getTrivialTypeSourceInfo(UInt64Ty, noLoc);
+        Expr* castedE = m_Sema->BuildCStyleCastExpr(noLoc, TSI, noLoc, E).get();
         CallArgs.push_back(castedE);
       }
       else if (desugaredTy->isReferenceType()) {
@@ -364,11 +360,9 @@ namespace {
       }
       else if (desugaredTy->isAnyPointerType()) {
         // function pointers need explicit void* cast.
-        QualType VoidPtrTy = m_Context->VoidPtrTy;
-        TypeSourceInfo* TSI
-          = m_Context->getTrivialTypeSourceInfo(VoidPtrTy, noLoc);
-        Expr* castedE
-          = m_Sema->BuildCStyleCastExpr(noLoc, TSI, noLoc, E).get();
+        QualType VoidPtrTy = AST.VoidPtrTy;
+        TypeSourceInfo* TSI = AST.getTrivialTypeSourceInfo(VoidPtrTy, noLoc);
+        Expr* castedE = m_Sema->BuildCStyleCastExpr(noLoc, TSI, noLoc, E).get();
         CallArgs.push_back(castedE);
       }
       else if (desugaredTy->isNullPtrType()) {
@@ -389,7 +383,7 @@ namespace {
       }
       else {
         m_Sema->Diag(locStart, diag::err_unsupported_unknown_any_decl) <<
-          utils::TypeName::GetFullyQualifiedName(desugaredTy, *m_Context) <<
+          utils::TypeName::GetFullyQualifiedName(desugaredTy, AST) <<
           SourceRange(locStart, locEnd);
       }
     }
@@ -418,7 +412,8 @@ namespace {
 
   bool ValueExtractionSynthesizer::FindAndCacheRuntimeDecls(clang::Expr* E) {
     assert(!m_gClingVD && "Called multiple times!?");
-    DeclContext* NSD = m_Context->getTranslationUnitDecl();
+    ASTContext& AST = m_Sema->getASTContext();
+    DeclContext* NSD = AST.getTranslationUnitDecl();
     clang::VarDecl* clingVD = nullptr;
     if (m_Sema->getLangOpts().CPlusPlus) {
       if (!(NSD = utils::Lookup::Namespace(m_Sema, "cling")))
@@ -431,7 +426,7 @@ namespace {
       if (!(NSD = utils::Lookup::Namespace(m_Sema, "internal", NSD)))
         return VSError(m_Sema, E, "cling::runtime::internal namespace");
     }
-    LookupResult R(*m_Sema, &m_Context->Idents.get("setValueNoAlloc"),
+    LookupResult R(*m_Sema, &AST.Idents.get("setValueNoAlloc"),
                    SourceLocation(), Sema::LookupOrdinaryName,
                    Sema::ForRedeclaration);
 
@@ -446,7 +441,7 @@ namespace {
       return VSError(m_Sema, E, "cling::runtime::internal::setValueNoAlloc");
 
     R.clear();
-    R.setLookupName(&m_Context->Idents.get("setValueWithAlloc"));
+    R.setLookupName(&AST.Idents.get("setValueWithAlloc"));
     m_Sema->LookupQualifiedName(R, NSD);
     if (R.empty())
       return VSError(m_Sema, E, "cling::runtime::internal::setValueWithAlloc");
@@ -456,7 +451,7 @@ namespace {
       return VSError(m_Sema, E, "cling::runtime::internal::setValueWithAlloc");
 
     R.clear();
-    R.setLookupName(&m_Context->Idents.get("copyArray"));
+    R.setLookupName(&AST.Idents.get("copyArray"));
     m_Sema->LookupQualifiedName(R, NSD);
     // FIXME: In the case of the multiple interpreters (parent-child),
     // the child interpreter doesn't include the runtime universe.
