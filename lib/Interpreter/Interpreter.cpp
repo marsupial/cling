@@ -229,9 +229,12 @@ namespace cling {
         return;
     }
 
+    const CompilerInstance* CI = getCI();
+    const LangOptions& LangOpts = CI->getLangOpts();
+
     // Tell the diagnostic client that we are entering file parsing mode.
-    DiagnosticConsumer& DClient = getCI()->getDiagnosticClient();
-    DClient.BeginSourceFile(getCI()->getLangOpts(), &PP);
+    DiagnosticConsumer& DClient = CI->getDiagnosticClient();
+    DClient.BeginSourceFile(LangOpts, &PP);
 
     llvm::SmallVector<IncrementalParser::ParseResultTransaction, 2>
       IncrParserTransactions;
@@ -271,6 +274,27 @@ namespace cling {
                 cling::errs() << Sym << " not defined\n";
             } else
               cling::errs() << Sym << " not in Module!\n";
+          }
+
+          const clang::Decl* Scope =
+              LangOpts.CPlusPlus
+                  ? m_LookupHelper->findScope("cling::runtime",
+                                              LookupHelper::NoDiagnostics)
+                  : CI->getSema().getASTContext().getTranslationUnitDecl();
+          if (!Scope) {
+          }
+          else if (const clang::ValueDecl* gCling =
+              m_LookupHelper->findDataMember(Scope, "gCling",
+                                             LookupHelper::NoDiagnostics)) {
+            using namespace utils;
+            const std::string Name = Analyze::maybeMangleDeclName(gCling);
+            if (!Name.empty()) {
+              if (!parent())
+                m_Executor->addSymbol(Name.c_str(), &m_Parenting, true);
+              else
+                m_Executor->addSymbol(Name.c_str(), &m_Parenting[0], true);
+            }
+          } else {
           }
         }
       }
@@ -373,31 +397,21 @@ namespace cling {
     // loading the PCH/PCM will make the runtime barf about dupe definitions.
     bool EmitDefinitions = !SyntaxOnly;
 
-    // FIXME: gCling should be const so assignemnt is a compile time error.
-    // Currently the name mangling is coming up wrong for the const version
-    // (on OS X at least, so probably Linux too) and the JIT thinks the symbol
-    // is undefined in a child Interpreter.  And speaking of children, should
-    // gCling actually be thisCling, so a child Interpreter can only access
-    // itself? One could use a macro (simillar to __dso_handle) to block
-    // assignemnt and get around the mangling issue.
-    const char* Linkage = LangOpts.CPlusPlus ? "extern \"C\"" : "";
-    if (!NoRuntime) {
+    if (!NoRuntime)
+      Strm << "#include \"cling/Interpreter/RuntimeUniverse.h\"\n";
+    else if (EmitDefinitions && (parent() && !m_Opts.NoRuntime)) {
+      // FIXME: All this because a child interpreter cannot include the above.
       if (LangOpts.CPlusPlus) {
-        Strm << "#include \"cling/Interpreter/RuntimeUniverse.h\"\n";
-        if (EmitDefinitions)
           Strm << "namespace cling { class Interpreter; namespace runtime { "
-                  "Interpreter* gCling=(Interpreter*)" << ThisP << ";}}\n";
-      } else {
-        Strm << "#include \"cling/Interpreter/CValuePrinter.h\"\n"
-             << "void* gCling";
-        if (EmitDefinitions)
-          Strm << "=(void*)" << ThisP;
-        Strm << ";\n";
-      }
+                  "extern Interpreter* const gCling;}}\n"
+               << "using namespace cling::runtime;\n";
+      } else
+        Strm << "extern void* const gCling;\n";
     }
 
     // Intercept all atexit calls, as the Interpreter and functions will be long
     // gone when the -native- versions invoke them.
+    const char* Linkage = LangOpts.CPlusPlus ? "extern \"C\"" : "";
 #if defined(__GLIBCXX__) && !defined(__APPLE__)
     const char* LinkageCxx = "extern \"C++\"";
     const char* Attr = LangOpts.CPlusPlus ? " throw () " : "";
