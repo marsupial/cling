@@ -15,18 +15,15 @@
 namespace clang {
   class Decl;
   class Expr;
-  class Sema;
-  class VarDecl;
 }
 
 namespace cling {
+  class Interpreter;
 
   class ValueExtractionSynthesizer : public WrapperTransformer {
-
-  private:
-    ///\brief cling::runtime::gCling variable cache.
+    ///\brief Owning Interpreter (may be a child of another Intepreter).
     ///
-    clang::VarDecl* m_gClingVD;
+    Interpreter& m_Interp;
 
     ///\brief cling::runtime::internal::setValueNoAlloc cache.
     ///
@@ -40,16 +37,12 @@ namespace cling {
     ///
     clang::Expr* m_UnresolvedCopyArray;
 
-    bool m_isChildInterpreter;
-
 public:
     ///\ brief Constructs the return synthesizer.
     ///
-    ///\param[in] S - The semantic analysis object.
-    ///\param[in] isChildInterpreter - flag to control if it is called
-    /// from a child or parent Interpreter
+    ///\param[in] I - The owning Interpreter instance.
     ///
-    ValueExtractionSynthesizer(clang::Sema* S, bool isChildInterpreter);
+    ValueExtractionSynthesizer(Interpreter& I);
 
     virtual ~ValueExtractionSynthesizer();
 
@@ -85,7 +78,7 @@ public:
 
     // Find and cache cling::runtime::gCling, setValueNoAlloc,
     // setValueWithAlloc on first request.
-    bool FindAndCacheRuntimeDecls(clang::Expr*);
+    bool FindAndCacheRuntimeDecls();
   };
 
 } // namespace cling

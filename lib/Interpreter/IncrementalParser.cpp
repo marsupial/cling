@@ -870,7 +870,7 @@ namespace cling {
       WrapXform.emplace_back(make_unique<ValuePrinterSynthesizer>(S));
     WrapXform.emplace_back(make_unique<DeclExtractor>(S));
     if (!m_Interpreter->getOptions().NoRuntime)
-      WrapXform.emplace_back(make_unique<ValueExtractionSynthesizer>(S, Child));
+      WrapXform.emplace_back(make_unique<ValueExtractionSynthesizer>(*I));
     WrapXform.emplace_back(make_unique<CheckEmptyTransactionTransformer>(S));
 
     // Add transformers to the ASTConsumer, which owns them
