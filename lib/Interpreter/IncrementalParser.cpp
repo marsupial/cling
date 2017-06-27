@@ -849,33 +849,32 @@ namespace cling {
     }
   }
 
-  void IncrementalParser::SetTransformers(bool isChildInterpreter) {
-    // Add transformers to the IncrementalParser, which owns them
-    Sema* TheSema = &m_CI->getSema();
+  void IncrementalParser::SetTransformers(bool Child) {
+    // for llvm::make_unique, only instd:: in C++14
+    using namespace llvm;
+    Sema* S = &m_CI->getSema();
+    Interpreter* I = m_Interpreter;
     // Register the AST Transformers
-    typedef std::unique_ptr<ASTTransformer> ASTTPtr_t;
-    std::vector<ASTTPtr_t> ASTTransformers;
-    ASTTransformers.emplace_back(new AutoSynthesizer(TheSema));
-    ASTTransformers.emplace_back(new EvaluateTSynthesizer(TheSema));
+    std::vector<std::unique_ptr<ASTTransformer>> ASTXform;
+    ASTXform.emplace_back(make_unique<AutoSynthesizer>(S));
+    ASTXform.emplace_back(make_unique<EvaluateTSynthesizer>(S));
     if (hasCodeGenerator() && !m_Interpreter->getOptions().NoRuntime) {
        // Don't protect against crashes if we cannot run anything.
-       // cling might also be in a PCH-generation mode; don't inject our Sema pointer
-       // into the PCH.
-       ASTTransformers.emplace_back(new NullDerefProtectionTransformer(m_Interpreter));
+       // cling might also be in a PCH-generation mode; don't inject our Sema
+       // pointer into the PCH.
+       ASTXform.emplace_back(make_unique<NullDerefProtectionTransformer>(I));
     }
 
-    typedef std::unique_ptr<WrapperTransformer> WTPtr_t;
-    std::vector<WTPtr_t> WrapperTransformers;
+    std::vector<std::unique_ptr<WrapperTransformer>> WrapXform;
     if (!m_Interpreter->getOptions().NoRuntime)
-      WrapperTransformers.emplace_back(new ValuePrinterSynthesizer(TheSema));
-    WrapperTransformers.emplace_back(new DeclExtractor(TheSema));
+      WrapXform.emplace_back(make_unique<ValuePrinterSynthesizer>(S));
+    WrapXform.emplace_back(make_unique<DeclExtractor>(S));
     if (!m_Interpreter->getOptions().NoRuntime)
-      WrapperTransformers.emplace_back(new ValueExtractionSynthesizer(TheSema,
-                                                           isChildInterpreter));
-    WrapperTransformers.emplace_back(new CheckEmptyTransactionTransformer(TheSema));
+      WrapXform.emplace_back(make_unique<ValueExtractionSynthesizer>(S, Child));
+    WrapXform.emplace_back(make_unique<CheckEmptyTransactionTransformer>(S));
 
-    m_Consumer->SetTransformers(std::move(ASTTransformers),
-                                std::move(WrapperTransformers));
+    // Add transformers to the ASTConsumer, which owns them
+    m_Consumer->SetTransformers(std::move(ASTXform), std::move(WrapXform));
   }
 
 
