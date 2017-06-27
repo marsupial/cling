@@ -177,10 +177,10 @@ namespace NS1 {
 
 .rawInput 0
 
-const cling::LookupHelper& lookup = gCling->getLookupHelper();
+const cling::LookupHelper& lookup = thisCling.getLookupHelper();
 cling::LookupHelper::DiagSetting diags = cling::LookupHelper::WithDiagnostics;
-clang::Sema* Sema = &gCling->getSema();
-const clang::ASTContext& Ctx = gCling->getSema().getASTContext();
+clang::Sema* Sema = &thisCling.getSema();
+const clang::ASTContext& Ctx = thisCling.getSema().getASTContext();
 cling::utils::Transform::Config transConfig;
 using namespace cling::utils;
 

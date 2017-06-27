@@ -22,7 +22,7 @@ void compileFunc() {
     "printf(\"arg is %d\\n\", arg); return arg * arg; \n"
     "}";
 
-  myFunc_t myFuncP = (myFunc_t) gCling->compileFunction("myFunc", myFuncCode);
+  myFunc_t myFuncP = (myFunc_t) thisCling.compileFunction("myFunc", myFuncCode);
   printf("myFunc returned %d\n", (*myFuncP)(12));
   //CHECK: arg is 12
   //CHECK: myFunc returned 144
@@ -31,7 +31,7 @@ void compileFunc() {
   const char* myFuncCode2 = "extern \"C\" int myFunc(int arg) { \n"
     "printf(\"arg is %d\\n\", arg); return -1; \n"
     "}";
-  if (gCling->compileFunction("myFunc", myFuncCode2) == myFuncP) {
+  if (thisCling.compileFunction("myFunc", myFuncCode2) == myFuncP) {
     printf("As expected, myFunc() did not change.\n");
     //CHECK: As expected, myFunc() did not change.
   }
@@ -41,7 +41,7 @@ void compileFunc() {
     "printf(\"privateFunc() returns %d\\n\", Foo::privateFunc()); return -1; \n"
     "}";
   myFunc_t myPrivFuncP
-    = (myFunc_t) gCling->compileFunction("myPrivFunc", myPrivFuncCode,
+    = (myFunc_t) thisCling.compileFunction("myPrivFunc", myPrivFuncCode,
                                          false /*ifUniq*/,
                                          false /*withAccessControl*/);
   printf("myPrivFunc returned %d\n", (*myPrivFuncP)(13));
@@ -53,7 +53,7 @@ void compileFunc() {
     "return NOFUZZY; //expected-error@2 {{use of undeclared identifier 'NOFUZZY'}} \n"
     "}";
 
-  if (!gCling->compileFunction("myBadFunc", myBadFuncCode)) {
+  if (!thisCling.compileFunction("myBadFunc", myBadFuncCode)) {
     printf("As expected, myBadFunc did not compile\n");
     //CHECK: myBadFunc did not compile
   }

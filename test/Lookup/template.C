@@ -29,7 +29,7 @@ public:
 template <typename T> class TmpltOutside {};
 .rawInput 0
 
-const cling::LookupHelper& lookup = gCling->getLookupHelper();
+const cling::LookupHelper& lookup = thisCling.getLookupHelper();
 cling::LookupHelper::DiagSetting diags = cling::LookupHelper::WithDiagnostics;
 
 

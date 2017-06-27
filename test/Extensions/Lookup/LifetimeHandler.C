@@ -8,7 +8,7 @@
 
 // RUN: cat %s | %built_cling -I%p | FileCheck %s
 // We should revise the destruction of the LifetimeHandlers, because
-// its destructor uses gCling and the CompilerInstance, which are
+// its destructor uses thisCling and the CompilerInstance, which are
 // already gone
 
 #include "cling/Interpreter/Interpreter.h"
@@ -17,8 +17,8 @@
 .dynamicExtensions 1
 
 std::unique_ptr<cling::test::SymbolResolverCallback> SRC;
-SRC.reset(new cling::test::SymbolResolverCallback(gCling))
-gCling->setCallbacks(std::move(SRC));
+SRC.reset(new cling::test::SymbolResolverCallback(thisCling))
+thisCling.setCallbacks(std::move(SRC));
 
 .x LifetimeHandler.h
 // CHECK: Alpha's single arg ctor called {{.*Interpreter.*}}

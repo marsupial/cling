@@ -80,7 +80,7 @@ namespace cling {
       returnStmts.push_back(CS->body_begin() + foundAtPos);
 
     // We want to support cases such as:
-    // gCling->evaluate("if() return 'A' else return 12", V), that puts in V,
+    // thisCling->evaluate("if() return 'A' else return 12", V), that puts in V,
     // either A or 12.
     // In this case the void wrapper is compiled with the stmts returning
     // values. Sema would cast them to void, but the code will still be
@@ -155,9 +155,9 @@ namespace cling {
         // We need to synthesize later:
         // Wrapper has signature: void w(cling::Value SVR)
         // case 1):
-        //   setValueNoAlloc(gCling, &SVR, lastExprTy, lastExpr())
+        //   setValueNoAlloc(thisCling.ancestor(), &SVR, lastExprTy, lastExpr())
         // case 2):
-        //   new (setValueWithAlloc(gCling, &SVR, lastExprTy)) (lastExpr)
+        //   new (setValueWithAlloc(thisCling.ancestor(), &SVR, lastExprTy)) (lastExpr)
         // case 2.1):
         //   copyArray(src, placement, size)
 
@@ -283,7 +283,7 @@ namespace {
       if (!desugaredTy->isMemberPointerType()
           && !availableCopyConstructor(desugaredTy, m_Sema))
         return E;
-      // call new (setValueWithAlloc(gCling, &SVR, ETy)) (E)
+      // call new (setValueWithAlloc(thisCling, &SVR, ETy)) (E)
       Call = m_Sema->ActOnCallExpr(/*Scope*/0, m_UnresolvedWithAlloc,
                                    locStart, CallArgs, locEnd);
       Expr* placement = Call.get();

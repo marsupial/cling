@@ -37,7 +37,7 @@ namespace cling {
     FwdDeclsMap m_Map;
     bool m_ShowSuggestions;
   public:
-    AutoloadCallback(cling::Interpreter* interp, bool showSuggestions = true)
+    AutoloadCallback(cling::Interpreter& interp, bool showSuggestions = true)
       : InterpreterCallbacks(interp), m_ShowSuggestions(showSuggestions) { }
     ~AutoloadCallback();
     using cling::InterpreterCallbacks::LookupObject;

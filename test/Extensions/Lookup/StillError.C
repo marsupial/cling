@@ -25,7 +25,7 @@
 .dynamicExtensions 1
 
 std::unique_ptr<cling::test::SymbolResolverCallback> SRC;
-SRC.reset(new cling::test::SymbolResolverCallback(gCling, false))
-gCling->setCallbacks(std::move(SRC));
+SRC.reset(new cling::test::SymbolResolverCallback(thisCling, false))
+thisCling.setCallbacks(std::move(SRC));
 p.q // CHECK: {{input_line_.*: error: use of undeclared identifier 'p'}}
 .q

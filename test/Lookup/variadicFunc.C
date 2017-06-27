@@ -28,7 +28,7 @@ using namespace llvm;
 //  We need to fetch the global scope declaration,
 //  otherwise known as the translation unit decl.
 //
-const cling::LookupHelper& lookup = gCling->getLookupHelper();
+const cling::LookupHelper& lookup = thisCling.getLookupHelper();
 const clang::Decl* G = lookup.findScope("", cling::LookupHelper::WithDiagnostics);
 printf("G: 0x%lx\n", (unsigned long) G);
 //CHECK: G: 0x{{[1-9a-f][0-9a-f]*$}}

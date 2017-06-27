@@ -70,15 +70,15 @@ public:
     /// We need to synthesize later:
     /// Wrapper has signature: void w(cling::Value V)
     /// case 1):
-    ///   setValueNoAlloc(gCling, &SVR, lastExprTy, lastExpr())
+    ///   setValueNoAlloc(thisCling.ancestor(), &SVR, lastExprTy, lastExpr())
     /// case 2):
-    ///   new (setValueWithAlloc(gCling, &SVR, lastExprTy)) (lastExpr)
+    ///   new (setValueWithAlloc(thisCling.ancestor(), &SVR, lastExprTy)) (lastExpr)
     /// case 2.1):
     ///   copyArray(src, placement, N)
     ///
     clang::Expr* SynthesizeSVRInit(clang::Expr* E);
 
-    // Find and cache cling::runtime::gCling, setValueNoAlloc,
+    // Find and cache cling::runtime::thisCling, setValueNoAlloc,
     // setValueWithAlloc on first request.
     bool FindAndCacheRuntimeDecls();
   };

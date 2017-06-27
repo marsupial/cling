@@ -13,7 +13,7 @@
 
 #include "cling/Interpreter/Interpreter.h"
 
-class MyClass { public:  MyClass(){ gCling->process("gCling->getVersion()");} };
+class MyClass { public:  MyClass(){ thisCling.process("thisCling.getVersion()");} };
 
 MyClass *My = new MyClass(); // CHECK: (const char *) "{{.*}}"
 

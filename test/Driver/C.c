@@ -14,7 +14,7 @@
 // Fix value printing!
 
 int printf(const char*,...);
-printf("CHECK 123 %p\n", gCling); // CHECK: CHECK 123
+printf("CHECK 123 %p\n", thisCling); // CHECK: CHECK 123
 
 12 // expected-error {{ValueExtractionSynthesizer could not find: 'cling::runtime::internal::setValueNoAlloc'.}}
 

@@ -11,23 +11,23 @@
 #include "cling/Interpreter/Interpreter.h"
 
 #define TEST01 "A  B  C  D  E  F"
-gCling->getMacroValue("TEST01")
+thisCling.getMacroValue("TEST01")
 // CHECK: (std::string) "A  B  C  D  E  F"
 
 #define TEST02 0  1  2  3  4  5  6  7
-gCling->getMacroValue("TEST02")
+thisCling.getMacroValue("TEST02")
 // CHECK-NEXT: (std::string) "0 1 2 3 4 5 6 7"
 
 #define TEST03 STRIP "STRING" TEST
-gCling->getMacroValue("TEST03")
+thisCling.getMacroValue("TEST03")
 // CHECK-NEXT: (std::string) "STRIP STRING TEST"
 
 #define TEST03 STRIP "STRING" TEST
-gCling->getMacroValue("TEST03", 0)
+thisCling.getMacroValue("TEST03", 0)
 // CHECK-NEXT: (std::string) "STRIP "STRING" TEST"
 
 #define TEST04(A,B,C) A ##B #C
-gCling->getMacroValue("TEST04")
+thisCling.getMacroValue("TEST04")
 // CHECK-NEXT: (std::string) "A ## B # C"
 
 // expected-no-diagnostics

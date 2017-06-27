@@ -12,14 +12,14 @@ extern "C" int printf(const char*,...);
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/Transaction.h"
 
-gCling->getDefaultOptLevel() // CHECK: (int) 2
+thisCling.getDefaultOptLevel() // CHECK: (int) 2
 .O // CHECK-NEXT: Current cling optimization level: 2
-(int)gCling->getLatestTransaction()->getCompilationOpts().OptLevel // CHECK-NEXT: (int) 2
+(int)thisCling.getLatestTransaction()->getCompilationOpts().OptLevel // CHECK-NEXT: (int) 2
 
 .O 0
-gCling->getDefaultOptLevel() // CHECK: (int) 0
+thisCling.getDefaultOptLevel() // CHECK: (int) 0
 .O // CHECK-NEXT: Current cling optimization level: 0
 
 #pragma cling optimize(1)
-gCling->getDefaultOptLevel() // CHECK: (int) 0
+thisCling.getDefaultOptLevel() // CHECK: (int) 0
 .O // CHECK-NEXT: Current cling optimization level: 0

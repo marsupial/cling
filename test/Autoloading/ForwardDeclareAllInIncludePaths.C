@@ -12,7 +12,7 @@
 
 typedef llvm::SmallVector<std::string, 16> Includes;
 Includes includePaths;
-gCling->GetIncludePaths(includePaths, /*system=*/true, /*withflags=*/false);
+thisCling.GetIncludePaths(includePaths, /*system=*/true, /*withflags=*/false);
 DIR *dir;
 struct dirent *ent;
 static std::regex dirsToIgnore("(.*)/backward");
@@ -56,7 +56,7 @@ for (int i = 0; i < 1 /*includePaths.size()*/; ++i) { // We know STL is first.
         continue;
       if (ent->d_type == DT_REG && strcmp(ent->d_name, ".") && strcmp(ent->d_name, "..")) {
         fwdDeclFile = "/tmp/__cling_fwd_"; fwdDeclFile += ent->d_name;
-        gCling->GenerateAutoloadingMap(ent->d_name, fwdDeclFile);
+        thisCling.GenerateAutoloadingMap(ent->d_name, fwdDeclFile);
         // Run it in separate cling and assert it went all fine:
         sourceCode = " \"//expected-no-diagnostics\"";
         sourceCode += " '#include \"" + fwdDeclFile + "\"'";

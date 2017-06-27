@@ -42,7 +42,7 @@ namespace cling {
 
   void AutoloadCallback::report(clang::SourceLocation l, llvm::StringRef name,
                                 llvm::StringRef header) {
-    Sema& sema= m_Interpreter->getSema();
+    Sema& sema= m_Interpreter.getSema();
 
     unsigned id
       = sema.getDiagnostics().getCustomDiagID (DiagnosticsEngine::Level::Warning,
@@ -353,7 +353,7 @@ namespace cling {
 
     AutoloadingVisitor defaultArgsCleaner;
     for (auto D : found->second) {
-      defaultArgsCleaner.RemoveDefaultArgsOf(D, &getInterpreter()->getSema());
+      defaultArgsCleaner.RemoveDefaultArgsOf(D, &m_Interpreter.getSema());
     }
     // Don't need to keep track of cleaned up decls from file.
     m_Map.erase(found);
@@ -394,7 +394,7 @@ namespace cling {
       return;
 
     AutoloadingVisitor defaultArgsStateCollector;
-    Preprocessor& PP = m_Interpreter->getCI()->getPreprocessor();
+    Preprocessor& PP = m_Interpreter.getCI()->getPreprocessor();
     for (auto I = T.decls_begin(), E = T.decls_end(); I != E; ++I)
       for (auto&& D: I->m_DGR)
         defaultArgsStateCollector.TrackDefaultArgStateOf(D, m_Map, PP);

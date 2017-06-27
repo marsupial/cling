@@ -263,7 +263,7 @@ namespace cling {
     }
 
     // DO NOT commit the transactions here: static initialization in these
-    // transactions requires gCling through local_cxa_atexit(), but that has not
+    // transactions requires thisCling through local_cxa_atexit(), but that has not
     // been defined yet!
     ParseResultTransaction PRT = endTransaction(CurT);
     result.push_back(PRT);
@@ -787,7 +787,7 @@ namespace cling {
     typedef std::unique_ptr<ASTTransformer> ASTTPtr_t;
     std::vector<ASTTPtr_t> ASTTransformers;
     ASTTransformers.emplace_back(new AutoSynthesizer(TheSema));
-    ASTTransformers.emplace_back(new EvaluateTSynthesizer(TheSema));
+    ASTTransformers.emplace_back(new EvaluateTSynthesizer(*m_Interpreter));
     if (hasCodeGenerator() && !m_Interpreter->getOptions().NoRuntime) {
        // Don't protect against crashes if we cannot run anything.
        // cling might also be in a PCH-generation mode; don't inject our Sema pointer

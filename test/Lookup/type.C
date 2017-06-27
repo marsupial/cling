@@ -33,7 +33,7 @@ using cling::LookupHelper;
 .rawInput 0
 
 
-const LookupHelper& lookup = gCling->getLookupHelper();
+const LookupHelper& lookup = thisCling.getLookupHelper();
 
 QualType cl_A = lookup.findType("A", LookupHelper::WithDiagnostics);
 cl_A.getAsString().c_str()

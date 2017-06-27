@@ -15,17 +15,17 @@
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/Value.h"
 #include <stdio.h>
-gCling->declare("int print() { printf(\"print is run.\\n\"); return 1; }");
+thisCling.declare("int print() { printf(\"print is run.\\n\"); return 1; }");
 cling::Value V;
-gCling->process("int a = print();",&V);
+thisCling.process("int a = print();",&V);
 //CHECK: print is run.
-gCling->process("a", &V);
+thisCling.process("a", &V);
 //CHECK: (int) 1
-gCling->process("a;", &V);
+thisCling.process("a;", &V);
 //CHECK-NOT: print is run.
 // End PR #96277
 // PR #98146
-gCling->process("\"Root\"", &V);
+thisCling.process("\"Root\"", &V);
 // CHECK: (const char [5]) "Root"
 V
 // CHECK: (cling::Value &) boxes [(const char [5]) "Root"]
@@ -44,22 +44,22 @@ const enumName constVar = (enumName) 1 // k2 is invisible!
 int step = 10 // CHECK: (int) 10
 step // CHECK: (int) 10
 
-gCling->process("#ifdef __UNDEFINED__\n42\n#endif")
+thisCling.process("#ifdef __UNDEFINED__\n42\n#endif")
 //CHECK: (cling::Interpreter::CompilationResult) (cling::Interpreter::CompilationResult::kSuccess) : ({{(unsigned )?}}int) 0
 
 // User input variants of above:
 #ifdef NOTDEFINED
- gCling->echo("9")
+ thisCling.echo("9")
 #else
- gCling->echo("12")
+ thisCling.echo("12")
 #endif
 //CHECK: (int) 12
 //CHECK: (cling::Interpreter::CompilationResult) (cling::Interpreter::CompilationResult::kSuccess) : ({{(unsigned )?}}int) 0
 
 #ifdef __CLING__
- gCling->echo("19");
+ thisCling.echo("19");
 #else
- gCling->echo("156")
+ thisCling.echo("156")
 #endif
 //CHECK: (int) 19
 

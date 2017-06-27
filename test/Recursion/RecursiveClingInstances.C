@@ -14,11 +14,11 @@
 
 #include "cling/Interpreter/Interpreter.h"
 
-gCling->process("const char * const argV = \"cling\";");
-gCling->process("cling::Interpreter *DefaultInterp;");
+thisCling.process("const char * const argV = \"cling\";");
+thisCling.process("cling::Interpreter *DefaultInterp;");
 
-gCling->process("DefaultInterp = new cling::Interpreter(1, &argV);");
-gCling->process("DefaultInterp->process(\"#include \\\"cling/Interpreter/Interpreter.h\\\"\");");
-gCling->process("DefaultInterp->process(\"std::string s; gCling->createUniqueName(s); s.c_str()\");");
+thisCling.process("DefaultInterp = new cling::Interpreter(1, &argV);");
+thisCling.process("DefaultInterp->process(\"#include \\\"cling/Interpreter/Interpreter.h\\\"\");");
+thisCling.process("DefaultInterp->process(\"std::string s; thisCling.createUniqueName(s); s.c_str()\");");
 // CHECK: ({{[^)]+}}) "__cling_Un1Qu31"
 .q

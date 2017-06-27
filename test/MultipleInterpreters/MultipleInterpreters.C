@@ -9,7 +9,7 @@
 // RUN: cat %s | %cling 2>&1 | FileCheck %s
 
 // Test to check the functionality of the multiple interpreters.
-// Create a "child" interpreter and use gCling as its "parent".
+// Create a "child" interpreter and use thisCling as its "parent".
 
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/MetaProcessor/MetaProcessor.h"
@@ -20,7 +20,7 @@
 int foo(){ return 42; }
 
 // OR
-//gCling->declare("void foo(){ cling::outs() << \"foo(void)\\n\"; }");
+//thisCling.declare("void foo(){ cling::outs() << \"foo(void)\\n\"; }");
 
 const char* argV[1] = {"cling"};
 // Declare something in the child interpreter, then execute it from the child
@@ -29,9 +29,10 @@ const char* argV[1] = {"cling"};
 // that the parent is not modified during the child's lifetime
 // is violated.
 {
-  cling::Interpreter ChildInterp(*gCling, 1, argV);
+  cling::Interpreter ChildInterp(thisCling, 1, argV);
   ChildInterp.declare("void foo(int i){ printf(\"foo(int) = %d\\n\", i); }\n");
   ChildInterp.echo("foo()"); //CHECK: (int) 42
   ChildInterp.echo("foo(1)"); //CHECK: foo(int) = 1
+  ChildInterp.echo("&thisCling != &thisCling.ancestor()");
 }
 .q

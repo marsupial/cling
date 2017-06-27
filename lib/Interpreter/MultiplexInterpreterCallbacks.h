@@ -20,7 +20,7 @@ namespace cling {
     std::vector<std::unique_ptr<InterpreterCallbacks>> m_Callbacks;
 
   public:
-    MultiplexInterpreterCallbacks(Interpreter* interp)
+    MultiplexInterpreterCallbacks(Interpreter& interp)
       : InterpreterCallbacks(interp, true, true, true) {}
 
     void addCallback(std::unique_ptr<InterpreterCallbacks> newCb) {

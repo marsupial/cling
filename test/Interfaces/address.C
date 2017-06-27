@@ -21,13 +21,13 @@ const char* comp(void* A, void* B) {
 }
 
 bool fromJIT = false;
-clang::Sema& sema = gCling->getSema();
+clang::Sema& sema = thisCling.getSema();
 int gMyGlobal = 12;
 void* addr1 = &gMyGlobal;
 clang::NamedDecl* D = cling::utils::Lookup::Named(&sema, "gMyGlobal");
 if (!D) printf("gMyGlobal decl not found!\n");
 clang::VarDecl* VD = llvm::cast<clang::VarDecl>(D);
-void* addr2 = gCling->getAddressOfGlobal(clang::GlobalDecl(VD), &fromJIT);
+void* addr2 = thisCling.getAddressOfGlobal(clang::GlobalDecl(VD), &fromJIT);
 if (!fromJIT) printf("gMyGlobal should come from JIT!\n");
 printf("gMyGlobal: %s\n", comp(addr1, addr2)); // CHECK: gMyGlobal: equal
 
@@ -42,7 +42,7 @@ if (!ND) printf("namespace N decl not found!\n");
 fromJIT = false;
 VD = llvm::cast<clang::VarDecl>(cling::utils::Lookup::Named(&sema, "gMyGlobal", ND));
 if (!VD) printf("N::gMyGlobal decl not found!\n");
-void* addrN2 = gCling->getAddressOfGlobal(clang::GlobalDecl(VD), &fromJIT);
+void* addrN2 = thisCling.getAddressOfGlobal(clang::GlobalDecl(VD), &fromJIT);
 if (!fromJIT) printf("N::gMyGlobal should come from JIT!\n");
 printf("N::gMyGlobal: %s\n", comp(addrN1, addrN2)); //CHECK: N::gMyGlobal: equal
 
@@ -56,7 +56,7 @@ void* addrL1 = &gLibGlobal;
 fromJIT = true;
 VD = llvm::cast<clang::VarDecl>(cling::utils::Lookup::Named(&sema, "gLibGlobal"));
 if (!VD) printf("gLibGlobal decl not found!\n");
-void* addrL2 = gCling->getAddressOfGlobal(clang::GlobalDecl(VD), &fromJIT);
+void* addrL2 = thisCling.getAddressOfGlobal(clang::GlobalDecl(VD), &fromJIT);
 if (fromJIT) printf("gLibGlobal should NOT come from JIT!\n");
 printf("gLibGlobal: %s\n", comp(addrL1, addrL2)); //CHECK-NEXT: gLibGlobal: equal
 
@@ -68,10 +68,10 @@ static bool symalign(clang::Sema& sema) {
   *g2 = llvm::cast<clang::VarDecl>(cling::utils::Lookup::Named(&sema, "gByteAlign2")),
   *g3 = llvm::cast<clang::VarDecl>(cling::utils::Lookup::Named(&sema, "gByteAlign3"));
 
-  gCling->getAddressOfGlobal(clang::GlobalDecl(g0), &b0);
-  gCling->getAddressOfGlobal(clang::GlobalDecl(g1), &b1);
-  gCling->getAddressOfGlobal(clang::GlobalDecl(g2), &b2);
-  gCling->getAddressOfGlobal(clang::GlobalDecl(g3), &b3);
+  thisCling.getAddressOfGlobal(clang::GlobalDecl(g0), &b0);
+  thisCling.getAddressOfGlobal(clang::GlobalDecl(g1), &b1);
+  thisCling.getAddressOfGlobal(clang::GlobalDecl(g2), &b2);
+  thisCling.getAddressOfGlobal(clang::GlobalDecl(g3), &b3);
   return !b0 && !b1 && !b2 && !b3;
 }
 symalign(sema)

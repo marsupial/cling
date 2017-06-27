@@ -38,7 +38,7 @@ void dumpDecl(const char* title, const clang::Decl* D) {
 //  We need to fetch the global scope declaration,
 //  otherwise known as the translation unit decl.
 //
-const cling::LookupHelper& lookup = gCling->getLookupHelper();
+const cling::LookupHelper& lookup = thisCling.getLookupHelper();
 cling::LookupHelper::DiagSetting diags = cling::LookupHelper::WithDiagnostics;
 const clang::Decl* G = lookup.findScope("", diags);
 printf("G: 0x%lx\n", (unsigned long) G);

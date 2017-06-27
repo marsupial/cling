@@ -26,16 +26,16 @@ template<typename T> class aClass {
   }
 };
 .rawInput 0
-const cling::LookupHelper& lookup = gCling->getLookupHelper();
+const cling::LookupHelper& lookup = thisCling.getLookupHelper();
 cling::LookupHelper::DiagSetting diags = cling::LookupHelper::WithDiagnostics;
 llvm::SmallVector<clang::Expr*, 4> exprs;
 std::string buf;
-clang::PrintingPolicy Policy(gCling->getSema().getASTContext().getPrintingPolicy());
+clang::PrintingPolicy Policy(thisCling.getSema().getASTContext().getPrintingPolicy());
 
 lookup.findArgList("a, a", exprs, diags);
 
-exprs[0]->dumpPretty(gCling->getSema().getASTContext());
+exprs[0]->dumpPretty(thisCling.getSema().getASTContext());
 //CHECK: a
-exprs[1]->dumpPretty(gCling->getSema().getASTContext());
+exprs[1]->dumpPretty(thisCling.getSema().getASTContext());
 //CHECK: a
 .q

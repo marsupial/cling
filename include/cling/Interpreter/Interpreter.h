@@ -143,7 +143,6 @@ namespace cling {
     InvocationOptions m_Opts;
 
     ///\brief Back pointer to *this* which stores parent information.
-    /// FIXME: Will also allow to link in gCling rather than runtime define it.
     ///
     Interpreter** m_Parenting;
 
@@ -293,7 +292,7 @@ namespace cling {
 
     ///\brief Initialize runtime and C/C++ level overrides
     ///
-    ///\param[in] NoRuntime - Don't include the runtime headers / gCling
+    ///\param[in] NoRuntime - Don't include the runtime headers / thisCling
     ///\param[in] SyntaxOnly - In SyntaxOnly mode
     ///\param[out] Globals - Global symbols that need to be emitted
     ///

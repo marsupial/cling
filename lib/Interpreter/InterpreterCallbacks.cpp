@@ -156,14 +156,14 @@ namespace cling {
     }
   };
 
-  InterpreterCallbacks::InterpreterCallbacks(Interpreter* interp,
+  InterpreterCallbacks::InterpreterCallbacks(Interpreter& interp,
                              bool enableExternalSemaSourceCallbacks/* = false*/,
                         bool enableDeserializationListenerCallbacks/* = false*/,
                                              bool enablePPCallbacks/* = false*/)
     : m_Interpreter(interp), m_ExternalSemaSource(0), m_PPCallbacks(0),
       m_IsRuntime(false) {
-    Sema& SemaRef = interp->getSema();
-    ASTReader* Reader = m_Interpreter->getCI()->getModuleManager().get();
+    Sema& SemaRef = m_Interpreter.getSema();
+    ASTReader* Reader = m_Interpreter.getCI()->getModuleManager().get();
     ExternalSemaSource* externalSemaSrc = SemaRef.getExternalSource();
     // Disable the ROOT external sema source when we have modules. In the
     // modules case the module manager is taking it's place and we don't want
@@ -174,7 +174,7 @@ namespace cling {
         // our listener.
         m_ExternalSemaSource = new InterpreterExternalSemaSource(this);
         m_ExternalSemaSource->InitializeSema(SemaRef);
-        m_Interpreter->getSema().addExternalSource(m_ExternalSemaSource);
+        m_Interpreter.getSema().addExternalSource(m_ExternalSemaSource);
 
         // FIXME: We should add a multiplexer in the ASTContext, too.
         llvm::IntrusiveRefCntPtr<ExternalASTSource>
@@ -195,7 +195,7 @@ namespace cling {
     }
 
     if (enablePPCallbacks) {
-      Preprocessor& PP = m_Interpreter->getCI()->getPreprocessor();
+      Preprocessor& PP = m_Interpreter.getCI()->getPreprocessor();
       m_PPCallbacks = new InterpreterPPCallbacks(this);
       PP.addPPCallbacks(std::unique_ptr<InterpreterPPCallbacks>(m_PPCallbacks));
     }
@@ -303,10 +303,10 @@ namespace test {
     printf("%s", "\n");
   }
 
-  SymbolResolverCallback::SymbolResolverCallback(Interpreter* interp,
+  SymbolResolverCallback::SymbolResolverCallback(Interpreter& interp,
                                                  bool resolve)
     : InterpreterCallbacks(interp), m_Resolve(resolve), m_TesterDecl(0) {
-    m_Interpreter->process("cling::test::Tester = new cling::test::TestProxy();");
+    m_Interpreter.process("cling::test::Tester = new cling::test::TestProxy();");
   }
 
   SymbolResolverCallback::~SymbolResolverCallback() { }
@@ -322,7 +322,7 @@ namespace test {
 
       // Only for demo resolve all unknown objects to cling::test::Tester
       if (!m_TesterDecl) {
-        clang::Sema& SemaR = m_Interpreter->getSema();
+        clang::Sema& SemaR = m_Interpreter.getSema();
         clang::NamespaceDecl* NSD = utils::Lookup::Namespace(&SemaR, "cling");
         NSD = utils::Lookup::Namespace(&SemaR, "test", NSD);
         m_TesterDecl = utils::Lookup::Named(&SemaR, "Tester", NSD);

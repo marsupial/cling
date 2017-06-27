@@ -25,17 +25,17 @@ using namespace cling;
 void generateNestedTransaction(int depth) {
   if (!depth)
     return;
-  cling::Interpreter::PushTransactionRAII RAIIT(gCling);
+  cling::Interpreter::PushTransactionRAII RAIIT(thisCling);
   if (depth | 0x1) { // if odd
     char buff[100];
     sprintf(buff, "int i%d;", depth);
-    gCling->process(buff);
+    thisCling.process(buff);
   } // this will cause every even transaction to be reused.
   generateNestedTransaction(--depth);
 }
 
 generateNestedTransaction(5);
-const cling::Transaction* T = gCling->getFirstTransaction();
+const cling::Transaction* T = thisCling.getFirstTransaction();
 while(T) {
   if (T->empty())
     printf("Empty transaction detected!\n");

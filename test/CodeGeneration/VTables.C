@@ -36,18 +36,18 @@ void f() {
 
 .rawInput
 
-const cling::LookupHelper& lh = gCling->getLookupHelper();
-clang::Sema& S = gCling->getSema();
+const cling::LookupHelper& lh = thisCling.getLookupHelper();
+clang::Sema& S = thisCling.getSema();
 const clang::NamedDecl* D = 0;
 
 clang::DeclContext* DC = 0;
 DC = llvm::dyn_cast_or_null<clang::DeclContext>(const_cast<clang::Decl*>(lh.findScope("C<int>")));
 D = cling::utils::Lookup::Named(&S, "S", DC);
-gCling->getAddressOfGlobal(D)
+thisCling.getAddressOfGlobal(D)
 //CHECK-NOT: (void *) 0x0
 
 D = cling::utils::Lookup::Named(&S, "f", DC);
-gCling->getAddressOfGlobal(D)
+thisCling.getAddressOfGlobal(D)
 //TODO-CHECK-NOT: (void *) 0x0
 
 .rawInput
@@ -67,7 +67,7 @@ public:
 
 DC = llvm::dyn_cast_or_null<clang::DeclContext>(const_cast<clang::Decl*>(lh.findScope("N1::N2")));
 D = cling::utils::Lookup::Named(&S, "fN2", DC);
-gCling->getAddressOfGlobal(D)
+thisCling.getAddressOfGlobal(D)
 //CHECK-NOT: (void *) 0x0
 
 .rawInput
@@ -89,10 +89,10 @@ public:
 
 DC = llvm::dyn_cast_or_null<clang::DeclContext>(const_cast<clang::Decl*>(lh.findScope("X")));
 D = cling::utils::Lookup::Named(&S, "fV", DC);
-gCling->getAddressOfGlobal(D)
+thisCling.getAddressOfGlobal(D)
 //CHECK-NOT: (void *) 0x0
 
 DC = llvm::dyn_cast_or_null<clang::DeclContext>(const_cast<clang::Decl*>(lh.findScope("X::S")));
 D = cling::utils::Lookup::Named(&S, "fS", DC);
-gCling->getAddressOfGlobal(D)
+thisCling.getAddressOfGlobal(D)
 //CHECK-NOT: (void *) 0x0

@@ -49,7 +49,7 @@ namespace cling {
 
     ///\brief Our interpreter instance.
     ///
-    Interpreter* m_Interpreter; // we don't own
+    Interpreter& m_Interpreter; // we don't own
 
     ///\brief Our custom SemaExternalSource, translating interesting events into
     /// callbacks. RefOwned by Sema & ASTContext.
@@ -88,14 +88,14 @@ namespace cling {
     ///\param[in] enablePPCallbacks  - creates a default InterpreterPPCallbacks
     ///           and attaches it to the Preprocessor.
     ///
-    InterpreterCallbacks(Interpreter* interp,
+    InterpreterCallbacks(Interpreter& interp,
                          bool enableExternalSemaSourceCallbacks = false,
                          bool enableDeserializationListenerCallbacks = false,
                          bool enablePPCallbacks = false);
 
     virtual ~InterpreterCallbacks();
 
-    cling::Interpreter* getInterpreter() const { return m_Interpreter; }
+    cling::Interpreter& getInterpreter() const { return m_Interpreter; }
     clang::ExternalSemaSource* getInterpreterExternalSemaSource() const;
 
     clang::ASTDeserializationListener*
@@ -196,7 +196,7 @@ namespace cling {
       bool m_Resolve;
       clang::NamedDecl* m_TesterDecl;
     public:
-      SymbolResolverCallback(Interpreter* interp, bool resolve = true);
+      SymbolResolverCallback(Interpreter& interp, bool resolve = true);
       ~SymbolResolverCallback();
 
       bool LookupObject(clang::LookupResult& R, clang::Scope* S);

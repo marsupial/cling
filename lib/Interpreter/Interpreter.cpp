@@ -247,7 +247,7 @@ namespace cling {
     llvm::SmallVector<llvm::StringRef, 6> Syms;
     Initialize(noRuntime || m_Opts.NoRuntime, isInSyntaxOnlyMode(), Syms);
 
-    // Commit the transactions, now that gCling is set up. It is needed for
+    // Commit the transactions, now that thisCling is set up. It is needed for
     // static initialization in these transactions through local_cxa_atexit().
     for (auto&& I: IncrParserTransactions)
       m_IncrParser->commitTransaction(I);
@@ -282,7 +282,7 @@ namespace cling {
     // We need InterpreterCallbacks only if it is a parent Interpreter.
     if (!parentInterp) {
       std::unique_ptr<InterpreterCallbacks>
-         AutoLoadCB(new AutoloadCallback(this, showSuggestions));
+         AutoLoadCB(new AutoloadCallback(*this, showSuggestions));
       setCallbacks(std::move(AutoLoadCB));
     }
 
@@ -380,13 +380,13 @@ namespace cling {
       if (LangOpts.CPlusPlus) {
         if (EmitDefinitions) {
           Strm << "namespace cling { class Interpreter; namespace runtime { "
-                  "Interpreter* const gCling=(Interpreter*)" << this << ";}}\n";
-          // If child, make sure to inject gCling into global namespace.
+                  "Interpreter& thisCling=*(Interpreter*)" << this << ";}}\n";
+          // If child, make sure to inject thisCling into global namespace.
           if (parent())
             Strm << "using namespace cling::runtime;\n";
         }
       } else {
-        Strm << "void* const gCling";
+        Strm << "void* const thisCling";
         if (EmitDefinitions)
           Strm << "=(void*)" << this;
         Strm << ";\n";
@@ -1450,7 +1450,7 @@ namespace cling {
   void Interpreter::setCallbacks(std::unique_ptr<InterpreterCallbacks> C) {
     // We need it to enable LookupObject callback.
     if (!m_Callbacks) {
-      m_Callbacks.reset(new MultiplexInterpreterCallbacks(this));
+      m_Callbacks.reset(new MultiplexInterpreterCallbacks(*this));
       // FIXME: Move to the InterpreterCallbacks.cpp;
       if (DynamicLibraryManager* DLM = getDynamicLibraryManager())
         DLM->setCallbacks(m_Callbacks.get());
@@ -1613,10 +1613,10 @@ namespace cling {
 
   namespace runtime {
     namespace internal {
-      Value EvaluateDynamicExpression(Interpreter* interp, DynamicExprInfo* DEI,
+      Value EvaluateDynamicExpression(Interpreter& interp, DynamicExprInfo* DEI,
                                       clang::DeclContext* DC) {
-        return interp->Evaluate(DEI->getExpr(), DC,
-                                DEI->isValuePrinterRequested());
+        return interp.Evaluate(DEI->getExpr(), DC,
+                               DEI->isValuePrinterRequested());
       }
     } // namespace internal
   }  // namespace runtime

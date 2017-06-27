@@ -12,34 +12,34 @@ extern "C" int printf(const char*,...);
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/Transaction.h"
 
-gCling->getDefaultOptLevel()
+thisCling.getDefaultOptLevel()
 // CHECK: (int) 2
 
-(int)gCling->getLatestTransaction()->getCompilationOpts().OptLevel
+(int)thisCling.getLatestTransaction()->getCompilationOpts().OptLevel
 // CHECK-NEXT: (int) 2
 
 {
 #pragma cling optimize(0)
-  printf("Transaction OptLevel=%d\n", (int)gCling->getLatestTransaction()->getCompilationOpts().OptLevel);
+  printf("Transaction OptLevel=%d\n", (int)thisCling.getLatestTransaction()->getCompilationOpts().OptLevel);
 }
 // CHECK-NEXT: Transaction OptLevel=0
 
 {
 #pragma cling optimize(1)
-  printf("Transaction OptLevel=%d\n", (int)gCling->getLatestTransaction()->getCompilationOpts().OptLevel);
+  printf("Transaction OptLevel=%d\n", (int)thisCling.getLatestTransaction()->getCompilationOpts().OptLevel);
 }
 // CHECK-NEXT: Transaction OptLevel=1
 
 {
 #pragma cling optimize(2)
-  printf("Transaction OptLevel=%d\n", (int)gCling->getLatestTransaction()->getCompilationOpts().OptLevel);
+  printf("Transaction OptLevel=%d\n", (int)thisCling.getLatestTransaction()->getCompilationOpts().OptLevel);
 }
 // CHECK-NEXT: Transaction OptLevel=2
 
 {
 #pragma cling optimize(0)
 #pragma cling optimize(1)
-  printf("Transaction OptLevel=%d\n", (int)gCling->getLatestTransaction()->getCompilationOpts().OptLevel);
+  printf("Transaction OptLevel=%d\n", (int)thisCling.getLatestTransaction()->getCompilationOpts().OptLevel);
 }
 // CHECK-NEXT: cling::PHOptLevel: conflicting `#pragma cling optimize` directives: was already set to 0
 // CHECK-NEXT: Ignoring higher value of 1
@@ -51,14 +51,14 @@ gCling->getDefaultOptLevel()
 // No parenthesis
 {
 #pragma cling optimize 1
-  printf("Transaction OptLevel=%d\n", (int)gCling->getLatestTransaction()->getCompilationOpts().OptLevel);
+  printf("Transaction OptLevel=%d\n", (int)thisCling.getLatestTransaction()->getCompilationOpts().OptLevel);
 }
 // CHECK-NEXT: Transaction OptLevel=1
 
 // Full functional style
 {
 #pragma cling(optimize, 3)
-  printf("Transaction OptLevel=%d\n", (int)gCling->getLatestTransaction()->getCompilationOpts().OptLevel);
+  printf("Transaction OptLevel=%d\n", (int)thisCling.getLatestTransaction()->getCompilationOpts().OptLevel);
 }
 // CHECK-NEXT: Transaction OptLevel=3
 

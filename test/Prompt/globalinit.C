@@ -16,8 +16,8 @@
 #endif
 
 void globalinit(const std::string Path = TEST_PATH) {
-  gCling->loadFile(Path + "globalinit.C.h", false); // CHECK: A::S()
-  gCling->loadFile(Path + "globalinit.C2.h", false); // CHECK: B::S()
+  thisCling.loadFile(Path + "globalinit.C.h", false); // CHECK: A::S()
+  thisCling.loadFile(Path + "globalinit.C2.h", false); // CHECK: B::S()
 }
 // CHECK: B::~S()
 // CHECK: A::~S()

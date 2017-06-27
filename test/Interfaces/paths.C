@@ -10,13 +10,13 @@
 
 #include "cling/Interpreter/Interpreter.h"
 
-gCling->AddIncludePaths(TEST_PATH "Paths/A:" TEST_PATH "Paths/B:"
+thisCling.AddIncludePaths(TEST_PATH "Paths/A:" TEST_PATH "Paths/B:"
                         TEST_PATH "Paths/C");
 #include "A.h"
 #include "B.h"
 #include "C.h"
 
-gCling->AddIncludePath(TEST_PATH "Paths/D");
+thisCling.AddIncludePath(TEST_PATH "Paths/D");
 #include "D.h"
 
 TestA

@@ -13,8 +13,8 @@
 
 .dynamicExtensions
 std::unique_ptr<cling::test::SymbolResolverCallback> SRC;
-SRC.reset(new cling::test::SymbolResolverCallback(gCling))
-gCling->setCallbacks(std::move(SRC));
+SRC.reset(new cling::test::SymbolResolverCallback(thisCling))
+thisCling.setCallbacks(std::move(SRC));
 jksghdgsjdf->getVersion() // CHECK: {{.*Interpreter.*}}
 hsdghfjagsp->Draw() // CHECK: (int) 12
 

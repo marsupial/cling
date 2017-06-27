@@ -24,7 +24,7 @@ using namespace cling;
 class A {};
 .rawInput 0
 
-const LookupHelper& lookup = gCling->getLookupHelper();
+const LookupHelper& lookup = thisCling.getLookupHelper();
 LookupHelper::DiagSetting diags = LookupHelper::WithDiagnostics;
 
 const clang::Decl* cl_A = lookup.findScope("A", diags);

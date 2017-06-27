@@ -40,8 +40,8 @@ class Inside_AnotherNext {};
 .rawInput 0
 
 
-clang::Sema& S = gCling->getSema();
-const LookupHelper& lookup = gCling->getLookupHelper();
+clang::Sema& S = thisCling.getSema();
+const LookupHelper& lookup = thisCling.getLookupHelper();
 LookupHelper::DiagSetting diags = LookupHelper::WithDiagnostics;
 
 const clang::NamedDecl *decl{nullptr};

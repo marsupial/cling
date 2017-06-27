@@ -61,10 +61,10 @@ class A {
 .rawInput 0
 
 
-const cling::LookupHelper& lookup = gCling->getLookupHelper();
+const cling::LookupHelper& lookup = thisCling.getLookupHelper();
 cling::LookupHelper::DiagSetting diags = cling::LookupHelper::WithDiagnostics;
 std::string buf;
-clang::PrintingPolicy Policy(gCling->getSema().getASTContext().getPrintingPolicy());
+clang::PrintingPolicy Policy(thisCling.getSema().getASTContext().getPrintingPolicy());
 
 //
 //  We need to fetch the global scope declaration,

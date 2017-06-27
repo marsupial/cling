@@ -16,8 +16,8 @@
 #include <clang/Frontend/CompilerInstance.h>
 
 using namespace cling::utils;
-DiagnosticsStore LC(gCling->getCI()->getDiagnostics(), false);
-gCling->echo("error");
+DiagnosticsStore LC(thisCling.getCI()->getDiagnostics(), false);
+thisCling.echo("error");
 
 // When preprocessed out is supported, test that reporting works too.
 // LC.Report();

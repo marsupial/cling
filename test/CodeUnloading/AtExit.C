@@ -40,7 +40,7 @@ atexit(atexit_3);
 cling::Interpreter * gChild = 0;
 {
   const char* kArgV[1] = {"cling"};
-  cling::Interpreter ChildInterp(*gCling, 1, kArgV);
+  cling::Interpreter ChildInterp(thisCling, 1, kArgV);
   gChild = &ChildInterp;
   ChildInterp.declare("static void atexit_c() { printf(\"atexit_c %d\\n\", gChild==__dso_handle); }");
   ChildInterp.execute("atexit(atexit_c);");
@@ -49,7 +49,7 @@ cling::Interpreter * gChild = 0;
 // CHECK: atexit_c 1
 
 static void atexit_f() {
-  printf("atexit_f %s\n", gCling==__dso_handle ? "true" : "false");
+  printf("atexit_f %s\n", &thisCling==__dso_handle ? "true" : "false");
 }
 at_quick_exit(atexit_f);
 

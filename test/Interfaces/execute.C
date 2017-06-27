@@ -10,7 +10,7 @@
 
 #include "cling/Interpreter/Interpreter.h"
 
-gCling->execute("1;");
+thisCling.execute("1;");
 extern "C" int printf(const char* fmt, ...);
-gCling->execute("printf(\"%d\", printf(\"%d\",1));");
+thisCling.execute("printf(\"%d\", printf(\"%d\",1));");
 // CHECK: 11
