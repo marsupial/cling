@@ -204,6 +204,13 @@ if (LLVM_COMPILER_IS_GCC_COMPATIBLE)
   foreach (check_flag "-Wno-nested-anon-types" "-Wno-covered-switch-default" "-Wno-unused-local-typedef")
     cling_add_cxx_flag(CMAKE_CXX_FLAGS ${check_flag})
   endforeach ()
+
+  option (CLING_PEDANTIC "Pedantic warnings as errors." OFF)
+  if (CLING_PEDANTIC)
+    if(NOT MSVC)
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror -Wpedantic")
+    endif()
+  endif()
 endif ()
 
 # Lots of cling is needed at runtime (e.g. Value, or Interpreter::Evaluate()).
