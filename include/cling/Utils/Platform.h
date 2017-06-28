@@ -77,11 +77,12 @@ namespace platform {
   /// \param [in] Cmd - Command and arguments to invoke.
   /// \param [out] Buf - Buffer to write output to.
   /// \param [in] StdErrToStdOut - Redirect stderr to stdout.
+  /// \param [out] ExitCode - The process exit code if wanted.
   ///
   /// \returns whether any output was written to Buf
   ///
   bool Popen(const std::string& Cmd, llvm::SmallVectorImpl<char>& Buf,
-             bool StdErrToStdOut = false);
+             bool StdErrToStdOut = false, int* ExitCode = nullptr);
 
 #if defined(LLVM_ON_UNIX)
 

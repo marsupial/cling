@@ -598,7 +598,8 @@ static void CloseHandle(HANDLE H) {
     ReportLastError("CloseHandle");
 }
 
-bool Popen(const std::string& Cmd, llvm::SmallVectorImpl<char>& Buf, bool RdE) {
+bool Popen(const std::string& Cmd, llvm::SmallVectorImpl<char>& Buf, bool RedrE,
+           int* ExitCode) {
   Buf.resize(0);
 
   SECURITY_ATTRIBUTES saAttr;
@@ -611,7 +612,7 @@ bool Popen(const std::string& Cmd, llvm::SmallVectorImpl<char>& Buf, bool RdE) {
 
   if (::CreatePipe(&hOutputReadTmp, &hOutputWrite, &saAttr, 0) == 0)
     return false;
-  if (RdE) {
+  if (RedrE) {
     if (::DuplicateHandle(Process, hOutputWrite, Process, &hErrorWrite, 0, TRUE,
                           DUPLICATE_SAME_ACCESS) == 0) {
       ReportLastError("DuplicateHandle");
@@ -629,7 +630,7 @@ bool Popen(const std::string& Cmd, llvm::SmallVectorImpl<char>& Buf, bool RdE) {
     ReportLastError("DuplicateHandle");
     ::CloseHandle(hOutputReadTmp);
     ::CloseHandle(hOutputWrite);
-    if (RdE)
+    if (RedrE)
       ::CloseHandle(hErrorWrite);
     return false;
   }
@@ -642,7 +643,7 @@ bool Popen(const std::string& Cmd, llvm::SmallVectorImpl<char>& Buf, bool RdE) {
   si.cb = sizeof(si);
   si.dwFlags = STARTF_USESTDHANDLES;
   si.hStdOutput = hOutputWrite;
-  if (RdE)
+  if (RedrE)
     si.hStdError = hErrorWrite;
 
   PROCESS_INFORMATION pi;
@@ -659,7 +660,7 @@ bool Popen(const std::string& Cmd, llvm::SmallVectorImpl<char>& Buf, bool RdE) {
   // process or else the pipe will not close when the child process exits and
   // the ReadFile will hang.
   CloseHandle(hOutputWrite);
-  if (RdE)
+  if (RedrE)
     CloseHandle(hErrorWrite);
   
   if (Result != 0) {
@@ -678,6 +679,15 @@ bool Popen(const std::string& Cmd, llvm::SmallVectorImpl<char>& Buf, bool RdE) {
       }
       if (dwRead < Chunk)
         Buf.resize(Len + dwRead);
+    }
+
+    // Get the exit code if requested.
+    if (ExitCode) {
+      ::WaitForSingleObject(pi.hProcess, INFINITE );
+      DWORD Code;
+      if (!::GetExitCodeProcess(pi.hProcess, &Code))
+        ReportLastError("GetExitCodeProcess");
+      *ExitCode = Code;
     }
 
     // Close process and thread handles.

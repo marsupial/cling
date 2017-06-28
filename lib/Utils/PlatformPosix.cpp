@@ -142,8 +142,9 @@ std::string NormalizePath(const std::string& Path) {
   return std::string();
 }
 
-bool Popen(const std::string& Cmd, llvm::SmallVectorImpl<char>& Buf, bool RdE) {
-  if (FILE *PF = ::popen(RdE ? (Cmd + " 2>&1").c_str() : Cmd.c_str(), "r")) {
+bool Popen(const std::string& Cmd, llvm::SmallVectorImpl<char>& Buf, bool RedrE,
+           int* Result) {
+  if (FILE *PF = ::popen(RedrE ? (Cmd + " 2>&1").c_str() : Cmd.c_str(), "r")) {
     Buf.resize(0);
     const size_t Chunk = Buf.capacity_in_bytes();
     while (true) {
@@ -155,7 +156,9 @@ bool Popen(const std::string& Cmd, llvm::SmallVectorImpl<char>& Buf, bool RdE) {
         break;
       }
     }
-    ::pclose(PF);
+    const int Rval = ::pclose(PF);
+    if (Result)
+      *Result = Rval;
     return !Buf.empty();
   }
   return false;
