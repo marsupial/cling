@@ -617,9 +617,9 @@ namespace {
     return Call.get();
   }
 
-  static bool VSError(clang::Sema* Sema, clang::Expr* E, llvm::StringRef Err) {
-    DiagnosticsEngine& Diags = Sema->getDiagnostics();
-    Diags.Report(E->getLocStart(),
+  static bool VSError(Interpreter& Interp, llvm::StringRef Err) {
+    DiagnosticsEngine& Diags = Interp.getDiagnostics();
+    Diags.Report(Interp.getSourceLocation(),
                  Diags.getCustomDiagID(
                      clang::DiagnosticsEngine::Level::Error,
                      "ValueExtractionSynthesizer could not find: '%0'."))
@@ -638,12 +638,12 @@ namespace {
 
     m_Sema->LookupQualifiedName(R, NSD);
     if (R.empty())
-      return VSError(m_Sema, E, "cling_ValueExtraction");
+      return VSError(m_Interp, "cling_ValueExtraction");
 
     CXXScopeSpec CSS;
     m_ValueSynth = m_Sema->BuildDeclarationNameExpr(CSS, R, /*ADL*/false).get();
     if (!m_ValueSynth)
-      return VSError(m_Sema, E, "cling_ValueExtraction");
+      return VSError(m_Interp, "cling_ValueExtraction");
     return true;
   }
 } // end namespace cling
