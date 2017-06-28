@@ -12,6 +12,7 @@ set( LLVM_LINK_COMPONENTS
 )
 
 add_cling_library(clingMetaProcessor OBJECT
+  BuiltinCommands.cpp
   Commands.cpp
   Display.cpp
   InputValidator.cpp
