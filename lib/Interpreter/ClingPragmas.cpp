@@ -16,7 +16,6 @@
 
 #include "clang/AST/ASTContext.h"
 #include "clang/Basic/TokenKinds.h"
-#include "clang/Frontend/CompilerInstance.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Lex/LiteralSupport.h"
 #include "clang/Lex/Token.h"
@@ -145,7 +144,7 @@ namespace {
       // We have to be on the global context. At that point we are in a
       // wrapper function so the parent context must be the global.
       TranslationUnitDecl* TU =
-      m_Interp.getCI()->getASTContext().getTranslationUnitDecl();
+      m_Interp.get<ASTContext>().getTranslationUnitDecl();
       Sema::ContextAndScopeRAII pushedDCAndS(m_Interp.getSema(),
                                             TU, m_Interp.getSema().TUScope);
       Interpreter::PushTransactionRAII pushedT(&m_Interp);
@@ -241,7 +240,7 @@ namespace {
 }
 
 void cling::addClingPragmas(Interpreter& interp) {
-  Preprocessor& PP = interp.getCI()->getPreprocessor();
+  Preprocessor& PP = interp.get<Preprocessor>();
   // PragmaNamespace / PP takes ownership of sub-handlers.
   PP.AddPragmaHandler(StringRef(), new ClingPragmaHandler(interp));
 }

@@ -23,7 +23,6 @@
 #include "llvm/Config/config.h"
 
 #include "clang/Basic/LangOptions.h"
-#include "clang/Frontend/CompilerInstance.h"
 
 namespace {
   ///\brief Class that specialises the textinput TabCompletion to allow Cling
@@ -150,7 +149,7 @@ namespace cling {
   void UserInterface::PrintLogo() {
     llvm::raw_ostream& outs = m_MetaProcessor->getOuts();
     const clang::LangOptions& LangOpts
-      = m_MetaProcessor->getInterpreter().getCI()->getLangOpts();
+      = m_MetaProcessor->getInterpreter().get<clang::LangOptions>();
     if (LangOpts.CPlusPlus) {
       outs << "\n"
         "****************** CLING ******************\n"

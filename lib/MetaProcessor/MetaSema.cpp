@@ -19,7 +19,7 @@
 
 #include "clang/AST/ASTContext.h"
 #include "clang/Basic/SourceManager.h"
-#include "clang/Frontend/CompilerInstance.h"
+#include "clang/Frontend/CodeGenOptions.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Serialization/ASTReader.h"
 
@@ -253,7 +253,7 @@ namespace cling {
   }
 
   void MetaSema::actOndebugCommand(llvm::Optional<int> mode) const {
-    clang::CodeGenOptions& CGO = m_Interpreter.getCI()->getCodeGenOpts();
+    clang::CodeGenOptions& CGO = m_Interpreter.get<clang::CodeGenOptions>();
     if (!mode) {
       bool flag = CGO.getDebugInfo() == clang::codegenoptions::NoDebugInfo;
       if (flag)
@@ -392,7 +392,7 @@ namespace cling {
   }
 
   void MetaSema::actOnfileExCommand() const {
-    const clang::SourceManager& SM = m_Interpreter.getCI()->getSourceManager();
+    const clang::SourceManager& SM = m_Interpreter.get<clang::SourceManager>();
     SM.getFileManager().PrintStats();
 
     m_MetaProcessor.getOuts() << "\n***\n\n";
@@ -403,7 +403,7 @@ namespace cling {
       m_MetaProcessor.getOuts() << "\n";
     }
     /* Only available in clang's trunk:
-    clang::ASTReader* Reader = m_Interpreter.getCI()->getModuleManager();
+    clang::ASTReader* Reader = m_Interpreter.get<ASTReader*>();
     const clang::serialization::ModuleManager& ModMan
       = Reader->getModuleManager();
     for (clang::serialization::ModuleManager::ModuleConstIterator I
@@ -465,7 +465,7 @@ namespace cling {
       int ret = std::system(trimmed.str().c_str());
 
       // Build the result
-      clang::ASTContext& Ctx = m_Interpreter.getCI()->getASTContext();
+      clang::ASTContext& Ctx = m_Interpreter.get<clang::ASTContext>();
       if (result) {
         *result = Value(Ctx.IntTy, m_Interpreter);
         result->getAs<long long>() = ret;

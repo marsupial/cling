@@ -16,7 +16,6 @@
 #include "cling/Utils/ParserStateRAII.h"
 
 #include "clang/AST/ASTContext.h"
-#include "clang/Frontend/CompilerInstance.h"
 #include "clang/Parse/Parser.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
 #include "clang/Sema/Scope.h"
@@ -1942,7 +1941,7 @@ namespace cling {
       Cache = m_Interpreter->getLatestTransaction();
       m_StringTy[kWCharString] = getType(this, "std::wstring");
 
-      const clang::LangOptions& LO = m_Interpreter->getCI()->getLangOpts();
+      const clang::LangOptions& LO = m_Interpreter->get<clang::LangOptions>();
       if (LO.CPlusPlus11) {
         m_StringTy[kUTF16Str] = getType(this, "std::u16string");
         m_StringTy[kUTF32Str] = getType(this, "std::u32string");

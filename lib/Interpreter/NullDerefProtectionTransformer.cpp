@@ -18,7 +18,6 @@
 #include "clang/AST/Expr.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Basic/SourceLocation.h"
-#include "clang/Frontend/CompilerInstance.h"
 #include "clang/Sema/Lookup.h"
 
 #include <bitset>
@@ -28,7 +27,7 @@ using namespace clang;
 
 namespace cling {
   NullDerefProtectionTransformer::NullDerefProtectionTransformer(Interpreter* I)
-    : ASTTransformer(&I->getCI()->getSema()), m_Interp(I) {
+    : ASTTransformer(&I->get<Sema>()), m_Interp(I) {
   }
 
   NullDerefProtectionTransformer::~NullDerefProtectionTransformer()
@@ -51,8 +50,8 @@ namespace cling {
 
   public:
     PointerCheckInjector(Interpreter& I)
-      : m_Interp(I), m_Sema(I.getCI()->getSema()),
-        m_Context(I.getCI()->getASTContext()),
+      : m_Interp(I), m_Sema(I.get<Sema>()),
+        m_Context(I.get<ASTContext>()),
         m_clingthrowIfInvalidPointerCache(0) {}
 
     ~PointerCheckInjector() {

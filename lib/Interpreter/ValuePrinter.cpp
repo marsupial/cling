@@ -23,7 +23,6 @@
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/Type.h"
-#include "clang/Frontend/CompilerInstance.h"
 
 #include "llvm/Support/Format.h"
 #include "llvm/ExecutionEngine/GenericValue.h"
@@ -133,7 +132,7 @@ struct AccessCtrlRAII_t {
   clang::LangOptions& LangOpts;
 
   AccessCtrlRAII_t(cling::Interpreter& Interp):
-    LangOpts(const_cast<clang::LangOptions&>(Interp.getCI()->getLangOpts())) {
+    LangOpts(Interp.get<clang::LangOptions>()) {
     savedAccessControl = LangOpts.AccessControl;
     LangOpts.AccessControl = false;
   }
