@@ -8,12 +8,8 @@
 //------------------------------------------------------------------------------
 
 #include "cling/Interpreter/Interpreter.h"
-#include "cling/Utils/Paths.h"
-#ifdef LLVM_ON_WIN32
-#include "cling/Utils/Platform.h"
-#endif
-#include "ClingUtils.h"
 
+#include "ClingUtils.h"
 #include "DynamicLookup.h"
 #include "ExternalInterpreterSource.h"
 #include "ForwardDeclPrinter.h"
@@ -35,7 +31,11 @@
 #include "cling/Utils/AST.h"
 #include "cling/Utils/Casting.h"
 #include "cling/Utils/Output.h"
+#include "cling/Utils/Paths.h"
 #include "cling/Utils/SourceNormalization.h"
+#ifdef CLING_WIN_SEH_EXCEPTIONS
+#include "cling/Utils/Platform.h"
+#endif
 
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/GlobalDecl.h"
