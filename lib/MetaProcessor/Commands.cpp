@@ -67,6 +67,42 @@ CommandHandler::Unescape(llvm::StringRef Str) {
   return Out;
 }
 
+template <class T>
+static llvm::Optional<T> ArgToOptional(llvm::StringRef Arg, bool* WasBool) {
+  T Val;
+  // Returns true on error!
+  if (Arg.getAsInteger(10, Val)) {
+    if (Arg.equals_lower("true"))
+      Val = 1;
+    else if (Arg.equals_lower("false"))
+      Val = 0;
+    else
+      return llvm::Optional<T>();
+
+    if (WasBool)
+      *WasBool = true;
+  } else if (WasBool)
+    *WasBool = false;
+
+  return Val;
+}
+
+template <>
+llvm::Optional<unsigned> CommandHandler::Optional<unsigned>(Argument Arg,
+                                                            bool* WasBool) {
+  return ArgToOptional<unsigned>(Arg, WasBool);
+}
+
+template <>
+llvm::Optional<int> CommandHandler::Optional<int>(Argument Arg, bool* WasBool) {
+  return ArgToOptional<int>(Arg, WasBool);
+}
+
+template <>
+llvm::Optional<bool> CommandHandler::Optional<bool>(Argument Arg, bool* WasBool) {
+  return ArgToOptional<bool>(Arg, WasBool);
+}
+
 llvm::StringRef
 CommandHandler::Split(llvm::StringRef Str, SplitArgumentsList& Out,
                       unsigned Flags, llvm::StringRef Separators) {
@@ -488,19 +524,37 @@ CommandHandler::CommandID CommandHandler::AddCommand<ObjEscapedFunction::Dual>(
   return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help));
 }
 
+bool CommandHandler::Alias(std::string Name, CommandID ID) {
+  return false;
+}
+
 CommandResult CommandHandler::Execute(const Invocation& I) {
   SplitArguments Args;
-  const unsigned Flags = kPopFirstArgument | kSplitWithGrouping;
-  llvm::StringRef CmdName = Split(I.Args, Args, Flags);
+  llvm::StringRef CmdName;
+  if (!I.Args.empty()) {
+    CmdName = I.Cmd;
+    Split(I.Args, Args, kSplitWithGrouping);
+  } else
+    CmdName = Split(I.Cmd, Args, kPopFirstArgument | kSplitWithGrouping);
+
   const auto Cmds = m_Callbacks.equal_range(CmdName);
   if (Cmds.first == Cmds.second)
     return kCmdNotFound;
+
+  // Build the new Invocation with CmdName and Args properly split and make
+  // sure CmdHandler points to this.
+  const Invocation Adjusted = {
+      CmdName, I.Interp, I.Out, *this, I.Val,
+      !I.Args.empty()
+          ? I.Args
+          : I.Cmd.substr((CmdName.data() + CmdName.size()) - I.Cmd.data()),
+  };
 
   // Hold the escaped arguemnts here, so it only needs to be done once.
   std::vector<std::string> ArgV;
 
   for (auto Cmd = Cmds.first; Cmd != Cmds.second; ++Cmd) {
-    const CommandResult Result = Cmd->second->Dispatch(I, Args, ArgV);
+    const CommandResult Result = Cmd->second->Dispatch(Adjusted, Args, ArgV);
     if (Result != kCmdSuccess)
       return Result;
   }
@@ -508,7 +562,7 @@ CommandResult CommandHandler::Execute(const Invocation& I) {
 }
 
 CommandResult Invocation::Execute(StringRef Cmd, llvm::raw_ostream* OS) const {
-  const Invocation I = { Cmd, Interp, OS ? *OS : Out, CmdHandler, Val };
+  const Invocation I = { Cmd, Interp, OS ? *OS : Out, CmdHandler, Val, "" };
   return CmdHandler.Execute(I);
 }
 

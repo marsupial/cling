@@ -320,7 +320,7 @@ namespace {
       return false;
 
     DiagnosticErrorTrap Trap(PP.getDiagnostics());
-    meta::Invocation Invok = {Cmd, m_Interp, cling::outs(), *Cmds, nullptr};
+    meta::Invocation Invok = {Cmd, m_Interp, cling::outs(), *Cmds, nullptr, ""};
     if (Cmds->Execute(Invok) == meta::kCmdSuccess)
       return true;
 

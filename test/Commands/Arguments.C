@@ -26,7 +26,7 @@ static void DumpArgs(llvm::StringRef Str, llvm::raw_ostream& Out,
   for (auto&& A : Args) {
    	Out << "  '" << A.first << "'";
   	if (A.second) Out << " escaped";
-  	Out << "\n";
+  	  Out << "\n";
   }
 }
 
@@ -37,9 +37,9 @@ public:
 
   virtual CommandResult Execute(const Invocation& I) {
     Outs = &I.Out;
-    I.Out << "'" << I.Args << "'\n";
+    I.Out << "'" << I.Cmd << "'\n";
 
-	DumpArgs(I.Args, I.Out);
+	DumpArgs(I.Cmd, I.Out);
 
     return kCmdSuccess;
   }

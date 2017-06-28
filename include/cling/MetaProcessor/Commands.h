@@ -46,8 +46,8 @@ namespace cling {
 
     struct Invocation {
       typedef llvm::StringRef StringRef;
-      ///\brief Command arguments.
-      StringRef Args;
+      ///\brief The name of the command as it was invoked.
+      StringRef Cmd;
 
       ///\brief Interpreter to operate on
       Interpreter& Interp;
@@ -60,6 +60,9 @@ namespace cling {
 
       ///\brief Value the command may create
       Value* Val;
+
+      ///\brief Command arguments.
+      StringRef Args;
 
       ///\brief Executes antother command
       ///
@@ -180,6 +183,16 @@ namespace cling {
       ///
       static std::string Unescape(llvm::StringRef Str);
 
+      ///\brief Convert a string to an Optional argument.
+      ///
+      ///\param[in] Arg - String to operate on.
+      ///\param[out] WasBool - Whether the string was converted as a boolean.
+      ///
+      ///\returns An llvm::Optional<> representation of the string.
+      ///
+      template <class T>
+      static llvm::Optional<T> Optional(Argument Arg, bool* WasBool = nullptr);
+
       ///\brief Add a given command
       ///
       ///\param[in] Name - The command name.
@@ -202,6 +215,16 @@ namespace cling {
         typename Supported<T>::type F(Obj);
         return AddCommand(std::move(Name), std::move(F), std::move(Help));
       }
+
+      ///\brief Alias a new command name to an existing command.
+      ///
+      ///\param[in] Name - The name to invoke with.
+      ///\param[in] ID - The original command name.
+      ///
+      ///\returns True if success, otherwise false.
+      ///
+      bool
+      Alias(std::string Name, CommandID ID);
 
       ///\brief Remove a previously registered command, and sets it to an
       //// invalid value.

@@ -40,9 +40,9 @@ static CommandResult DoTwoArgs(const Invocation& I, llvm::StringRef Arg1, llvm::
   return kCmdSuccess; 
 }
 
-Cmds.AddCommand("LLVM", DoOneLArg, "");
+Cmds.AddCommand("LLVM", &DoOneLArg, "");
 Cmds.AddCommand("STD", &DoOneSArg, "");
-Cmds.AddCommand("TWO", DoTwoArgs, "");
+Cmds.AddCommand("TWO", &DoTwoArgs, "");
 
 
 #pragma cling LLVM  A0 A1 A2 { A3, A4, A5 }  "ESC\tSEQ"
