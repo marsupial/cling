@@ -11,8 +11,8 @@
 #include "cling/MetaProcessor/MetaProcessor.h"
 #include "cling/UserInterface/UserInterface.h"
 
+#include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/LangOptions.h"
-#include "clang/Frontend/CompilerInstance.h"
 #include "clang/FrontendTool/Utils.h"
 
 #include "llvm/Support/Signals.h"
@@ -30,19 +30,19 @@
 
 // If we are running with -verify a reported has to be returned as unsuccess.
 // This is relevant especially for the test suite.
-static int checkDiagErrors(clang::CompilerInstance* CI, unsigned* OutErrs = 0) {
+static int checkDiagErrors(cling::Interpreter& I, unsigned* OutErrs = 0) {
+  using namespace clang;
+  DiagnosticConsumer* Client = I.getDiagnostics().getClient();
+  unsigned Errs = Client->getNumErrors();
 
-  unsigned Errs = CI->getDiagnostics().getClient()->getNumErrors();
-
-  if (CI->getDiagnosticOpts().VerifyDiagnostics) {
+  if (I.get<DiagnosticOptions>().VerifyDiagnostics) {
     // If there was an error that came from the verifier we must return 1 as
     // an exit code for the process. This will make the test fail as expected.
-    clang::DiagnosticConsumer* Client = CI->getDiagnostics().getClient();
     Client->EndSourceFile();
     Errs = Client->getNumErrors();
 
     // The interpreter expects BeginSourceFile/EndSourceFiles to be balanced.
-    Client->BeginSourceFile(CI->getLangOpts(), &CI->getPreprocessor());
+    Client->BeginSourceFile(I.get<LangOptions>(), &I.get<Preprocessor>());
   }
 
   if (OutErrs)
@@ -88,9 +88,9 @@ int main( int argc, char **argv ) {
       // If output requested and execution succeeded let the DiagnosticsEngine
       // determine the result code
       if (Opts.CompilerOpts.HasOutput && ExecuteCompilerInvocation(CI))
-        return checkDiagErrors(CI);
+        return checkDiagErrors(Interp);
 
-      checkDiagErrors(CI, &ErrsReported);
+      checkDiagErrors(Interp, &ErrsReported);
     }
 
     // If no errors have been reported, try perror
@@ -138,5 +138,5 @@ int main( int argc, char **argv ) {
   ::fflush(stdout);
   ::fflush(stderr);
 
-  return checkDiagErrors(Interp.getCI());
+  return checkDiagErrors(Interp);
 }

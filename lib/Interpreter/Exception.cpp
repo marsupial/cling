@@ -14,7 +14,6 @@
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Utils/Validation.h"
 
-#include "clang/Frontend/CompilerInstance.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaDiagnostic.h"
@@ -37,14 +36,14 @@ void* cling_runtime_internal_throwIfInvalidPointer(void* Interp, void* Expr,
   // function in this specific order.
   if (!Arg) {
     cling::Interpreter* I = (cling::Interpreter*)Interp;
-    clang::Sema& S = I->getCI()->getSema();
+    clang::Sema& S = I->getSema();
     // Print a nice backtrace.
     I->getCallbacks()->PrintStackTrace();
     throw cling::InvalidDerefException(&S, E,
           cling::InvalidDerefException::DerefType::NULL_DEREF);
   } else if (!cling::utils::isAddressValid(Arg)) {
     cling::Interpreter* I = (cling::Interpreter*)Interp;
-    clang::Sema& S = I->getCI()->getSema();
+    clang::Sema& S = I->getSema();
     // Print a nice backtrace.
     I->getCallbacks()->PrintStackTrace();
     throw cling::InvalidDerefException(&S, E,

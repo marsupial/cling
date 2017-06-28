@@ -13,7 +13,6 @@
 
 #include "clang/AST/ASTContext.h"
 #include "clang/Sema/CodeCompleteConsumer.h"
-#include "clang/Frontend/CompilerInstance.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Serialization/ASTReader.h"
@@ -163,7 +162,7 @@ namespace cling {
     : m_Interpreter(interp), m_ExternalSemaSource(0), m_PPCallbacks(0),
       m_IsRuntime(false) {
     Sema& SemaRef = interp->getSema();
-    ASTReader* Reader = m_Interpreter->getCI()->getModuleManager().get();
+    ASTReader* Reader = m_Interpreter->get<ASTReader*>();
     ExternalSemaSource* externalSemaSrc = SemaRef.getExternalSource();
     // Disable the ROOT external sema source when we have modules. In the
     // modules case the module manager is taking it's place and we don't want
@@ -195,7 +194,7 @@ namespace cling {
     }
 
     if (enablePPCallbacks) {
-      Preprocessor& PP = m_Interpreter->getCI()->getPreprocessor();
+      Preprocessor& PP = m_Interpreter->get<Preprocessor>();
       m_PPCallbacks = new InterpreterPPCallbacks(this);
       PP.addPPCallbacks(std::unique_ptr<InterpreterPPCallbacks>(m_PPCallbacks));
     }

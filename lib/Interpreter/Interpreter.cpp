@@ -51,6 +51,7 @@
 #include "clang/Parse/Parser.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaDiagnostic.h"
+#include "clang/Serialization/ASTReader.h"
 
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -183,6 +184,30 @@ namespace cling {
 
   template <> Parser& Interpreter::get<Parser>() const {
     return *m_IncrParser->getParser();
+  }
+
+  template <> Preprocessor& Interpreter::get<Preprocessor>() const {
+      return getCI()->getPreprocessor();
+  }
+
+  template <> SourceManager& Interpreter::get<SourceManager>() const {
+      return getCI()->getSourceManager();
+  }
+
+  template <> FileManager& Interpreter::get<FileManager>() const {
+      return getCI()->getFileManager();
+  }
+
+  template <> DiagnosticOptions& Interpreter::get<DiagnosticOptions>() const {
+    return getCI()->getDiagnosticOpts();
+  }
+
+  template <> CodeGenOptions& Interpreter::get<CodeGenOptions>() const {
+    return getCI()->getCodeGenOpts();
+  }
+
+  template <> ASTReader* Interpreter::get<ASTReader*>() const {
+      return getCI()->getModuleManager().get();
   }
 
   Sema& Interpreter::getSema() const {

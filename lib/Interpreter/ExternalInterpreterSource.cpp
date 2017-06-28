@@ -14,7 +14,6 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTDiagnostic.h"
 #include "clang/AST/ASTImporter.h"
-#include "clang/Frontend/CompilerInstance.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/Sema.h"
 
@@ -72,19 +71,19 @@ namespace cling {
         m_ParentInterpreter(parent), m_ChildInterpreter(child) {
 
     clang::DeclContext *parentTUDeclContext =
-      m_ParentInterpreter->getCI()->getASTContext().getTranslationUnitDecl();
+      m_ParentInterpreter->get<ASTContext>().getTranslationUnitDecl();
 
     clang::DeclContext *childTUDeclContext =
-      m_ChildInterpreter->getCI()->getASTContext().getTranslationUnitDecl();
+      m_ChildInterpreter->get<ASTContext>().getTranslationUnitDecl();
 
     // Also keep in the map of Decl Contexts the Translation Unit Decl Context
     m_ImportedDeclContexts[childTUDeclContext] = parentTUDeclContext;
 
-    FileManager &childFM = m_ChildInterpreter->getCI()->getFileManager();
-    FileManager &parentFM = m_ParentInterpreter->getCI()->getFileManager();
+    FileManager &childFM = m_ChildInterpreter->get<FileManager>();
+    FileManager &parentFM = m_ParentInterpreter->get<FileManager>();
 
-    ASTContext &fromASTContext = m_ParentInterpreter->getCI()->getASTContext();
-    ASTContext &toASTContext = m_ChildInterpreter->getCI()->getASTContext();
+    ASTContext &fromASTContext = m_ParentInterpreter->get<ASTContext>();
+    ASTContext &toASTContext = m_ChildInterpreter->get<ASTContext>();
     ClingASTImporter* importer
       = new ClingASTImporter(toASTContext, childFM, fromASTContext, parentFM,
                              /*MinimalImport : ON*/ true, *this);
@@ -202,7 +201,7 @@ namespace cling {
       // for this Name.
       std::string name = childDeclName.getAsString();
       IdentifierTable &parentIdentifierTable =
-                            m_ParentInterpreter->getCI()->getASTContext().Idents;
+                            m_ParentInterpreter->get<ASTContext>().Idents;
       IdentifierInfo &parentIdentifierInfo =
                             parentIdentifierTable.get(name);
       parentDeclName = DeclarationName(&parentIdentifierInfo);
@@ -253,7 +252,7 @@ namespace cling {
     // Filter the decls from the external source using the stem information
     // stored in Sema.
     StringRef filter =
-      m_ChildInterpreter->getCI()->getPreprocessor().getCodeCompletionFilter();
+      m_ChildInterpreter->get<Preprocessor>().getCodeCompletionFilter();
     for (DeclContext::decl_iterator IDeclContext =
                                       parentDeclContext->decls_begin(),
                                     EDeclContext =

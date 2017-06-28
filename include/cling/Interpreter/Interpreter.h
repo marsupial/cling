@@ -668,10 +668,14 @@ namespace cling {
     ///\brief Useful pattern so that one can access internal items without
     /// knowing about clang's internal structures: Intrp->get<clang::LangOpts>()
     ///
-    /// Currently implemented for Sema, ASTContext, Parser, LangOptions,
-    /// DiagnosticsEngine.
+    /// Currently implemented for Sema, ASTContext, Parser, DiagnosticsEngine,
+    /// LangOptions, Preprocessor, SourceManager, FileManager, CodeGenOptions,
+    /// and DiagnosticOptions.
     ///
-    template <typename A> A& get() const;
+    template <typename T>
+    typename std::enable_if<!std::is_pointer<T>::value, T&>::type get() const;
+    template <typename T>
+    typename std::enable_if<std::is_pointer<T>::value, T>::type get() const;
 
     //FIXME: This must be in InterpreterCallbacks.
     void installLazyFunctionCreator(void* (*fp)(const std::string&));

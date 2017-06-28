@@ -20,7 +20,6 @@
 #include "clang/AST/CanonicalType.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/Type.h"
-#include "clang/Frontend/CompilerInstance.h"
 #include "clang/Sema/Lookup.h"
 #include "clang/Sema/Overload.h"
 #include "clang/Sema/Sema.h"
@@ -156,7 +155,7 @@ namespace cling {
   }
 
   clang::ASTContext& Value::getASTContext() const {
-    return m_Interpreter->getCI()->getASTContext();
+    return m_Interpreter->get<clang::ASTContext>();
   }
 
   bool Value::isValid() const { return !getType().isNull(); }

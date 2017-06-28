@@ -13,10 +13,9 @@
 #include <cling/Interpreter/Interpreter.h>
 #include <cling/Utils/Diagnostics.h>
 #include <cling/Utils/Output.h>
-#include <clang/Frontend/CompilerInstance.h>
 
 using namespace cling::utils;
-DiagnosticsStore LC(gCling->getCI()->getDiagnostics(), false);
+DiagnosticsStore LC(gCling->getDiagnostics(), false);
 gCling->echo("error");
 
 // When preprocessed out is supported, test that reporting works too.

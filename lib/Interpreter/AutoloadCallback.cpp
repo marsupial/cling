@@ -18,7 +18,6 @@
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/DeclVisitor.h"
 #include "clang/Lex/Preprocessor.h"
-#include "clang/Frontend/CompilerInstance.h"
 
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/InterpreterCallbacks.h"
@@ -394,7 +393,7 @@ namespace cling {
       return;
 
     AutoloadingVisitor defaultArgsStateCollector;
-    Preprocessor& PP = m_Interpreter->getCI()->getPreprocessor();
+    Preprocessor& PP = m_Interpreter->get<Preprocessor>();
     for (auto I = T.decls_begin(), E = T.decls_end(); I != E; ++I)
       for (auto&& D: I->m_DGR)
         defaultArgsStateCollector.TrackDefaultArgStateOf(D, m_Map, PP);
