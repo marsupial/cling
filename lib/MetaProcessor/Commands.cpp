@@ -437,11 +437,8 @@ void CommandHandler::Clear() {
 }
 
 #define CH_ADD_COMMAND_SPEC(Type)                                              \
-  template <>                                                                  \
-  typename std::enable_if<CommandHandler::Supported<Type>::same,               \
-                          CommandHandler::CommandID>::type                     \
-  CommandHandler::AddCommand<Type>(std::string Name, Type F,                   \
-                                   std::string Help) {                         \
+  template <> CommandHandler::CommandID CommandHandler::DoAddCommand<Type>(    \
+      std::string Name, Type F, std::string Help) {                            \
     return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help)); \
   }
 

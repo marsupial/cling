@@ -144,6 +144,9 @@ namespace cling {
                value = Converted::value };
       };
 
+      // Work-horse for AddCommand to avoid name mangling errors on gcc.
+      template <class T> CommandID
+      DoAddCommand(std::string Name, T Obj, std::string Help);
 
     public:
       virtual ~CommandHandler();
@@ -204,7 +207,9 @@ namespace cling {
       ///
       template <class T>
       typename std::enable_if<Supported<T>::same, CommandID>::type
-      AddCommand(std::string Name, T Obj, std::string Help);
+      AddCommand(std::string Name, T Obj, std::string Help) {
+        return DoAddCommand(std::move(Name), std::move(Obj), std::move(Help));
+      }
 
       ///\brief Lambda variant of above.
       ///
@@ -213,7 +218,7 @@ namespace cling {
                               CommandID>::type
       AddCommand(std::string Name, T Obj, std::string Help) {
         typename Supported<T>::type F(Obj);
-        return AddCommand(std::move(Name), std::move(F), std::move(Help));
+        return DoAddCommand(std::move(Name), std::move(F), std::move(Help));
       }
 
       ///\brief Alias a new command name to an existing command.
