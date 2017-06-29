@@ -18,6 +18,10 @@
 #include <array>
 #endif
 
+#ifdef CLING_WIN_SEH_EXCEPTIONS
+#include <vector>
+#endif
+
 namespace llvm {
   class raw_ostream;
 }
@@ -201,14 +205,29 @@ inline namespace windows {
     ~WindowsSDK();
   };
 
+#ifdef CLING_WIN_SEH_EXCEPTIONS
   ///\brief Runtime override for _CxxThrowException in Interpreter.
   //
   __declspec(noreturn) void __stdcall ClingRaiseSEHException(void*, void*);
 
-  void RegisterEHFrames(uint8_t* Addr, size_t Size, uintptr_t BaseAddr,
-                        bool Block);
+  ///\brief Mirrors an internal LLVM structure that will hopefully become public
+  //
+  struct RuntimePRFunction {
+    uint8_t* Addr;
+    size_t Size;
+  };
+  typedef std::vector<RuntimePRFunction> EHFrameInfos;
 
-  void DeRegisterEHFrames(uint8_t* Addr, size_t Size);
+  ///\brief Add an 'ImageBase' and a vector of PRUNTIME_FUNCTION into lookup
+  /// for the exception handler.
+  //
+  void RegisterEHFrames(uintptr_t BaseAddr, const EHFrameInfos& Fr, bool Block);
+
+  ///\brief Remove an 'ImageBase' and all of it's PRUNTIME_FUNCTION from lookup
+  /// in the exception handler.
+  //
+  void DeRegisterEHFrames(uintptr_t BaseAddr, const EHFrameInfos& Frames);
+#endif // CLING_WIN_SEH_EXCEPTIONS
 
 } // namespace windows
 using SDK = WindowsSDK;
