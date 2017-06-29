@@ -436,93 +436,32 @@ void CommandHandler::Clear() {
   m_Callbacks.clear();
 }
 
-template <>
-CommandHandler::CommandID CommandHandler::AddCommand<FreeFunction::Base>(
-    std::string Name, FreeFunction::Base F, std::string Help) {
-  return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help));
-}
+#define CH_ADD_COMMAND_SPEC(Type)                                              \
+  template <>                                                                  \
+  typename std::enable_if<CommandHandler::Supported<Type>::same,               \
+                          CommandHandler::CommandID>::type                     \
+  CommandHandler::AddCommand<Type>(std::string Name, Type F,                   \
+                                   std::string Help) {                         \
+    return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help)); \
+  }
 
-template <>
-CommandHandler::CommandID CommandHandler::AddCommand<ObjFunction::Base>(
-    std::string Name, ObjFunction::Base F, std::string Help) {
-  return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help));
-}
+CH_ADD_COMMAND_SPEC(FreeFunction::Base)
 
-template <>
-CommandHandler::CommandID CommandHandler::AddCommand<FreeFunction::ArgList>(
-    std::string Name, FreeFunction::ArgList F, std::string Help) {
-  return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help));
-}
+CH_ADD_COMMAND_SPEC(FreeFunction::ArgList)
+CH_ADD_COMMAND_SPEC(FreeFunction::Single)
+CH_ADD_COMMAND_SPEC(FreeFunction::Dual)
+CH_ADD_COMMAND_SPEC(FreeEscapedFunction::ArgList)
+CH_ADD_COMMAND_SPEC(FreeEscapedFunction::Single)
+CH_ADD_COMMAND_SPEC(FreeEscapedFunction::Dual)
 
-template <>
-CommandHandler::CommandID
-CommandHandler::AddCommand<FreeEscapedFunction::ArgList>(
-    std::string Name, FreeEscapedFunction::ArgList F, std::string Help) {
-  return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help));
-}
+CH_ADD_COMMAND_SPEC(ObjFunction::Base)
 
-template <>
-CommandHandler::CommandID CommandHandler::AddCommand<ObjFunction::ArgList>(
-    std::string Name, ObjFunction::ArgList F, std::string Help) {
-  return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help));
-}
-
-template <>
-CommandHandler::CommandID
-CommandHandler::AddCommand<ObjEscapedFunction::ArgList>(
-    std::string Name, ObjEscapedFunction::ArgList F, std::string Help) {
-  return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help));
-}
-
-template <>
-CommandHandler::CommandID CommandHandler::AddCommand<FreeFunction::Single>(
-    std::string Name, FreeFunction::Single F, std::string Help) {
-  return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help));
-}
-
-template <>
-CommandHandler::CommandID
-CommandHandler::AddCommand<FreeEscapedFunction::Single>(
-    std::string Name, FreeEscapedFunction::Single F, std::string Help) {
-  return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help));
-}
-
-template <>
-CommandHandler::CommandID CommandHandler::AddCommand<ObjFunction::Single>(
-    std::string Name, ObjFunction::Single F, std::string Help) {
-  return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help));
-}
-
-template <>
-CommandHandler::CommandID
-CommandHandler::AddCommand<ObjEscapedFunction::Single>(
-    std::string Name, ObjEscapedFunction::Single F, std::string Help) {
-  return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help));
-}
-
-template <>
-CommandHandler::CommandID CommandHandler::AddCommand<FreeFunction::Dual>(
-    std::string Name, FreeFunction::Dual F, std::string Help) {
-  return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help));
-}
-
-template <>
-CommandHandler::CommandID CommandHandler::AddCommand<FreeEscapedFunction::Dual>(
-    std::string Name, FreeEscapedFunction::Dual F, std::string Help) {
-  return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help));
-}
-
-template <>
-CommandHandler::CommandID CommandHandler::AddCommand<ObjFunction::Dual>(
-    std::string Name, ObjFunction::Dual F, std::string Help) {
-  return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help));
-}
-
-template <>
-CommandHandler::CommandID CommandHandler::AddCommand<ObjEscapedFunction::Dual>(
-    std::string Name, ObjEscapedFunction::Dual F, std::string Help) {
-  return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help));
-}
+CH_ADD_COMMAND_SPEC(ObjFunction::ArgList)
+CH_ADD_COMMAND_SPEC(ObjFunction::Single)
+CH_ADD_COMMAND_SPEC(ObjFunction::Dual)
+CH_ADD_COMMAND_SPEC(ObjEscapedFunction::ArgList)
+CH_ADD_COMMAND_SPEC(ObjEscapedFunction::Single)
+CH_ADD_COMMAND_SPEC(ObjEscapedFunction::Dual)
 
 bool CommandHandler::Alias(std::string Name, CommandID ID) {
   return false;
