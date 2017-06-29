@@ -16,6 +16,7 @@
 #include "cling/Interpreter/Interpreter.h"
 #include "cling/Interpreter/Value.h"
 #include "cling/Utils/Output.h"
+#include "cling/MetaProcessor/Commands.h"
 
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/TargetInfo.h"
@@ -271,10 +272,17 @@ namespace cling {
       m_MetaProcessor.m_RedirectOutput->resetStdOut();
   }
 
+namespace meta {
+class CommandHandler;
+CommandResult AddBuiltinCommands(CommandHandler& Cmds);
+}
+
   MetaProcessor::MetaProcessor(Interpreter& interp, raw_ostream& outs)
     : m_Interp(interp), m_Outs(&outs) {
     m_InputValidator.reset(new InputValidator());
     m_MetaParser.reset(new MetaParser(new MetaSema(interp, *this)));
+    if (meta::CommandHandler* Cmds = interp.getCommandHandler())
+      meta::AddBuiltinCommands(*Cmds);
   }
 
   MetaProcessor::~MetaProcessor() {
