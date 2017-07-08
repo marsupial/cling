@@ -103,3 +103,68 @@ namespace Next {}
 const clang::Decl* cl_Next = lookup.findScope("Next", diags);
 printf("cl_Next: 0x%lx\n", (unsigned long) cl_Next);
 //CHECK-NEXT: cl_Next: 0x{{[1-9a-f][0-9a-f]*$}}
+
+class Members {
+    enum Enum { };
+    typedef int Type;
+    void FuncA() {}
+    void FuncB() {}
+    void FuncB(int Arg) {}
+};
+static Members sMember;
+
+static void TestScopeLookup(const clang::Decl* cl_Members) {
+  printf("cl_Members: 0x%" PRIxPTR "\n", (uintptr_t) cl_Members);
+
+  const clang::Decl* Dcl = lookup.findDataMember(cl_Members, "Enum", diags);
+  printf("Enum: 0x%" PRIxPTR "\n", (uintptr_t) Dcl);
+
+  Dcl = lookup.findDataMember(cl_Members, "Type", diags);
+  printf("Type: 0x%" PRIxPTR "\n", (uintptr_t) Dcl);
+
+  Dcl = lookup.findDataMember(cl_Members, "FuncA", diags);
+  printf("FuncA.Data: 0x%" PRIxPTR "\n", (uintptr_t) Dcl);
+
+  Dcl = lookup.findFunction(cl_Members, "FuncA", diags);
+  printf("FuncA: 0x%" PRIxPTR "\n", (uintptr_t) Dcl);
+
+  llvm::SmallVector<clang::FunctionDecl*, 2> Funcs;
+  Dcl = lookup.findFunction(cl_Members, "FuncB", diags, &Funcs);
+  printf("FuncB: 0x%" PRIxPTR ", N: %zu\n", (uintptr_t) Dcl, Funcs.size());
+
+  Dcl = lookup.findFunction(cl_Members, "FuncA", diags, &Funcs);
+  printf("FuncA: 0x%" PRIxPTR ", N: %zu\n", (uintptr_t) Dcl, Funcs.size());
+}
+
+TestScopeLookup(lookup.findDataMember(0, "sMember", diags));
+// CHECK-NEXT: cl_Members: 0x{{[1-9a-f][0-9a-f]*$}}
+// CHECK-NEXT: Enum: 0x{{0+}}
+// CHECK-NEXT: Type: 0x{{0+}}
+// CHECK-NEXT: FuncA.Data: 0x{{0+}}
+// CHECK-NEXT: FuncA: 0x{{[1-9a-f][0-9a-f]*$}}
+// CHECK-NEXT: FuncB: 0x{{[1-9a-f][0-9a-f]*}}, N: 2
+// CHECK-NEXT: FuncA: 0x{{[1-9a-f][0-9a-f]*}}, N: 1
+
+TestScopeLookup(lookup.findScope("Members", diags));
+// CHECK-NEXT: cl_Members: 0x{{[1-9a-f][0-9a-f]*$}}
+// CHECK-NEXT: Enum: 0x{{0+}}
+// CHECK-NEXT: Type: 0x{{0+}}
+// CHECK-NEXT: FuncA.Data: 0x{{0+}}
+// CHECK-NEXT: FuncA: 0x{{[1-9a-f][0-9a-f]*$}}
+// CHECK-NEXT: FuncB: 0x{{[1-9a-f][0-9a-f]*}}, N: 2
+// CHECK-NEXT: FuncA: 0x{{[1-9a-f][0-9a-f]*}}, N: 1
+
+const clang::Decl* FnTest = lookup.findFunction(0, "TestScopeLookup", diags);
+printf("TestScopeLookup: 0x%lx\n", (unsigned long) FnTest);
+// CHECK-NEXT: TestScopeLookup: 0x{{[1-9a-f][0-9a-f]*$}}
+
+extern "C" void ExternCFunc() { };
+extern "C++" void ExternCXXFunc() { };
+
+FnTest = lookup.findFunction(0, "ExternCFunc", diags);
+printf("ExternCFunc: 0x%lx\n", (unsigned long) FnTest);
+// CHECK-NEXT: ExternCFunc: 0x{{[1-9a-f][0-9a-f]*$}}
+
+FnTest = lookup.findFunction(0, "ExternCXXFunc", diags);
+printf("ExternCXXFunc: 0x%lx\n", (unsigned long) FnTest);
+// CHECK-NEXT: ExternCXXFunc: 0x{{[1-9a-f][0-9a-f]*$}}

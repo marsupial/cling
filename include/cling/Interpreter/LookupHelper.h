@@ -102,16 +102,43 @@ namespace cling {
     const clang::ClassTemplateDecl*
     findClassTemplate(llvm::StringRef Name, DiagSetting diagOnOff) const;
 
+    ///\brief Lookup a named ValueDecl based on its Decl(Context), name.
+    ///
+    ///\param [in] scopeDecl - the scope that is searched for decl, if null the
+    ///   Translation Unit is used.
+    ///\param [in] name  - the name of the decl to find.
+    ///\param [in] diagOnOff - whether to diagnose lookup failures.
+    ///\param [in] isFunction - whether to return a function if found.
+    ///\param [out] funcs - storage for multiple functions found.
+    ///\returns The first decl found or null, indicating functions will be empty
+    clang::ValueDecl*
+    lookupDecl(const clang::Decl* scope, llvm::StringRef name,
+               DiagSetting diagOnOff, bool isFunction = false,
+               llvm::SmallVectorImpl<clang::FunctionDecl*>* funcs = 0) const;
+
     ///\brief Lookup a data member based on its Decl(Context), name.
     ///
-    ///\param [in] scopeDecl - the scope (namespace or tag) that is searched for
-    ///   the function.
+    ///\param [in] scopeDecl - the scope that is searched for decl, if null the
+    ///   Translation Unit is used.
     ///\param [in] dataName  - the name of the data member to find.
     ///\param [in] diagOnOff - whether to diagnose lookup failures.
     ///\returns The value/data member found or null.
     const clang::ValueDecl* findDataMember(const clang::Decl* scopeDecl,
                                            llvm::StringRef dataName,
                                            DiagSetting diagOnOff) const;
+
+    ///\brief Lookup a named function based on its Decl(Context), name.
+    ///
+    ///\param [in] scopeDecl - the scope that is searched for decl, if null the
+    ///   Translation Unit is used.
+    ///\param [in] dataName  - the name of the function to find.
+    ///\param [in] diagOnOff - whether to diagnose lookup failures.
+    ///\param [out] funcs - multiple matches in case of function overloading.
+    ///\returns The first function found, with overload placed in funcs;
+    const clang::FunctionDecl*
+    findFunction(const clang::Decl* scopeDecl, llvm::StringRef dataName,
+                 DiagSetting diagOnOff,
+                 llvm::SmallVectorImpl<clang::FunctionDecl*>* funcs = 0) const;
 
     ///\brief Lookup a function template based on its Decl(Context), name.
     ///

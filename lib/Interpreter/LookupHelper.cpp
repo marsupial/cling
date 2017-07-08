@@ -822,30 +822,59 @@ namespace cling {
     return 0;
   }
 
-  const ValueDecl* LookupHelper::findDataMember(const clang::Decl* scopeDecl,
-                                                llvm::StringRef dataName,
-                                                DiagSetting diagOnOff) const {
-    // Lookup a data member based on its Decl(Context), name.
-
+  clang::ValueDecl* LookupHelper::lookupDecl(
+      const clang::Decl* Scope, llvm::StringRef Name, DiagSetting DiagsOnOff,
+      bool FindFunction, llvm::SmallVectorImpl<FunctionDecl*>* Funcs) const {
     Parser& P = *m_Parser;
     Sema& S = P.getActions();
     Preprocessor& PP = S.getPreprocessor();
 
-    IdentifierInfo *dataII = &PP.getIdentifierTable().get(dataName);
-    DeclarationName decl_name( dataII );
+    if (Funcs)
+      Funcs->clear();
 
-    const clang::DeclContext *dc = llvm::cast<clang::DeclContext>(scopeDecl);
-
-    Interpreter::PushTransactionRAII pushedT(m_Interpreter);
-    DeclContext::lookup_result lookup = const_cast<clang::DeclContext*>(dc)->lookup(decl_name);
-    for (DeclContext::lookup_iterator I = lookup.begin(), E = lookup.end();
-         I != E; ++I) {
-      const ValueDecl *result = dyn_cast<ValueDecl>(*I);
-      if (result && !isa<FunctionDecl>(result))
-        return result;
+    const DeclContext* DC =
+        Scope ? dyn_cast<DeclContext>(Scope)
+              : S.getASTContext().getTranslationUnitDecl();
+    if (!DC) {
+      assert(Scope && "No Transaltion Unit!");
+      const ValueDecl* VD = dyn_cast<ValueDecl>(Scope);
+      const TagDecl* TD = VD ? VD->getType()->getAsTagDecl() : nullptr;
+      if (!TD)
+        return nullptr;
+      DC = cast<DeclContext>(TD);
     }
 
-    return 0;
+    Interpreter::PushTransactionRAII PushedT(m_Interpreter);
+    clang::ValueDecl* Result = nullptr;
+    for (clang::Decl* D : DC->lookup(&PP.getIdentifierTable().get(Name))) {
+      if (clang::ValueDecl* VD = dyn_cast<ValueDecl>(D)) {
+        const bool IsFunction = isa<FunctionDecl>(VD);
+        if (IsFunction == FindFunction && !Result) {
+          Result = VD;
+          // When not gathering functions we are done.
+          if (!Funcs)
+            break;
+        }
+        if (IsFunction && Funcs)
+          Funcs->push_back(cast<FunctionDecl>(VD));
+      }
+    }
+    return Result;
+  }
+
+  const ValueDecl* LookupHelper::findDataMember(const clang::Decl* scopeDecl,
+                                                llvm::StringRef dataName,
+                                                DiagSetting diagOnOff) const {
+    // Lookup a data member based on its Decl(Context), name.
+    return lookupDecl(scopeDecl, dataName, diagOnOff);
+  }
+
+  const FunctionDecl* LookupHelper::findFunction(
+      const clang::Decl* scopeDecl, llvm::StringRef dataName,
+      DiagSetting diagOnOff,
+      llvm::SmallVectorImpl<clang::FunctionDecl*>* Fns) const {
+    const ValueDecl* VD = lookupDecl(scopeDecl, dataName, diagOnOff, true, Fns);
+    return cast_or_null<FunctionDecl>(VD);
   }
 
   static
