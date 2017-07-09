@@ -26,7 +26,7 @@
 
 typedef struct emutls_address_array {
     uintptr_t size;  /* number of elements in the 'data' array */
-    void* data[];
+    void* data[1];
 } emutls_address_array;
 
 static void emutls_shutdown(emutls_address_array *array);
@@ -322,7 +322,7 @@ static __inline uintptr_t emutls_new_data_array_size(uintptr_t index) {
  * N number of elements for data field.
  */
 static __inline uintptr_t emutls_asize(uintptr_t N) {
-    return N * sizeof(void *) + sizeof(emutls_address_array);
+    return N * sizeof(void *) + sizeof(emutls_address_array) - sizeof(emutls_address_array::data);
 }
 
 /* Returns the thread local emutls_address_array.
