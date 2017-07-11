@@ -26,6 +26,9 @@
 
 
 int main( int argc, char **argv ) {
+  // Force the UserInterface to be destroyed last, so any file manipulation,
+  // pipes, or dups are active for the entire process.
+  cling::UserInterface Ui;
 
   llvm::llvm_shutdown_obj shutdownTrigger;
 
@@ -79,7 +82,7 @@ int main( int argc, char **argv ) {
   for (const std::string& Lib : Opts.LibsToLoad)
     Interp.loadFile(Lib);
 
-  cling::UserInterface Ui(Interp);
+  Ui.attach(Interp);
   // If we are not interactive we're supposed to parse files
   if (!Opts.IsInteractive()) {
     for (const std::string &Input : Opts.Inputs) {
