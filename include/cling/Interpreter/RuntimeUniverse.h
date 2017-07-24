@@ -170,6 +170,8 @@ namespace cling {
       void copyArray(const T (*src)[N], void* placement, std::size_t size) {
         copyArray(src[0], placement, size);
       }
+      // overload for when size == 0
+      template <class T> void copyArray(const T *src, void* placement) {}
     } // end namespace internal
   } // end namespace runtime
 } // end namespace cling

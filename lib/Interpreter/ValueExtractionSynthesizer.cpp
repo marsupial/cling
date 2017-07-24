@@ -296,12 +296,12 @@ namespace {
         CallArgs.clear();
         CallArgs.push_back(E);
         CallArgs.push_back(placement);
-        size_t arrSize
-          = m_Context->getConstantArrayElementCount(constArray);
-        Expr* arrSizeExpr
-          = utils::Synthesize::IntegerLiteralExpr(*m_Context, arrSize);
-
-        CallArgs.push_back(arrSizeExpr);
+        if (size_t arrSize =
+                m_Context->getConstantArrayElementCount(constArray)) {
+          Expr* arrSizeExpr =
+              utils::Synthesize::IntegerLiteralExpr(*m_Context, arrSize);
+          CallArgs.push_back(arrSizeExpr);
+        }
         // 2.1) arrays:
         // call copyArray(T* src, void* placement, size_t size)
         Call = m_Sema->ActOnCallExpr(/*Scope*/0, m_UnresolvedCopyArray,
