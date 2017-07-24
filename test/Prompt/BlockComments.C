@@ -69,10 +69,10 @@
 /* // /* */// expected-warning {{within block comment}}
 
 /* // /* *// */
-// expected-warning@input_line_27:2 {{within block comment}}
-// expected-error@input_line_27:2 {{expected expression}}
-// expected-error@input_line_27:2 {{expected expression}}
-// expected-error@input_line_27:3 {{expected expression}}
+// expected-warning@input_line_26:2 {{within block comment}}
+// expected-error@input_line_26:2 {{expected expression}}
+// expected-error@input_line_26:2 {{expected expression}}
+// expected-error@input_line_26:3 {{expected expression}}
 
 /* //  *  // */
 
