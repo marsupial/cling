@@ -8,7 +8,7 @@ configuration:
 branches:
   only:
     - master
-    - mister
+    - dev
 
 cache:
   - builddir

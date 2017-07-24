@@ -35,7 +35,7 @@ branches:
     - /^__internal.*$/
   only:
     - master
-    - mister
+    - dev
 
 matrix:
   # Abort all builds on a single failing matrix entry.
