@@ -381,8 +381,13 @@ namespace cling {
                 m_LookupHelper->findDataMember(Scope, "gCling",
                                                LookupHelper::NoDiagnostics)) {
               using namespace utils;
-              const std::string Name = Analyze::maybeMangleDeclName(gCling);
+              std::string Name = Analyze::maybeMangleDeclName(gCling);
               if (!Name.empty()) {
+#ifdef LLVM_ON_WIN32
+                // MS mangling is purposely adding a prefix of '\x1'...why?
+                if (Name[0] == '\x1')
+                  Name = Name.substr(1, Name.size()-1);
+#endif
                 // gCling gets linked to top-most Interpreter.
                 if (!parent())
                   m_Executor->addSymbol(Name, &m_Parenting, true);
