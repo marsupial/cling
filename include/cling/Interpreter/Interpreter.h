@@ -44,6 +44,7 @@ namespace clang {
   class DiagnosticsEngine;
   class FunctionDecl;
   class GlobalDecl;
+  class HeaderSearchOptions;
   class MacroInfo;
   class NamedDecl;
   class Parser;
@@ -703,7 +704,7 @@ namespace cling {
     ///
     /// Currently implemented for Sema, ASTContext, Parser, DiagnosticsEngine,
     /// LangOptions, Preprocessor, SourceManager, FileManager, CodeGenOptions,
-    /// and DiagnosticOptions.
+    /// DiagnosticOptions, and HeaderSearchOptions.
     ///
     template <typename T>
     typename std::enable_if<!std::is_pointer<T>::value, T&>::type get() const;

@@ -364,9 +364,8 @@ namespace cling {
         return AR_Success;
     } else if (llvm::sys::fs::is_regular_file(file))
       return actOnLCommand(file, transaction);
-    else if (fResolver.resolve(file,
-                 m_Interpreter.getCI()->getHeaderSearchOpts(),
-                 action))
+    else if (fResolver.resolve(
+                 file, m_Interpreter.get<clang::HeaderSearchOptions>(), action))
       return AR_Success;
 
 #endif

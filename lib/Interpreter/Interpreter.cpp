@@ -235,6 +235,11 @@ namespace cling {
     return getCI()->getCodeGenOpts();
   }
 
+  template <>
+  HeaderSearchOptions& Interpreter::get<HeaderSearchOptions>() const {
+    return getCI()->getHeaderSearchOpts();
+  }
+
   template <> ASTReader* Interpreter::get<ASTReader*>() const {
       return getCI()->getModuleManager().get();
   }
@@ -976,11 +981,11 @@ namespace cling {
     // Ignore diagnostics when we tab complete.
     // This is because we get redefinition errors due to the import of the decls.
     clang::IgnoringDiagConsumer* ignoringDiagConsumer =
-                                            new clang::IgnoringDiagConsumer();                      
+                                            new clang::IgnoringDiagConsumer();
     childSemaRef.getDiagnostics().setClient(ignoringDiagConsumer, true);
     DiagnosticsEngine& parentDiagnostics = this->getCI()->getSema().getDiagnostics();
 
-    std::unique_ptr<DiagnosticConsumer> ownerDiagConsumer = 
+    std::unique_ptr<DiagnosticConsumer> ownerDiagConsumer =
                                                 parentDiagnostics.takeClient();
     auto clientDiagConsumer = parentDiagnostics.getClient();
     parentDiagnostics.setClient(ignoringDiagConsumer, /*owns*/ false);
