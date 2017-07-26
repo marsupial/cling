@@ -641,7 +641,7 @@ static std::string callCPrintValue(const Value& V, const void* Val,
 static std::string callPrintValue(const Value& V, const void* Val,
                                   const clang::QualType* Ty = nullptr) {
   Interpreter *Interp = V.getInterpreter();
-  if (LLVM_UNLIKELY(!Interp->getSema().getLangOpts().CPlusPlus)) {
+  if (LLVM_UNLIKELY(!Interp->get<clang::LangOptions>().CPlusPlus)) {
     assert(Ty && "C language printing requires a type.");
     return callCPrintValue(V, Val, Interp, *Ty);
   }
@@ -1116,7 +1116,7 @@ namespace cling {
       }
 
       Interpreter* Interp = V.getInterpreter();
-      if (LLVM_UNLIKELY(!Interp->getSema().getLangOpts().CPlusPlus))
+      if (LLVM_UNLIKELY(!Interp->get<clang::LangOptions>().CPlusPlus))
         return cling_PrintValue(V);
 
       // Include "RuntimePrintValue.h" only on the first printing.
