@@ -315,7 +315,8 @@ namespace cling {
 
     // Check if the current statement is now complete. If not, return to
     // prompt for more.
-    if (m_InputValidator->validate(input_line, &m_Interp.getCI()->getLangOpts())
+    if (m_InputValidator->validate(input_line,
+                                   &m_Interp.get<clang::LangOptions>())
         == InputValidator::kIncomplete) {
       compRes = Interpreter::kMoreInputExpected;
       return m_InputValidator->getExpectedIndent();
