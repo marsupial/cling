@@ -31,7 +31,7 @@
 //#include <chrono>
 //#include <thread>
 
-#include <unistd.h>
+//#include <unistd.h>
 
 // Ugh, no functions here!?
  class Rename {
@@ -54,7 +54,7 @@
    m_Restore = !m_Restore;
    // Try to make sure fs has sunch changes before continuing
    //std::this_thread::sleep_for(std::chrono::milliseconds(500));
-   ::sync();
+   //::sync();
   }
 };
 
@@ -75,7 +75,7 @@ gCling->lookupFileOrLibrary("DirC/b.h").exists()
 using namespace cling::utils;
 FileEntry feH = gCling->lookupFileOrLibrary("libTest");
 feH.filePath()
-// CHECK: (const std::string &) "{{.*}}Tree/DirB/libTest"
+// CHECK: (const std::string &) "{{.*Tree[/\]DirB[/\]}}libTest"
 feH.exists()
 // CHECK: (bool) true
 feH.isLibrary()
@@ -86,20 +86,20 @@ Rename renamer(feH.filePath());
 
 gCling->loadFile(feH)
 #ifdef TEST_RELATIVE
-  // expected-error-re@input_line_59:1 {{'{{.*}}/DirB/libTest' file not found}}
+  // expected-error-re@input_line_59:1 {{'{{.*[/\]DirB[/\]}}libTest' file not found}}
 #else
-  // expected-error-re@input_line_59:1 {{cannot open file '{{.*}}/DirB/libTest': No such file or directory}}
+  // expected-error-re@input_line_59:1 {{cannot open file '{{.*[/\]DirB[/\]}}libTest': {{[Nn]}}o such file or directory}}
 #endif
-// CHECK: (cling::Interpreter::CompilationResult) (cling::Interpreter::CompilationResult::kFailure) : (unsigned int) 1
+// CHECK: (cling::Interpreter::CompilationResult) (cling::Interpreter::CompilationResult::kFailure) : ({{(unsigned )?}}int) 1
 
 gCling->loadFile("libTest")
-// CHECK: (cling::Interpreter::CompilationResult) (cling::Interpreter::CompilationResult::kSuccess) : (unsigned int) 0
+// CHECK: (cling::Interpreter::CompilationResult) (cling::Interpreter::CompilationResult::kSuccess) : ({{(unsigned )?}}int) 0
 
 // Move file libTest.h back to libTest
 renamer();
 // ### clang's caching is interfering with how this should work!
 //gCling->loadFile(feH)
-// NOCHECK: (cling::Interpreter::CompilationResult) (cling::Interpreter::CompilationResult::kSuccess) : (unsigned int) 0
+// NOCHECK: (cling::Interpreter::CompilationResult) (cling::Interpreter::CompilationResult::kSuccess) : ({{(unsigned )?}}int) 0
 
 //LoadedFrom
 // NOCHECK: (const char *) "DirB"
