@@ -21,11 +21,6 @@ public:
     if (I) throw std::runtime_error("Thrower");
   }
   ~Thrower() { printf("~Thrower-%d\n", m_Private); }
-
-  void* operator new(size_t Size) {
-    throw std::runtime_error("Thrower.new");
-    return malloc(Size);
-  }
 };
 
 void barrier() {
@@ -64,11 +59,11 @@ Thrower()
 barrier();
 // CHECK-NEXT: 2 -------------
 
-Thrower& flocal() {
-  Thrower T;
-  return T; // expected-warning {{reference to stack memory associated with local variable 'T' returned}}
+Thrower& fstatic() {
+  static Thrower sThrower;
+  return sThrower;
 }
-flocal()
+fstatic()
 // CHECK-NEXT: >>> Caught a std::exception: 'Thrower'.
 //  CHECK-NOT: ~Thrower-1
 
@@ -78,12 +73,56 @@ barrier();
 
 // Must be -new-, throwing from a constructor of a static calls std::terminate!
 new Thrower
-// CHECK-NEXT: >>> Caught a std::exception: 'Thrower.new'.
+// CHECK-NEXT: >>> Caught a std::exception: 'Thrower'.
 //  CHECK-NOT: ~Thrower-1
 
 
 barrier();
 // CHECK-NEXT: 4 -------------
+
+cling::Value V;
+gCling->evaluate("Thrower T1(1)", V);
+// CHECK-NEXT: >>> Caught a std::exception: 'Thrower'.
+V = cling::Value();
+//  CHECK-NOT: ~Thrower-1
+
+
+barrier();
+// CHECK-NEXT: 5 -------------
+
+gCling->evaluate("Thrower()", V);
+// CHECK-NEXT: >>> Caught a std::exception: 'Thrower'.
+V = cling::Value();
+//  CHECK-NOT: ~Thrower-1
+
+
+barrier();
+// CHECK-NEXT: 6 -------------
+
+gCling->evaluate("Thrower T1(1)", V);
+// CHECK-NEXT: >>> Caught a std::exception: 'Thrower'.
+V = cling::Value();
+//  CHECK-NOT: ~Thrower-1
+
+
+barrier();
+// CHECK-NEXT: 7 -------------
+
+gCling->echo("Thrower T0a(0)");
+// CHECK-NEXT: ~Thrower-0
+// CHECK-NEXT: >>> Caught a std::exception: 'cling::printValue'.
+
+
+barrier();
+// CHECK-NEXT: 8 -------------
+
+gCling->echo("Thrower(0)");
+// CHECK-NEXT: ~Thrower-0
+// CHECK-NEXT: >>> Caught a std::exception: 'cling::printValue'.
+
+
+barrier();
+// CHECK-NEXT: 9 -------------
 
 // Ts is a valid object and destruction should occur when out of scope.
 //  CHECK-NOT: ~Thrower-1
