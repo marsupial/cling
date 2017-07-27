@@ -26,8 +26,12 @@ extern "C" int printf(const char*,...);
 .L ATest
 .L BTest
 
+// FIXME: std::cout.flush() below should not be necessary, but is for Windows.
+#include <iostream>
+
 static void calledFromStaticDtor(void* Interp) {
   ((cling::Interpreter*)(Interp))->echo("printf(\"calledFromStaticDtor\\n\");");
+  std::cout.flush();
 }
 
 // FIXME This isn't working with lit only
