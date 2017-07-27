@@ -6,7 +6,7 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: cat %s | %cling -Xclang -verify -fno-rtti 2>&1 | FileCheck --match-full-lines %s
+// RUN: cat %s | %cling -Xclang -verify %RTTI 2>&1 | FileCheck --match-full-lines %s
 // Test command argument parsing
 
 #include "cling/MetaProcessor/Commands.h"
