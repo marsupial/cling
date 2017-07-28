@@ -21,7 +21,7 @@ namespace llvm {
 raw_ostream& operator<<(raw_ostream& OS,
                         cling::meta::CommandHandler::Argument Arg) {
   OS << "{\"" << Arg.Str << "\"";
-  if (Arg.Escaped) OS << ", Escaped";
+  if (Arg.escaped()) OS << ", Escaped";
   if (Arg.Group) OS << ", Group: '" << Arg.Group << '\'';
   OS << "}";
   return OS;

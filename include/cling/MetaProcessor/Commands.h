@@ -10,6 +10,7 @@
 #ifndef CLING_META_COMMANDS_H
 #define CLING_META_COMMANDS_H
 
+#include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 
@@ -80,28 +81,46 @@ namespace cling {
       /// The assumption is more often than not escape sequnces are not
       /// neccessary and can speed things up by not allocating a new string
       /// for every argument.
-      struct SplitArgument {
-        llvm::StringRef Str;
-        bool Escaped;
-        char Group;
+      class SplitArgument {
+        mutable llvm::PointerIntPair<std::string*, 1> UnescapedStr;
+
+      public:
+        const llvm::StringRef Str;
+        const char Group;
 
         SplitArgument(llvm::StringRef S = {}, bool E = false, char G = 0)
-            : Str(S), Escaped(E), Group(G) {}
+            : UnescapedStr(nullptr, E), Str(S), Group(G) {}
+        SplitArgument(SplitArgument&& O)
+            : UnescapedStr(O.UnescapedStr), Str(O.Str), Group(O.Group) {
+          O.UnescapedStr.setPointer(nullptr);
+        }
+        SplitArgument(const SplitArgument&) = delete;
+
+        ~SplitArgument() {
+          if (std::string* E = UnescapedStr.getPointer()) delete E;
+        }
 
         ///\brief Convert the string argument to an llvm::Optional.
         ///
         ///\param[out] WasBool - Whether the string was converted as a boolean.
         ///
-        template <class T> llvm::Optional<T>
-        Optional(bool* WasBool = nullptr) const;
+        template <class T>
+        llvm::Optional<T> Optional(bool* WasBool = nullptr) const;
 
         bool empty() const { return Str.empty(); }
-        bool operator == (const char* RHS) const { return Str == RHS; }
-        bool operator != (const char* RHS) const { return Str != RHS; }
-
+        bool operator==(const char* RHS) const { return Str == RHS; }
+        bool operator!=(const char* RHS) const { return Str != RHS; }
         operator llvm::StringRef() const { return Str; }
-        operator std::string() const {
-          return Escaped ? CommandHandler::Unescape(Str) : Str.str();
+
+        bool escaped() const { return UnescapedStr.getInt(); }
+        operator const std::string&() const {
+          std::string* E = UnescapedStr.getPointer();
+          if (!E) {
+            E = new std::string(escaped() ? CommandHandler::Unescape(Str)
+                                          : Str.str());
+            UnescapedStr.setPointer(E);
+          }
+          return *E;
         }
       };
 
