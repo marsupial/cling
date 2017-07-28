@@ -67,8 +67,8 @@ CommandHandler::Unescape(llvm::StringRef Str) {
   return Out;
 }
 
-template <class T>
-static llvm::Optional<T> ArgToOptional(llvm::StringRef Arg, bool* WasBool) {
+template <class T> static llvm::Optional<T>
+ArgToOptional(const llvm::StringRef& Arg, bool* WasBool) {
   T Val;
   // Returns true on error!
   if (Arg.getAsInteger(10, Val)) {
@@ -87,20 +87,19 @@ static llvm::Optional<T> ArgToOptional(llvm::StringRef Arg, bool* WasBool) {
   return Val;
 }
 
-template <>
-llvm::Optional<unsigned> CommandHandler::Optional<unsigned>(Argument Arg,
-                                                            bool* WasBool) {
-  return ArgToOptional<unsigned>(Arg, WasBool);
+template <> llvm::Optional<unsigned>
+CommandHandler::SplitArgument::Optional<unsigned>(bool* WasBool) const {
+  return ArgToOptional<unsigned>(Str, WasBool);
 }
 
-template <>
-llvm::Optional<int> CommandHandler::Optional<int>(Argument Arg, bool* WasBool) {
-  return ArgToOptional<int>(Arg, WasBool);
+template <> llvm::Optional<int>
+CommandHandler::SplitArgument::Optional<int>(bool* WasBool) const {
+  return ArgToOptional<int>(Str, WasBool);
 }
 
-template <>
-llvm::Optional<bool> CommandHandler::Optional<bool>(Argument Arg, bool* WasBool) {
-  return ArgToOptional<bool>(Arg, WasBool);
+template <> llvm::Optional<bool>
+CommandHandler::SplitArgument::Optional<bool>(bool* WasBool) const {
+  return ArgToOptional<bool>(Str, WasBool);
 }
 
 llvm::StringRef
@@ -149,7 +148,7 @@ CommandHandler::Split(llvm::StringRef Str, SplitArgumentsList& Out,
       if (InGroup != llvm::StringRef::npos) {
         // See if the character is the end of the current group type.
         if (GrpEnd.find(C) == InGroup) {
-          Out.push_back(std::make_pair(Str.slice(Start, Idx), HadEscape));
+          Out.emplace_back(Str.slice(Start, Idx), HadEscape, GrpBegin[InGroup]);
           InGroup = llvm::StringRef::npos;
           HadEscape = false;
           Start = Idx + 1;
@@ -175,21 +174,24 @@ CommandHandler::Split(llvm::StringRef Str, SplitArgumentsList& Out,
       if (CmdName.empty() && (Flags & kPopFirstArgument))
         CmdName = Str.slice(Start, Idx);
       else
-        Out.push_back(std::make_pair(Str.slice(Start, Idx), HadEscape));
+        Out.emplace_back(Str.slice(Start, Idx), HadEscape);
       HadEscape = false;
     }
     Start = Idx + 1;
   }
 
   // Unterminated group keep it as it was
-  if (InGroup != llvm::StringRef::npos)
+  char Group = 0;
+  if (InGroup != llvm::StringRef::npos) {
+    Group = GrpBegin[InGroup];
     --Start;
+  }
 
   // Grab whatever remains
   if (CmdName.empty() && (Flags & kPopFirstArgument))
     CmdName = Str.substr(Start);
   else if (Start != Len)
-    Out.push_back(std::make_pair(Str.substr(Start), HadEscape));
+    Out.emplace_back(Str.substr(Start), HadEscape, Group);
 
   return CmdName;
 }
@@ -279,7 +281,7 @@ class Callback {
   typedef CommandHandler::Argument Argument;
   typedef CommandHandler::EscArgument EscArgument;
 
-  static Argument Convert(const Unescaped& A) { return A.first; }
+  static Argument Convert(const Unescaped& A) { return A; }
   static EscArgument Convert(EscArgument A) { return A; }
 
   template <typename CFunc, typename ObjCall, typename... Ts>
@@ -362,8 +364,7 @@ public:
     if (Flags & kEscapedStr && ArgV.empty()) {
       ArgV.reserve(Args.size());
       for (auto&& A : Args)
-        ArgV.emplace_back(A.second ? CommandHandler::Unescape(A.first)
-                                   : A.first.str());
+        ArgV.emplace_back(std::move(A));
     }
 
     // callback (Invocation& I, ArgList);

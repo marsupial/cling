@@ -90,7 +90,7 @@ CommandResult ClassCommand(const Invocation& I, Argument Name) {
   else if (Name.empty())
     DisplayClasses(I.Out, &I.Interp, false);
   else
-    DisplayClass(I.Out, &I.Interp, Name.str().c_str(), true);
+    DisplayClass(I.Out, &I.Interp, Name, true);
   return kCmdSuccess;
 }
 
@@ -116,7 +116,7 @@ CommandResult GCommand(const Invocation& I, Argument Name) {
   if (Name.empty())
     DisplayGlobals(I.Out, &I.Interp);
   else
-    DisplayGlobal(I.Out, &I.Interp, Name.str());
+    DisplayGlobal(I.Out, &I.Interp, Name);
   return kCmdSuccess;
 }
 
@@ -124,19 +124,20 @@ CommandResult TypedefCommand(const Invocation& I, Argument Name) {
   if (Name.empty())
     DisplayTypedefs(I.Out, &I.Interp);
   else
-    DisplayTypedef(I.Out, &I.Interp, Name.str());
+    DisplayTypedef(I.Out, &I.Interp, Name);
   return kCmdSuccess;
 }
 
-CommandResult StatsCommand(const Invocation& I, Argument Name, Argument Arg) {
-  I.Interp.dump(Name, Arg); // FIXME: I.Out !
+CommandResult StatsCommand(const Invocation& I, Argument Arg0, Argument Arg1) {
+  I.Interp.dump(Arg0, Arg1 /* FIXME: Redirection into I.Out*/);
   return kCmdSuccess;
 }
 
-CommandResult TraceCommand(const Invocation& I, Argument Name, Argument Arg) {
+CommandResult TraceCommand(const Invocation& I, Argument Arg0, Argument Arg1) {
+  llvm::StringRef Name = Arg0;
   if (Name == "ast")
     Name = "asttree";
-  I.Interp.dump(Name, Arg); // FIXME: I.Out !
+  I.Interp.dump(Name, Arg1 /* FIXME: Redirection into I.Out*/);
   return kCmdSuccess;
 }
 
@@ -157,7 +158,7 @@ CommandResult CompareStateCommand(const Invocation& I, Argument Name) {
 }
 
 CommandResult UndoCommand(const Invocation& I, Argument Arg) {
-  const auto Val = CommandHandler::Optional<unsigned>(Arg);
+  const auto Val = Arg.Optional<unsigned>();
   I.Interp.unload(Val.hasValue() ? Val.getValue() : 1);
   return kCmdSuccess;
 }
@@ -171,7 +172,7 @@ void ShowState(llvm::raw_ostream& Out, bool Flag, llvm::StringRef Stat) {
 }
 
 CommandResult DynamicExtensionsCommand(const Invocation& I, Argument Arg) {
-  const auto Value = CommandHandler::Optional<unsigned>(Arg);
+  const auto Value = Arg.Optional<unsigned>();
   if (!Value) {
     const bool Flag = !I.Interp.isDynamicLookupEnabled();
     I.Interp.enableDynamicLookup(Flag);
@@ -182,7 +183,7 @@ CommandResult DynamicExtensionsCommand(const Invocation& I, Argument Arg) {
 }
 
 CommandResult PrintDebugCommand(const Invocation& I, Argument Arg) {
-  const auto Value = CommandHandler::Optional<unsigned>(Arg);
+  const auto Value = Arg.Optional<unsigned>();
   if (!Value) {
     const bool Flag = !I.Interp.isPrintingDebug();
     I.Interp.enablePrintDebug(Flag);
@@ -193,7 +194,7 @@ CommandResult PrintDebugCommand(const Invocation& I, Argument Arg) {
 }
 
 CommandResult RawInputCommand(const Invocation& I, Argument Arg) {
-  const auto Value = CommandHandler::Optional<unsigned>(Arg);
+  const auto Value = Arg.Optional<unsigned>();
   if (!Value) {
     const bool Flag = !I.Interp.isRawInputEnabled();
     I.Interp.enableRawInput(Flag);
@@ -211,7 +212,7 @@ CommandResult OCommand(const Invocation& I, Argument Arg) {
   }
 
   bool WasBool;
-  const auto Value = CommandHandler::Optional<unsigned>(Arg, &WasBool);
+  const auto Value = Arg.Optional<unsigned>(&WasBool);
   if (!Value || WasBool)
     return kCmdInvalidSyntax;
 
@@ -252,7 +253,7 @@ CommandResult FileExCommand(const Invocation& I, Argument Arg) {
 
 CommandResult DebugCommand(const Invocation& I, Argument Arg) {
   bool WasBool;
-  const auto Mode = CommandHandler::Optional<int>(Arg, &WasBool);
+  const auto Mode = Arg.Optional<int>(&WasBool);
 
   clang::CodeGenOptions& CGO = I.Interp.get<CodeGenOptions>();
   if (Mode && !WasBool) {

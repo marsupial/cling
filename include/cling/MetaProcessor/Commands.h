@@ -76,9 +76,40 @@ namespace cling {
 
     class CommandHandler {
     public:
-      typedef llvm::SmallVectorImpl<std::pair<llvm::StringRef, bool>>
-          SplitArgumentsList;
-      typedef llvm::StringRef Argument;
+      ///\brief The argument string and whether it contained an escape sequence.
+      /// The assumption is more often than not escape sequnces are not
+      /// neccessary and can speed things up by not allocating a new string
+      /// for every argument.
+      struct SplitArgument {
+        llvm::StringRef Str;
+        bool Escaped;
+        char Group;
+
+        SplitArgument(llvm::StringRef S = {}, bool E = false, char G = 0)
+            : Str(S), Escaped(E), Group(G) {}
+
+        ///\brief Convert the string argument to an llvm::Optional.
+        ///
+        ///\param[out] WasBool - Whether the string was converted as a boolean.
+        ///
+        template <class T> llvm::Optional<T>
+        Optional(bool* WasBool = nullptr) const;
+
+        bool empty() const { return Str.empty(); }
+        bool operator == (const char* RHS) const { return Str == RHS; }
+        bool operator != (const char* RHS) const { return Str != RHS; }
+
+        operator llvm::StringRef() const { return Str; }
+        operator std::string() const {
+          return Escaped ? CommandHandler::Unescape(Str) : Str.str();
+        }
+      };
+
+      ///\brief Convenience type for when 8 or less arguemnts expected.
+      typedef llvm::SmallVector<SplitArgument, 8> SplitArguments;
+
+      typedef llvm::SmallVectorImpl<SplitArgument> SplitArgumentsList;
+      typedef const SplitArgument& Argument;
       typedef const std::string& EscArgument;
       typedef std::vector<std::string> EscapedArgumentsList;
       typedef void* CommandID;
@@ -114,7 +145,7 @@ namespace cling {
                 >::type
               >::type
             >::type
-          >::type type;                                                                      
+          >::type type;
 
           enum { same = Same::value ? 1 : Next::same,
                  convert = Convert::value ? 1 : Next::convert,
@@ -151,15 +182,6 @@ namespace cling {
     public:
       virtual ~CommandHandler();
 
-      ///\brief The argument string and whether it contained an escape sequence.
-      /// The assumtion is more often than not escape sequnces are not
-      /// neccessary and can speed things up by not allocating a new string
-      /// for every argument. 
-      typedef std::pair<llvm::StringRef, bool> SplitArgument;
-
-      ///\brief Convenience type for when 8 or less arguemnts expected.
-      typedef llvm::SmallVector<SplitArgument, 8> SplitArguments;
-
       ///\brief Control how the string is split
       enum SplitFlags {
         ///\brief Don't include the first 'argument' in the output, return it
@@ -185,16 +207,6 @@ namespace cling {
       ///\brief Un-escape the given string
       ///
       static std::string Unescape(llvm::StringRef Str);
-
-      ///\brief Convert a string to an Optional argument.
-      ///
-      ///\param[in] Arg - String to operate on.
-      ///\param[out] WasBool - Whether the string was converted as a boolean.
-      ///
-      ///\returns An llvm::Optional<> representation of the string.
-      ///
-      template <class T>
-      static llvm::Optional<T> Optional(Argument Arg, bool* WasBool = nullptr);
 
       ///\brief Add a given command
       ///
