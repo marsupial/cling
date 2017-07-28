@@ -22,7 +22,7 @@ class Interpreter;
 void DisplayClasses(llvm::raw_ostream &stream,
                     const Interpreter *interpreter, bool verbose);
 void DisplayClass(llvm::raw_ostream &stream,
-                  const Interpreter *interpreter, const char *className,
+                  const Interpreter *interpreter, const std::string &className,
                   bool verbose);
 
 void DisplayNamespaces(llvm::raw_ostream &stream, const Interpreter *interpreter);

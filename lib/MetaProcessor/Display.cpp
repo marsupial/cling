@@ -1528,17 +1528,16 @@ void DisplayClasses(llvm::raw_ostream& stream, const Interpreter* interpreter,
 
 //______________________________________________________________________________
 void DisplayClass(llvm::raw_ostream& stream, const Interpreter* interpreter,
-                  const char* className, bool verbose)
+                  const std::string& inName, bool verbose)
 {
   assert(interpreter != 0 && "DisplayClass, 'interpreter' parameter is null");
-  assert(className != 0 && "DisplayClass, 'className' parameter is null");
 
-  while (std::isspace(*className))
-    ++className;
+  llvm::StringRef className(inName);
+  className = className.trim();
 
   ClassPrinter printer(stream, interpreter);
 
-  if (*className) {
+  if (!className.empty()) {
     printer.SetVerbose(verbose);
     printer.DisplayClass(className);
   } else {
