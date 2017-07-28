@@ -17,6 +17,16 @@
 #include <map>
 #include <vector>
 
+namespace llvm {
+raw_ostream& operator<<(raw_ostream& OS,
+                        cling::meta::CommandHandler::Argument Arg) {
+  OS << "{\"" << Arg.Str << "\"";
+  if (Arg.Escaped) OS << ", Escaped";
+  if (Arg.Group) OS << ", Group: '" << Arg.Group << '\'';
+  OS << "}";
+  return OS;
+}
+}
 namespace cling {
 namespace meta {
 
@@ -181,17 +191,14 @@ CommandHandler::Split(llvm::StringRef Str, SplitArgumentsList& Out,
   }
 
   // Unterminated group keep it as it was
-  char Group = 0;
-  if (InGroup != llvm::StringRef::npos) {
-    Group = GrpBegin[InGroup];
+  if (InGroup != llvm::StringRef::npos)
     --Start;
-  }
 
   // Grab whatever remains
   if (CmdName.empty() && (Flags & kPopFirstArgument))
     CmdName = Str.substr(Start);
   else if (Start != Len)
-    Out.emplace_back(Str.substr(Start), HadEscape, Group);
+    Out.emplace_back(Str.substr(Start), HadEscape);
 
   return CmdName;
 }

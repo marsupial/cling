@@ -269,4 +269,9 @@ namespace cling {
   }
 }
 
+// Helper function to dump a CommandHandler::Argument into an llvm::raw_ostream
+namespace llvm {
+raw_ostream& operator<<(raw_ostream&, cling::meta::CommandHandler::Argument&);
+}
+
 #endif // CLING_META_COMMANDS_H

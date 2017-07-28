@@ -23,11 +23,8 @@ static void DumpArgs(llvm::StringRef Str, llvm::raw_ostream& Out,
                      CommandHandler::kSplitWithGrouping) {
   CommandHandler::SplitArguments Args;
   Out << "<" << CommandHandler::Split(Str, Args, F) << ">\n";
-  for (auto&& A : Args) {
-   	Out << "  '" << A.first << "'";
-  	if (A.second) Out << " escaped";
-  	  Out << "\n";
-  }
+  for (auto&& A : Args)
+	Out << "  " << A << "\n";
 }
 
 class TestImpl : public CommandHandler {
@@ -54,86 +51,86 @@ gCling->setCommandHandler(&T);
 #pragma cling custom1 Arg0
 // CHECK-NEXT: 'custom1 Arg0'
 // CHECK-NEXT: <custom1>
-// CHECK-NEXT:   'Arg0'
+// CHECK-NEXT:   {"Arg0"}
 
 #pragma cling custom2 Arg0   Arg1
 // CHECK-NEXT: 'custom2 Arg0   Arg1'
 // CHECK-NEXT: <custom2>
-// CHECK-NEXT:   'Arg0'
-// CHECK-NEXT:   'Arg1'
+// CHECK-NEXT:   {"Arg0"}
+// CHECK-NEXT:   {"Arg1"}
 
 // Intentional trailing space on the next line
 #pragma cling   custom3   Arg0   Arg1        Arg2        
 // CHECK-NEXT: 'custom3   Arg0   Arg1        Arg2'
 // CHECK-NEXT: <custom3>
-// CHECK-NEXT:   'Arg0'
-// CHECK-NEXT:   'Arg1'
-// CHECK-NEXT:   'Arg2'
+// CHECK-NEXT:   {"Arg0"}
+// CHECK-NEXT:   {"Arg1"}
+// CHECK-NEXT:   {"Arg2"}
 
 #pragma cling   groups   <0 1 2 3>   { 4 "" 5 6} [ 7 () 8 9 ]
 // CHECK-NEXT: 'groups   <0 1 2 3>   { 4 "" 5 6} [ 7 () 8 9 ]'
 // CHECK-NEXT: <groups>
-// CHECK-NEXT:   '0 1 2 3'
-// CHECK-NEXT:   ' 4 "" 5 6'
-// CHECK-NEXT:   ' 7 () 8 9 '
+// CHECK-NEXT:   {"0 1 2 3", Group: '<'}
+// CHECK-NEXT:   {" 4 "" 5 6", Group: '{'}
+// CHECK-NEXT:   {" 7 () 8 9 ", Group: '['}
 
 // Unclosed groups
 DumpArgs("nocmd [ < \" {", *Outs, CommandHandler::kSplitWithGrouping);
 // CHECK-NEXT: <>
-// CHECK-NEXT: 'nocmd'
-// CHECK-NEXT: '[ < " {'
+// CHECK-NEXT:   {"nocmd"}
+// CHECK-NEXT:   {"[ < " {"}
 	  
 DumpArgs("cmd [ < \" {", *Outs);
 // CHECK-NEXT: <cmd>
-// CHECK-NEXT: '[ < " {'
+// CHECK-NEXT:   {"[ < " {"}
 
 DumpArgs("escape   \"\\\"\" \"b\\' \\\"e\"  \" <{\\\\} \"", *Outs);
 // CHECK-NEXT: <escape>
-// CHECK-NEXT:   '\"' escaped
-// CHECK-NEXT:   'b\' \"e' escaped
-// CHECK-NEXT:   ' <{\\} ' escaped
+// CHECK-NEXT:   {"\"", Escaped, Group: '"'}
+// CHECK-NEXT:   {"b\' \"e", Escaped, Group: '"'}
+// CHECK-NEXT:   {" <{\\} ", Escaped, Group: '"'}
 
 DumpArgs("escape2 \"\\\\\narg1\" arg2", *Outs, CommandHandler::kPopFirstArgument);
 // CHECK-NEXT: <escape2>
-// CHECK-NEXT:   '"\\' escaped
-// CHECK-NEXT:   'arg1"'
-// CHECK-NEXT:   'arg2'
+// CHECK-NEXT:   {""\\", Escaped}
+// CHECK-NEXT:   {"arg1""}
+// CHECK-NEXT:   {"arg2"}
 
 DumpArgs("escape3  arg1 \"\\\narg2\"", *Outs, CommandHandler::kPopFirstArgument);
 // CHECK-NEXT: <escape3>
-// CHECK-NEXT:   'arg1'
-// CHECK-NEXT:   '"\
-// CHECK-NEXT: arg2"' escaped
+// CHECK-NEXT:   {"arg1"}
+// CHECK-NEXT:   {""\
+// CHECK-NEXT: arg2"", Escaped}
 
 DumpArgs("escape4 \"\\\\\narg1\" arg2", *Outs);
 // CHECK-NEXT: <escape4>
-// CHECK-NEXT:   '\\
-// CHECK-NEXT:   arg1' escaped
-// CHECK-NEXT:   'arg2'
+// CHECK-NEXT:   {"\\
+// CHECK-NEXT: arg1", Escaped, Group: '"'}
+// CHECK-NEXT:   {"arg2"}
 
 DumpArgs("escape5  arg1 \"\\\narg2\"", *Outs);
 // CHECK-NEXT: <escape5>
-// CHECK-NEXT:   'arg1'
-// CHECK-NEXT:   '\
-// CHECK-NEXT: arg2' escaped
+// CHECK-NEXT:   {"arg1"}
+// CHECK-NEXT:   {"\
+// CHECK-NEXT: arg2", Escaped, Group: '"'}
 
 #pragma cling newline  arg1 arg2 \
                        arg3   arg4
 // CHECK-NEXT: 'newline  arg1 arg2 \
 // CHECK-NEXT:                        arg3   arg4'
 // CHECK-NEXT: <newline>
-// CHECK-NEXT:   'arg1'
-// CHECK-NEXT:   'arg2'
-// CHECK-NEXT:   'arg3'
-// CHECK-NEXT:   'arg4'
+// CHECK-NEXT:   {"arg1"}
+// CHECK-NEXT:   {"arg2"}
+// CHECK-NEXT:   {"arg3"}
+// CHECK-NEXT:   {"arg4"}
 
 #pragma cling newline2  arg1 \
 arg2
 // CHECK-NEXT: 'newline2  arg1 \
 // CHECK-NEXT: arg2'
 // CHECK-NEXT: <newline2>
-// CHECK-NEXT:   'arg1'
-// CHECK-NEXT:   'arg2'
+// CHECK-NEXT:   {"arg1"}
+// CHECK-NEXT:   {"arg2"}
 
 std::string TestSeq("1\\n2\\\"3\\\\4\\\'5\\t")
 // CHECK: (std::string &) "1\n2\"3\\4\'5\t"

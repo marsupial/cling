@@ -26,8 +26,8 @@ CommandHandler Cmds;
 gCling->setCommandHandler(&Cmds);
 
 
-static CommandResult DoOneLArg(const Invocation& I, llvm::StringRef Arg) {
-  I.Out << "llvm: " << Arg << "\n";
+static CommandResult DoOneLArg(const Invocation& I, CommandHandler::Argument Arg) {
+  I.Out << "llvm: " << Arg.Str << "\n";
   return kCmdSuccess; 
 }
 
