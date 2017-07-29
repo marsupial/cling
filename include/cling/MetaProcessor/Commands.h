@@ -122,10 +122,7 @@ namespace cling {
         void dump(llvm::raw_ostream* OS = nullptr);
       };
 
-      ///\brief Convenience type for when 8 or less arguemnts expected.
-      typedef llvm::SmallVector<SplitArgument, 8> SplitArguments;
-
-      typedef llvm::SmallVectorImpl<SplitArgument> SplitArgumentsList;
+      typedef llvm::SmallVectorImpl<SplitArgument> SplitArguments;
       typedef const SplitArgument& Argument;
       typedef const std::string& EscArgument;
       typedef std::vector<std::string> EscapedArgumentsList;
@@ -171,19 +168,13 @@ namespace cling {
 
         typedef Convertible<
           CommandResult (*)(const Invocation& I),
-          CommandResult (*)(const Invocation& I, const SplitArgumentsList&),
+          CommandResult (*)(const Invocation& I, const SplitArguments&),
           CommandResult (*)(const Invocation& I, Argument),
           CommandResult (*)(const Invocation& I, Argument, Argument),
-          CommandResult (*)(const Invocation& I, const EscapedArgumentsList&),
-          CommandResult (*)(const Invocation& I, EscArgument),
-          CommandResult (*)(const Invocation& I, EscArgument, EscArgument),
           std::function<CommandResult(const Invocation&)>,
-          std::function<CommandResult(const Invocation&, const SplitArgumentsList&)>,
+          std::function<CommandResult(const Invocation&, const SplitArguments&)>,
           std::function<CommandResult(const Invocation&, Argument)>,
-          std::function<CommandResult(const Invocation&, Argument, Argument)>,
-          std::function<CommandResult(const Invocation&, const EscapedArgumentsList&)>,
-          std::function<CommandResult(const Invocation&, EscArgument)>,
-          std::function<CommandResult(const Invocation&, EscArgument, EscArgument)>
+          std::function<CommandResult(const Invocation&, Argument, Argument)>
         > Converted;
 
         typedef typename Converted::type type;
@@ -194,10 +185,19 @@ namespace cling {
 
       // Work-horse for AddCommand to avoid name mangling errors on gcc.
       template <class T> CommandID
-      DoAddCommand(std::string Name, T Obj, std::string Help);
+      DoAddCommand(std::string Name, T Obj, std::string Help, unsigned Flags);
 
     public:
       virtual ~CommandHandler();
+
+      ///\brief Flags for the command callback
+      enum CommandFlags {
+        ///\brief Line and block comments will not be passed to command.
+        kIgnoreComments = 0,
+        ///\brief Pass line and block comments as arguments.
+        kPassComments = 1,
+        kCommandFlagsEnd = 2,
+      };
 
       ///\brief Control how the string is split
       enum SplitFlags {
@@ -217,7 +217,7 @@ namespace cling {
       ///\returns An empty string when kPopFirstArgument is not set, otherwise
       /// the first sequence in Str before any Separators occured.
       ///
-      static llvm::StringRef Split(llvm::StringRef Str, SplitArgumentsList& Out,
+      static llvm::StringRef Split(llvm::StringRef Str, SplitArguments& Out,
                                    unsigned Flags = 0,
                                    llvm::StringRef Separators = " \t\n\v\f\r");
 
@@ -236,8 +236,10 @@ namespace cling {
       ///
       template <class T>
       typename std::enable_if<Supported<T>::same, CommandID>::type
-      AddCommand(std::string Name, T Obj, std::string Help) {
-        return DoAddCommand(std::move(Name), std::move(Obj), std::move(Help));
+      AddCommand(std::string Name, T Obj, std::string Help,
+                 unsigned Flags = kIgnoreComments) {
+        return DoAddCommand(std::move(Name), std::move(Obj), std::move(Help),
+                            Flags);
       }
 
       ///\brief Lambda variant of above.
@@ -245,9 +247,11 @@ namespace cling {
       template <class T>
       typename std::enable_if<!Supported<T>::same && Supported<T>::convert,
                               CommandID>::type
-      AddCommand(std::string Name, T Obj, std::string Help) {
+      AddCommand(std::string Name, T Obj, std::string Help,
+                 unsigned Flags = kIgnoreComments) {
         typename Supported<T>::type F(Obj);
-        return DoAddCommand(std::move(Name), std::move(F), std::move(Help));
+        return DoAddCommand(std::move(Name), std::move(F), std::move(Help),
+                            Flags);
       }
 
       ///\brief Alias a new command name to an existing command.

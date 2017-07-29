@@ -50,6 +50,7 @@ Cmds.AddCommand("CMD", DoOneCArg, "");
 Cmds.AddCommand("LLVM", DoOneRArg, "");
 Cmds.AddCommand("STD", &DoOneSArg, "");
 Cmds.AddCommand("TWO", DoTwoArgs, "");
+Cmds.AddCommand("COMMENTS", &DoTwoArgs, "", CommandHandler::kPassComments);
 
 
 #pragma cling CMD  A0 A1 A2 { A3 , A4 , A5, A6 }  "ESC\tSEQ"
@@ -62,15 +63,22 @@ Cmds.AddCommand("TWO", DoTwoArgs, "");
 #pragma cling LLVM (A0, A1, A2, { A3, A4 , A5  ,  A6 }/*Test a
 block
   comment*/, "ESC\nSEQ")
-//      CHECK: llvm: A0
+// CHECK-NEXT: llvm: A0
 // CHECK-NEXT: llvm: A1
 // CHECK-NEXT: llvm: A2
 // CHECK-NEXT: llvm:  A3, A4 , A5  ,  A6 
-// CHECK-NEXT: llvm: Test a
-// CHECK-NEXT: block
-// CHECK-NEXT:   comment
 // CHECK-NEXT: llvm: ESC
 // CHECK-NEXT: SEQ
+
+#pragma cling COMMENTS (A0, A1, A2, { A3- A4 - A5  -  A6 }/*Test a
+block
+  comment*/, "ESC\nSEQ")
+// CHECK-NEXT: Two: (A0, A1)
+// CHECK-NEXT: Two: (A2,   A3- A4 - A5  -  A6 )
+// CHECK-NEXT: Two: (Test a
+// CHECK-NEXT: block
+// CHECK-NEXT:   comment, ESC
+// CHECK-NEXT: SEQ)
 
 #pragma cling STD  A0 A1 A2 "ESC\tSEQ"
 // CHECK-NEXT: std: A0
@@ -78,10 +86,18 @@ block
 // CHECK-NEXT: std: A2
 // CHECK-NEXT: std: ESC	SEQ
 
-#pragma cling TWO  A0 A1 A2 A3 A4
+#pragma cling TWO  A0 A1 A2 A3 A4 /*Skip A*/ /*Skip B*/ A5 A6
 // CHECK-NEXT: Two: (A0, A1)
 // CHECK-NEXT: Two: (A2, A3)
-// CHECK-NEXT: Two: (A4, )
+// CHECK-NEXT: Two: (A4, A5)
+// CHECK-NEXT: Two: (A6, )
+
+#pragma cling COMMENTS A0 A1 A2 A3 A4 /*NoSkip A*/ /*NoSkip B*/ A5 A6
+// CHECK-NEXT: Two: (A0, A1)
+// CHECK-NEXT: Two: (A2, A3)
+// CHECK-NEXT: Two: (A4, NoSkip A)
+// CHECK-NEXT: Two: (NoSkip B, A5)
+// CHECK-NEXT: Two: (A6, )
 
 auto Lamb =  [](const Invocation& I) -> CommandResult {
                   smallstream Capt;

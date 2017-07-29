@@ -21,7 +21,7 @@ llvm::raw_ostream* Outs;
 static void DumpArgs(llvm::StringRef Str, llvm::raw_ostream& Out,
                      unsigned F = CommandHandler::kPopFirstArgument |
                      CommandHandler::kSplitWithGrouping) {
-  CommandHandler::SplitArguments Args;
+  llvm::SmallVector<CommandHandler::SplitArgument, 8> Args;
   Out << "<" << CommandHandler::Split(Str, Args, F) << ">\n";
   for (auto&& A : Args) {
     Out << "  ";

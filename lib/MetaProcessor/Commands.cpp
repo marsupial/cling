@@ -112,8 +112,8 @@ void CommandHandler::SplitArgument::dump(llvm::raw_ostream* OS) {
 }
 
 llvm::StringRef
-CommandHandler::Split(llvm::StringRef Str, SplitArgumentsList& Out,
-                      unsigned Flags, llvm::StringRef Separators) {
+CommandHandler::Split(llvm::StringRef Str, SplitArguments& Out,  unsigned Flags,
+                      llvm::StringRef Separators) {
   size_t Start = 0;
   const size_t Len = Str.size(), LenMinOne = Len -1;
   llvm::StringRef CmdName;
@@ -235,26 +235,18 @@ template <typename List, typename Str> struct CallbackTypes<List, Str, true> {
   typedef CommandResult (*Dual)(const Invocation&, Str, Str);
 };
 
-typedef CallbackTypes<CommandHandler::SplitArgumentsList, CommandHandler::Argument> ObjFunction;
-typedef CallbackTypes<CommandHandler::SplitArgumentsList, CommandHandler::Argument, 1> FreeFunction;
-typedef CallbackTypes<CommandHandler::EscapedArgumentsList, CommandHandler::EscArgument> ObjEscapedFunction;
-typedef CallbackTypes<CommandHandler::EscapedArgumentsList, CommandHandler::EscArgument, 1> FreeEscapedFunction;
+typedef CallbackTypes<CommandHandler::SplitArguments, CommandHandler::Argument> ObjFunction;
+typedef CallbackTypes<CommandHandler::SplitArguments, CommandHandler::Argument, 1> FreeFunction;
 
-template <typename T, bool C = 0> struct CallbackData {
-  union {
-    typename T::Base *B;
-    typename T::ArgList *A;
-    typename T::Single *S;
-    typename T::Dual *D;
-  };
-};
+struct Value { template <class T> struct value_type { typedef T type; }; };
+struct Pointer { template <class T> struct value_type { typedef T* type; }; };
 
-template <typename T> struct CallbackData<T, true> {
+template <typename T, typename Storage> struct CallbackData {
   union {
-    typename T::Base B;
-    typename T::ArgList A;
-    typename T::Single S;
-    typename T::Dual D;
+    typename Storage::template value_type<typename T::Base>::type B;
+    typename Storage::template value_type<typename T::ArgList>::type A;
+    typename Storage::template value_type<typename T::Single>::type S;
+    typename Storage::template value_type<typename T::Dual>::type D;
   };
 };
 
@@ -262,20 +254,17 @@ namespace {
 class Callback {
   // Data members
   union {
-    CallbackData<FreeFunction, true> Free;
-    CallbackData<FreeEscapedFunction, true> FreeEscaped;
-    CallbackData<ObjFunction> Obj;
-    CallbackData<ObjEscapedFunction> ObjEscaped;
+    CallbackData<FreeFunction, Value> Free;
+    CallbackData<ObjFunction, Pointer> Obj;
     void* FuncPtr;
   };
   unsigned Flags : 5;
 
   enum {
-    kObjFunction = 1,
-    kArgList = 2,
-    kSingleStr = 4,
-    kDualStr = 8,
-    kEscapedStr = 16,
+    kObjFunction = CommandHandler::kCommandFlagsEnd,
+    kArgList = CommandHandler::kCommandFlagsEnd * 2,
+    kSingleStr = CommandHandler::kCommandFlagsEnd * 4,
+    kDualStr = CommandHandler::kCommandFlagsEnd * 8,
     kNoStrArgs = 0,
   };
 
@@ -290,24 +279,10 @@ class Callback {
   static constexpr unsigned GetArgFlags(const FreeFunction::ArgList&) { return kArgList; }
   static constexpr unsigned GetArgFlags(const FreeFunction::Single&) { return kSingleStr; }
   static constexpr unsigned GetArgFlags(const FreeFunction::Dual&) { return kDualStr; }
-  static constexpr unsigned GetArgFlags(const FreeEscapedFunction::ArgList&) { return kEscapedStr | kArgList; }
-  static constexpr unsigned GetArgFlags(const FreeEscapedFunction::Single&) { return kEscapedStr | kSingleStr; }
-  static constexpr unsigned GetArgFlags(const FreeEscapedFunction::Dual&) { return kEscapedStr | kDualStr; }
 
   static constexpr unsigned GetArgFlags(const ObjFunction::ArgList&) { return kArgList; }
   static constexpr unsigned GetArgFlags(const ObjFunction::Single&) { return kSingleStr; }
   static constexpr unsigned GetArgFlags(const ObjFunction::Dual&) { return kDualStr; }
-  static constexpr unsigned GetArgFlags(const ObjEscapedFunction::ArgList&) { return kEscapedStr | kArgList; }
-  static constexpr unsigned GetArgFlags(const ObjEscapedFunction::Single&) { return kEscapedStr | kSingleStr; }
-  static constexpr unsigned GetArgFlags(const ObjEscapedFunction::Dual&) { return kEscapedStr | kDualStr; }
-
-
-  typedef CommandHandler::SplitArgumentsList::value_type Unescaped;
-  typedef CommandHandler::Argument Argument;
-  typedef CommandHandler::EscArgument EscArgument;
-
-  static Argument Convert(const Unescaped& A) { return A; }
-  static EscArgument Convert(EscArgument A) { return A; }
 
   template <typename CFunc, typename ObjCall, typename... Ts>
   CommandResult Call(CFunc Func, const ObjCall& Obj, Ts&&... Args) {
@@ -316,102 +291,89 @@ class Callback {
     return Func(std::forward<Ts>(Args)...);
   }
 
-  template <typename CFunc, typename ObjCall, typename List>
-  CommandResult CallWithOne(const CFunc Func, const ObjCall& Obj,
-                            const Invocation& I, const List& Args) {
-    for (const auto& A : Args) {
-      const CommandResult Result = Call(Func, Obj, I, Convert(A));
-      if (Result != kCmdSuccess)
+  bool Skip(CommandHandler::Argument Arg) const {
+    return Flags & CommandHandler::kPassComments ? false : Arg.Group == '/';
+  }
+
+  template <typename CFunc, typename ObjCall> CommandResult
+  CallWithOne(const CFunc Func, const ObjCall& Obj, const Invocation& I,
+              const CommandHandler::SplitArguments& Args) {
+    for (const auto& Arg : Args) {
+      if (Skip(Arg))
+        continue;
+      if (const CommandResult Result = Call(Func, Obj, I, Arg))
         return Result;
     }
     return kCmdSuccess;
   }
 
-  template <typename CFunc, typename ObjCall, typename List>
-  CommandResult CallWithTwo(const CFunc Func, const ObjCall& Obj,
-                            const Invocation& I, const List& Args) {
-    typename List::value_type Empty;
+  template <typename CFunc, typename ObjCall> CommandResult
+  CallWithTwo(const CFunc Func, const ObjCall& Obj, const Invocation& I,
+              const CommandHandler::SplitArguments& Args) {
+    const CommandHandler::SplitArgument Empty;
     for (auto Itr = Args.begin(), End = Args.end(); Itr < End; ++Itr) {
       const auto& A = *Itr;
-      ++Itr;
-      const auto& B = Itr < End ? *Itr : Empty;
-      const CommandResult Result = Call(Func, Obj, I, Convert(A), Convert(B));
-      if (Result != kCmdSuccess)
+      if (Skip(A))
+        continue;
+      const CommandHandler::SplitArgument* B = nullptr;
+      while (!B && ++Itr < End) {
+        const CommandHandler::SplitArgument& Next = *Itr;
+        B = Skip(Next) ? nullptr : &Next;
+      }
+
+      if (const CommandResult Result = Call(Func, Obj, I, A, B ? *B : Empty))
         return Result;
     }
     return kCmdSuccess;
-  }
-
-  template <class T0, class T1> inline void DoDelete(T0* StdStr, T1* StrRef) {
-    // Delete the proper pointer type.
-    Flags & kEscapedStr ? (delete StdStr) : (delete StrRef);
   }
 
 public:
-  template <class FrFunc> Callback(FrFunc F) : Flags(GetArgFlags(F)) {
+  template <class FrFunc>
+  Callback(FrFunc Func, unsigned F) : Flags(F | GetArgFlags(Func)) {
     // Make sure the data is layed out as required.
-    static_assert(sizeof(FuncPtr) == sizeof(F), "Invalid assignment");
+    static_assert(sizeof(FuncPtr) == sizeof(Func), "Invalid assignment");
     static_assert(sizeof(Free) == sizeof(Obj), "Invalid assignment");
-    static_assert(sizeof(Free) == sizeof(FreeEscaped), "Invalid assignment");
-    static_assert(sizeof(Obj) == sizeof(ObjEscaped), "Invalid assignment");
     assert(&FuncPtr == static_cast<void*>(&Free.B) && "Bad overlap");
     assert(&FuncPtr == static_cast<void*>(&Obj.S) && "Bad overlap");
-    assert(&FuncPtr == static_cast<void*>(&ObjEscaped.D) && "Bad overlap");
 
-    FuncPtr = cling::utils::FunctionToVoidPtr(F);
+    FuncPtr = cling::utils::FunctionToVoidPtr(Func);
   }
 
   template <class StdFunc>
-  Callback(std::function<StdFunc> F) : Flags(kObjFunction | GetArgFlags(F)) {
-    FuncPtr = reinterpret_cast<void*>(new std::function<StdFunc>(std::move(F)));
+  Callback(std::function<StdFunc> Func, unsigned F)
+      : Flags(F | kObjFunction | GetArgFlags(Func)) {
+    FuncPtr = new std::function<StdFunc>(std::move(Func));
   }
 
   ~Callback() {
     if (Flags & kObjFunction) {
-      switch (Flags & ~(kObjFunction|kEscapedStr)) {
-        case kNoStrArgs: DoDelete(ObjEscaped.B, Obj.B); break;
-        case kArgList:   DoDelete(ObjEscaped.A, Obj.A); break;
-        case kSingleStr: DoDelete(ObjEscaped.S, Obj.S); break;
-        case kDualStr:   DoDelete(ObjEscaped.D, Obj.D); break;
+      switch (Flags & (kArgList|kSingleStr|kDualStr)) {
+        case kNoStrArgs: delete Obj.B; break;
+        case kArgList:   delete Obj.A; break;
+        case kSingleStr: delete Obj.S; break;
+        case kDualStr:   delete Obj.D; break;
         default: llvm_unreachable("Unkown function type not deallocated");
       }
     }
   }
 
   CommandResult Dispatch(const Invocation& I,
-                         CommandHandler::SplitArguments& Args,
-                         std::vector<std::string>& ArgV) {
+                         CommandHandler::SplitArguments& Args) {
     // Simplest callback (Invocation& I);
     if (!Flags || Flags == kObjFunction)
       return Call(Free.B, Obj.B, I);
 
-    // Do escaping now if neccessary.
-    if (Flags & kEscapedStr && ArgV.empty()) {
-      ArgV.reserve(Args.size());
-      for (auto&& A : Args)
-        ArgV.emplace_back(std::move(A));
-    }
-
     // callback (Invocation& I, ArgList);
-    if (Flags & kArgList) {
-      if (Flags & kEscapedStr)
-        return Call(FreeEscaped.A, ObjEscaped.A, I, ArgV);
+    if (Flags & kArgList)
       return Call(Free.A, Obj.A, I, Args);
-    }
 
-    // callback (Invocation& I, SingleStr);
-    if (Flags & kSingleStr) {
-      if (Flags & kEscapedStr)
-        return CallWithOne(FreeEscaped.S, ObjEscaped.S, I, ArgV);
+    // callback (Invocation& I, Arg);
+    if (Flags & kSingleStr)
       return CallWithOne(Free.S, Obj.S, I, Args);
-    }
 
-    // callback (Invocation& I, SingleStr, SingleStr);
-    if (Flags & kDualStr) {
-      if (Flags & kEscapedStr)
-        return CallWithTwo(FreeEscaped.D, ObjEscaped.D, I, ArgV);
+    // callback (Invocation& I, Arg0, Arg1);
+    if (Flags & kDualStr)
       return CallWithTwo(Free.D, Obj.D, I, Args);
-    }
 
     return kCmdUnimplemented;
   }
@@ -439,8 +401,9 @@ union Key {
 
 template <class T>
 static CommandHandler::CommandID AddIt(CallbackList& L, std::string Name,
-                                       T Func, std::string Help) {
-  Key K(L.emplace(std::move(Name), llvm::make_unique<Callback>(std::move(Func))));
+                                       T Func, std::string Help, unsigned F) {
+  Key K(L.emplace(std::move(Name),
+                  llvm::make_unique<Callback>(std::move(Func), F)));
   return K.Check(L.end());
 }
 
@@ -464,34 +427,26 @@ void CommandHandler::Clear() {
 
 #define CH_ADD_COMMAND_SPEC(Type)                                              \
   template <> CommandHandler::CommandID CommandHandler::DoAddCommand<Type>(    \
-      std::string Name, Type F, std::string Help) {                            \
-    return AddIt(m_Callbacks, std::move(Name), std::move(F), std::move(Help)); \
+      std::string N, Type F, std::string H, unsigned Flgs) {                   \
+    return AddIt(m_Callbacks, std::move(N), std::move(F), std::move(H), Flgs); \
   }
 
 CH_ADD_COMMAND_SPEC(FreeFunction::Base)
-
 CH_ADD_COMMAND_SPEC(FreeFunction::ArgList)
 CH_ADD_COMMAND_SPEC(FreeFunction::Single)
 CH_ADD_COMMAND_SPEC(FreeFunction::Dual)
-CH_ADD_COMMAND_SPEC(FreeEscapedFunction::ArgList)
-CH_ADD_COMMAND_SPEC(FreeEscapedFunction::Single)
-CH_ADD_COMMAND_SPEC(FreeEscapedFunction::Dual)
 
 CH_ADD_COMMAND_SPEC(ObjFunction::Base)
-
 CH_ADD_COMMAND_SPEC(ObjFunction::ArgList)
 CH_ADD_COMMAND_SPEC(ObjFunction::Single)
 CH_ADD_COMMAND_SPEC(ObjFunction::Dual)
-CH_ADD_COMMAND_SPEC(ObjEscapedFunction::ArgList)
-CH_ADD_COMMAND_SPEC(ObjEscapedFunction::Single)
-CH_ADD_COMMAND_SPEC(ObjEscapedFunction::Dual)
 
 bool CommandHandler::Alias(std::string Name, CommandID ID) {
   return false;
 }
 
 CommandResult CommandHandler::Execute(const Invocation& I) {
-  SplitArguments Args;
+  llvm::SmallVector<SplitArgument, 8> Args;
   llvm::StringRef CmdName;
   if (!I.Args.empty()) {
     CmdName = I.Cmd;
@@ -518,11 +473,8 @@ CommandResult CommandHandler::Execute(const Invocation& I) {
           : I.Cmd.substr((CmdName.data() + CmdName.size()) - I.Cmd.data()),
   };
 
-  // Hold the escaped arguemnts here, so it only needs to be done once.
-  std::vector<std::string> ArgV;
-
   for (auto Cmd = Cmds.first; Cmd != Cmds.second; ++Cmd) {
-    const CommandResult Result = Cmd->second->Dispatch(Adjusted, Args, ArgV);
+    const CommandResult Result = Cmd->second->Dispatch(Adjusted, Args);
     if (Result != kCmdSuccess)
       return Result;
   }

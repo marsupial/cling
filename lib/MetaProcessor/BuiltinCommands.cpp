@@ -37,7 +37,7 @@ CommandResult TCommand(const Invocation& I, EscArgument Input, EscArgument Outpu
 }
 
 CommandResult LCommand(const Invocation& I,
-                       const CommandHandler::SplitArgumentsList& Args) {
+                       const CommandHandler::SplitArguments& Args) {
   if (Args.empty())
     return kCmdInvalidSyntax;
 
@@ -72,7 +72,7 @@ CommandResult UCommand(const Invocation& I, EscArgument Name) {
 }
 
 CommandResult XCommand(const Invocation& I,
-                       const CommandHandler::SplitArgumentsList& Args) {
+                       const CommandHandler::SplitArguments& Args) {
   if (Args.empty() || Args.size() > 2)
     return kCmdInvalidSyntax;
 
@@ -291,7 +291,7 @@ CommandResult DebugCommand(const Invocation& I, Argument Arg) {
 }
 
 CommandResult RedirectCommand(const Invocation& I,
-                              const CommandHandler::SplitArgumentsList& Args) {
+                              const CommandHandler::SplitArguments& Args) {
   return kCmdUnimplemented;
 }
 
