@@ -82,22 +82,34 @@ namespace cling {
       /// neccessary and can speed things up by not allocating a new string
       /// for every argument.
       class SplitArgument {
-        mutable llvm::PointerIntPair<std::string*, 1> UnescapedStr;
+        mutable std::string UnescapedStr;
 
       public:
-        const llvm::StringRef Str;
+        const llvm::StringRef RawStr;
         const char Group;
+        const unsigned Escaped : 1;
 
         SplitArgument(llvm::StringRef S = {}, bool E = false, char G = 0)
-            : UnescapedStr(nullptr, E), Str(S), Group(G) {}
+            : RawStr(S), Group(G), Escaped(E) {}
         SplitArgument(SplitArgument&& O)
-            : UnescapedStr(O.UnescapedStr), Str(O.Str), Group(O.Group) {
-          O.UnescapedStr.setPointer(nullptr);
-        }
+            : UnescapedStr(std::move(O.UnescapedStr)), RawStr(O.RawStr),
+              Group(O.Group), Escaped(O.Escaped) {}
         SplitArgument(const SplitArgument&) = delete;
 
-        ~SplitArgument() {
-          if (std::string* E = UnescapedStr.getPointer()) delete E;
+        bool empty() const { return RawStr.empty(); }
+        bool operator==(const char* RHS) const { return RawStr == RHS; }
+        bool operator!=(const char* RHS) const { return RawStr != RHS; }
+
+        operator llvm::StringRef() const {
+          if (!Escaped) return RawStr;
+          return static_cast<const std::string&>(*this);
+        }
+
+        operator const std::string&() const {
+          if (UnescapedStr.empty())
+            (Escaped ? CommandHandler::Unescape(RawStr) : RawStr.str())
+                .swap(UnescapedStr);
+          return UnescapedStr;
         }
 
         ///\brief Convert the string argument to an llvm::Optional.
@@ -106,22 +118,6 @@ namespace cling {
         ///
         template <class T>
         llvm::Optional<T> Optional(bool* WasBool = nullptr) const;
-
-        bool empty() const { return Str.empty(); }
-        bool operator==(const char* RHS) const { return Str == RHS; }
-        bool operator!=(const char* RHS) const { return Str != RHS; }
-        operator llvm::StringRef() const { return Str; }
-
-        bool escaped() const { return UnescapedStr.getInt(); }
-        operator const std::string&() const {
-          std::string* E = UnescapedStr.getPointer();
-          if (!E) {
-            E = new std::string(escaped() ? CommandHandler::Unescape(Str)
-                                          : Str.str());
-            UnescapedStr.setPointer(E);
-          }
-          return *E;
-        }
       };
 
       ///\brief Convenience type for when 8 or less arguemnts expected.

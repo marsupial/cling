@@ -26,9 +26,14 @@ CommandHandler Cmds;
 gCling->setCommandHandler(&Cmds);
 
 
-static CommandResult DoOneLArg(const Invocation& I, CommandHandler::Argument Arg) {
-  I.Out << "llvm: " << Arg.Str << "\n";
+static CommandResult DoOneCArg(const Invocation& I, CommandHandler::Argument Arg) {
+  I.Out << "CMD: " << Arg.RawStr << "\n";
   return kCmdSuccess; 
+}
+
+static CommandResult DoOneRArg(const Invocation& I, llvm::StringRef Arg) {
+  I.Out << "llvm: " << Arg << "\n";
+  return kCmdSuccess;
 }
 
 static CommandResult DoOneSArg(const Invocation& I, const std::string& Arg) {
@@ -41,17 +46,26 @@ static CommandResult DoTwoArgs(const Invocation& I, llvm::StringRef Arg1, llvm::
   return kCmdSuccess; 
 }
 
-Cmds.AddCommand("LLVM", &DoOneLArg, "");
+Cmds.AddCommand("CMD", DoOneCArg, "");
+Cmds.AddCommand("LLVM", DoOneRArg, "");
 Cmds.AddCommand("STD", &DoOneSArg, "");
-Cmds.AddCommand("TWO", &DoTwoArgs, "");
+Cmds.AddCommand("TWO", DoTwoArgs, "");
 
 
-#pragma cling LLVM  A0 A1 A2 { A3, A4, A5 }  "ESC\tSEQ"
+#pragma cling CMD  A0 A1 A2 { A3, A4, A5 }  "ESC\tSEQ"
+//      CHECK: CMD: A0
+// CHECK-NEXT: CMD: A1
+// CHECK-NEXT: CMD: A2
+// CHECK-NEXT: CMD: A3, A4, A5
+// CHECK-NEXT: CMD: ESC\tSEQ
+
+#pragma cling LLVM  A0 A1 A2 { A3, A4, A5 }  "ESC\nSEQ"
 //      CHECK: llvm: A0
 // CHECK-NEXT: llvm: A1
 // CHECK-NEXT: llvm: A2
 // CHECK-NEXT: llvm: A3, A4, A5
-// CHECK-NEXT: llvm: ESC\tSEQ
+// CHECK-NEXT: llvm: ESC
+// CHECK-NEXT: SEQ
 
 #pragma cling STD  A0 A1 A2 "ESC\tSEQ"
 // CHECK-NEXT: std: A0

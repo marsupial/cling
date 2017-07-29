@@ -20,8 +20,8 @@
 namespace llvm {
 raw_ostream& operator<<(raw_ostream& OS,
                         cling::meta::CommandHandler::Argument Arg) {
-  OS << "{\"" << Arg.Str << "\"";
-  if (Arg.escaped()) OS << ", Escaped";
+  OS << "{\"" << Arg.RawStr << "\"";
+  if (Arg.Escaped) OS << ", Escaped";
   if (Arg.Group) OS << ", Group: '" << Arg.Group << '\'';
   OS << "}";
   return OS;
@@ -99,17 +99,17 @@ ArgToOptional(const llvm::StringRef& Arg, bool* WasBool) {
 
 template <> llvm::Optional<unsigned>
 CommandHandler::SplitArgument::Optional<unsigned>(bool* WasBool) const {
-  return ArgToOptional<unsigned>(Str, WasBool);
+  return ArgToOptional<unsigned>(RawStr, WasBool);
 }
 
 template <> llvm::Optional<int>
 CommandHandler::SplitArgument::Optional<int>(bool* WasBool) const {
-  return ArgToOptional<int>(Str, WasBool);
+  return ArgToOptional<int>(RawStr, WasBool);
 }
 
 template <> llvm::Optional<bool>
 CommandHandler::SplitArgument::Optional<bool>(bool* WasBool) const {
-  return ArgToOptional<bool>(Str, WasBool);
+  return ArgToOptional<bool>(RawStr, WasBool);
 }
 
 llvm::StringRef
