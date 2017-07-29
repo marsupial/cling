@@ -473,6 +473,12 @@ CommandResult CommandHandler::Execute(const Invocation& I) {
   } else
     CmdName = Split(I.Cmd, Args, kPopFirstArgument | kSplitWithGrouping);
 
+#if 1
+  llvm::raw_ostream& OS = cling::outs();
+  OS << "CMD: " << CmdName << "\n";
+  for (auto& Arg : Args) { OS << " arg: "; Arg.dump(&OS); OS << "\n"; }
+#endif
+
   const auto Cmds = m_Callbacks.equal_range(CmdName);
   if (Cmds.first == Cmds.second)
     return kCmdNotFound;

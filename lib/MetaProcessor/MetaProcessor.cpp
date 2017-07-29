@@ -8,6 +8,7 @@
 //------------------------------------------------------------------------------
 
 #include "cling/MetaProcessor/MetaProcessor.h"
+#include "cling/MetaProcessor/Commands.h"
 
 #include "Display.h"
 #include "InputValidator.h"
@@ -281,6 +282,7 @@ CommandResult AddBuiltinCommands(CommandHandler& Cmds);
     : m_Interp(interp), m_Outs(&outs) {
     m_InputValidator.reset(new InputValidator());
     m_MetaParser.reset(new MetaParser(new MetaSema(interp, *this)));
+    interp.setCommandHandler(new meta::CommandHandler);
     if (meta::CommandHandler* Cmds = interp.getCommandHandler())
       meta::AddBuiltinCommands(*Cmds);
   }
