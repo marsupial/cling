@@ -473,7 +473,7 @@ CommandResult CommandHandler::Execute(const Invocation& I) {
   } else
     CmdName = Split(I.Cmd, Args, kPopFirstArgument | kSplitWithGrouping);
 
-#if 1
+#if 0
   llvm::raw_ostream& OS = cling::outs();
   OS << "CMD: " << CmdName << "\n";
   for (auto& Arg : Args) { OS << " arg: "; Arg.dump(&OS); OS << "\n"; }
