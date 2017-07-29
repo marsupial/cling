@@ -17,18 +17,10 @@
 class Thrower {
   int m_Private = 0;
 public:
-  Thrower(int I = 1) : m_Private(I) {}
-  ~Thrower() { printf("~Thrower-%d\n", m_Private); }
-
-  void* operator new(size_t Size) {
-    throw std::runtime_error("Thrower.new");
-    return malloc(Size);
-  }
-
-  static Thrower Create(int I = 1) {
+  Thrower(int I = 1) : m_Private(I) {
     if (I) throw std::runtime_error("Thrower");
-    return Thrower(I);
   }
+  ~Thrower() { printf("~Thrower-%d\n", m_Private); }
 };
 
 void barrier() {
@@ -46,7 +38,7 @@ namespace cling {
 // FIXME: Intercept std::terminate call from this: Thrower Tt(1);
 
 // Check throwing from cling::printValue doesn't crash.
-Thrower Ts = Thrower::Create(0);
+Thrower Ts(0);
 barrier();
 // CHECK: 0 -------------
 
@@ -59,7 +51,7 @@ barrier();
 // CHECK-NEXT: 1 -------------
 
 // Un-named, so it's not a module static which would trigger std::terminate.
-Thrower::Create()
+Thrower()
 // CHECK-NEXT: >>> Caught a std::exception: 'Thrower'.
 //  CHECK-NOT: ~Thrower-1
 
@@ -67,11 +59,11 @@ Thrower::Create()
 barrier();
 // CHECK-NEXT: 2 -------------
 
-Thrower& flocal() {
-  Thrower T = Thrower::Create();
-  return T; // expected-warning {{reference to stack memory associated with local variable 'T' returned}}
+Thrower& fstatic() {
+  static Thrower sThrower;
+  return sThrower;
 }
-flocal()
+fstatic()
 // CHECK-NEXT: >>> Caught a std::exception: 'Thrower'.
 //  CHECK-NOT: ~Thrower-1
 
@@ -81,7 +73,7 @@ barrier();
 
 // Must be -new-, throwing from a constructor of a static calls std::terminate!
 new Thrower
-// CHECK-NEXT: >>> Caught a std::exception: 'Thrower.new'.
+// CHECK-NEXT: >>> Caught a std::exception: 'Thrower'.
 //  CHECK-NOT: ~Thrower-1
 
 
@@ -89,7 +81,7 @@ barrier();
 // CHECK-NEXT: 4 -------------
 
 cling::Value V;
-gCling->evaluate("Ts = Thrower::Create()", V);
+gCling->evaluate("Thrower T1(1)", V);
 // CHECK-NEXT: >>> Caught a std::exception: 'Thrower'.
 V = cling::Value();
 //  CHECK-NOT: ~Thrower-1
@@ -98,7 +90,7 @@ V = cling::Value();
 barrier();
 // CHECK-NEXT: 5 -------------
 
-//gCling->evaluate("Thrower::Create()", V);
+gCling->evaluate("Thrower()", V);
 // CHECK-NEXT: >>> Caught a std::exception: 'Thrower'.
 V = cling::Value();
 //  CHECK-NOT: ~Thrower-1
@@ -107,7 +99,7 @@ V = cling::Value();
 barrier();
 // CHECK-NEXT: 6 -------------
 
-//gCling->evaluate("Thrower T1 = Thrower::Create(1)", V);
+gCling->evaluate("Thrower T1(1)", V);
 // CHECK-NEXT: >>> Caught a std::exception: 'Thrower'.
 V = cling::Value();
 //  CHECK-NOT: ~Thrower-1
@@ -116,7 +108,7 @@ V = cling::Value();
 barrier();
 // CHECK-NEXT: 7 -------------
 
-//gCling->echo("Thrower T0a = Thrower::Create(0)");
+gCling->echo("Thrower T0a(0)");
 // CHECK-NEXT: ~Thrower-0
 // CHECK-NEXT: >>> Caught a std::exception: 'cling::printValue'.
 
@@ -124,7 +116,7 @@ barrier();
 barrier();
 // CHECK-NEXT: 8 -------------
 
-//gCling->echo("Thrower::Create(0)");
+gCling->echo("Thrower(0)");
 // CHECK-NEXT: ~Thrower-0
 // CHECK-NEXT: >>> Caught a std::exception: 'cling::printValue'.
 
