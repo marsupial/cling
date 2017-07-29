@@ -52,18 +52,23 @@ Cmds.AddCommand("STD", &DoOneSArg, "");
 Cmds.AddCommand("TWO", DoTwoArgs, "");
 
 
-#pragma cling CMD  A0 A1 A2 { A3, A4, A5 }  "ESC\tSEQ"
+#pragma cling CMD  A0 A1 A2 { A3 , A4 , A5, A6 }  "ESC\tSEQ"
 //      CHECK: CMD: A0
 // CHECK-NEXT: CMD: A1
 // CHECK-NEXT: CMD: A2
-// CHECK-NEXT: CMD: A3, A4, A5
+// CHECK-NEXT: CMD:  A3 , A4 , A5, A6 
 // CHECK-NEXT: CMD: ESC\tSEQ
 
-#pragma cling LLVM  A0 A1 A2 { A3, A4, A5 }  "ESC\nSEQ"
+#pragma cling LLVM (A0, A1, A2, { A3, A4 , A5  ,  A6 }/*Test a
+block
+  comment*/, "ESC\nSEQ")
 //      CHECK: llvm: A0
 // CHECK-NEXT: llvm: A1
 // CHECK-NEXT: llvm: A2
-// CHECK-NEXT: llvm: A3, A4, A5
+// CHECK-NEXT: llvm:  A3, A4 , A5  ,  A6 
+// CHECK-NEXT: llvm: Test a
+// CHECK-NEXT: block
+// CHECK-NEXT:   comment
 // CHECK-NEXT: llvm: ESC
 // CHECK-NEXT: SEQ
 

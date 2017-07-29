@@ -120,8 +120,9 @@ CommandHandler::Split(llvm::StringRef Str, SplitArgumentsList& Out,
   llvm::StringRef CmdName;
 
   bool HadEscape = false;
-  size_t InGroup = llvm::StringRef::npos;
-  const llvm::StringRef GrpBegin("\"'{[<("), GrpEnd("\"'}]>)");
+  size_t Group = llvm::StringRef::npos;
+  const llvm::StringRef GrpBegin("\"'{[<(/"), GrpEnd("\"'}]>)*");
+  const size_t Comment = GrpBegin.size() - true;
 
   for (size_t Idx = 0; Idx < Len; ++Idx) {
     const char C = Str[Idx];
@@ -136,7 +137,7 @@ CommandHandler::Split(llvm::StringRef Str, SplitArgumentsList& Out,
         ++Idx;
 
         // It cannot start or close a group, i.e ' \"quoted\" '
-        if (InGroup != llvm::StringRef::npos)
+        if (Group != llvm::StringRef::npos)
           continue;
 
         // But if an argument is open, it can close it out. ' arg1\\\narg2 '
@@ -155,23 +156,41 @@ CommandHandler::Split(llvm::StringRef Str, SplitArgumentsList& Out,
 
     // Groups
     if (Flags & kSplitWithGrouping) {
-      if (InGroup != llvm::StringRef::npos) {
+      if (Group != llvm::StringRef::npos) {
         // See if the character is the end of the current group type.
-        if (GrpEnd.find(C) == InGroup) {
-          Out.emplace_back(Str.slice(Start, Idx), HadEscape, GrpBegin[InGroup]);
-          InGroup = llvm::StringRef::npos;
-          HadEscape = false;
-          Start = Idx + 1;
+        if (GrpEnd.find(C) == Group) {
+          if (Group != Comment || Idx > LenMinOne || Str[Idx+1] == '/') {
+            Out.emplace_back(Str.slice(Start, Idx), HadEscape, GrpBegin[Group]);
+            // Advance two characters for block comment
+            Idx += Group == Comment;
+            Start = Idx + 1;
+            Group = llvm::StringRef::npos;
+            HadEscape = false;
+          }
         }
         // Already in a group, eat all until the end of it.
         continue;
       }
       // Maybe a group beginning
-      InGroup = GrpBegin.find(C);
-      if (InGroup != llvm::StringRef::npos) {
-        Start = Idx + 1;
-        HadEscape = false;
-        continue;
+      Group = GrpBegin.find(C);
+      if (Group != llvm::StringRef::npos) {
+        //
+        if (Group == Comment && Idx <= LenMinOne) {
+          switch (Str[Idx+1]) {
+            // Line comment,
+            case '/':
+              Out.emplace_back(Str.substr(Start+2), HadEscape, '/');
+              return CmdName;
+            // Block comment
+            case '*': ++Idx; break;
+            default: Group = llvm::StringRef::npos; break;
+          }
+        }
+        if (Group != llvm::StringRef::npos) {
+          Start = Idx + 1;
+          HadEscape = false;
+          continue;
+        }
       }
     }
 
@@ -191,7 +210,7 @@ CommandHandler::Split(llvm::StringRef Str, SplitArgumentsList& Out,
   }
 
   // Unterminated group keep it as it was
-  if (InGroup != llvm::StringRef::npos)
+  if (Group != llvm::StringRef::npos)
     --Start;
 
   // Grab whatever remains
