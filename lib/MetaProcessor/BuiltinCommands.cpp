@@ -55,13 +55,22 @@ CommandResult UCommand(const Invocation& I, Argument Name) {
 
 CommandResult XCommand(const Invocation& I,
                        const CommandHandler::SplitArguments& Args) {
-  if (Args.empty() || Args.size() > 2)
+  if (Args.empty())
     return kCmdInvalidSyntax;
 
-  const llvm::StringRef File = Args.front();
-  const llvm::StringRef Call =
-      Args.size() > 1 ? Args.back().str() : llvm::StringRef("()");
-  llvm::errs() << "'" << File << "' : " << Call << "\n";
+  llvm::SmallVector<std::pair<llvm::StringRef, llvm::StringRef>, 8> Calls;
+  for (auto Itr = Args.rbegin(), End = Args.rend(); Itr < End; ++Itr) {
+    llvm::StringRef Call("()");
+    if (Itr->Group == '(') {
+      Call = Itr->str();
+      if (++Itr >= End)
+        return kCmdInvalidSyntax;
+    }
+    Calls.emplace_back(Itr->str(), Call);
+  }
+  for (auto& Call : Calls) {
+    llvm::errs() << "'" << Call.first << "' : " << Call.second << "\n";
+  }
   return kCmdSuccess;
 }
 
