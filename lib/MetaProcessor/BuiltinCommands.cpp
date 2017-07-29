@@ -27,46 +27,28 @@ namespace {
 using namespace clang;
 
 typedef CommandHandler::Argument Argument;
-typedef CommandHandler::EscArgument EscArgument;
 
-CommandResult TCommand(const Invocation& I, EscArgument Input, EscArgument Output) {
+CommandResult TCommand(const Invocation& I, Argument Input, Argument Output) {
   if (Input.empty() || Output.empty())
     return kCmdInvalidSyntax;
   I.Interp.GenerateAutoloadingMap(Input, Output);
   return kCmdSuccess;
 }
 
-CommandResult LCommand(const Invocation& I,
-                       const CommandHandler::SplitArguments& Args) {
-  if (Args.empty())
+CommandResult LCommand(const Invocation& I, Argument Arg) {
+  if (Arg.empty())
     return kCmdInvalidSyntax;
 
-  for (auto Itr = Args.begin(), End = Args.end(); Itr < End;) {
-    EscArgument File = *Itr;
-    llvm::errs() << "Load '" << File << "'\n";
-    // I.actions().actOnLCommand(File);
-    if (++Itr < End) {
-      EscArgument Next = *Itr;
-      if (Next.find("//") == 0) {
-        std::string Decl;
-        if (Next.size() == 2) {
-          if (++Itr < End) {
-            Decl = *Itr;
-            ++Itr;
-          }
-        } else
-          Decl = Next.substr(2);
-        if (!Decl.empty()) {
-          llvm::errs() << "Decl '" << Decl << "'\n";
-          //I.Interp.declare(Decl);
-        }
-      }
-    }
-  }
-  return kCmdUnimplemented;
+  if (Arg.IsComment()) {
+    //I.Interp.declare(Arg1);
+    llvm::errs() << "Declare '" << Arg.str() << "'\n";
+  } else
+    llvm::errs() << "Load '" << Arg.str() << "'\n";
+
+  return kCmdSuccess;
 }
 
-CommandResult UCommand(const Invocation& I, EscArgument Name) {
+CommandResult UCommand(const Invocation& I, Argument Name) {
   // I.actions().actOnUCommand(Name);
   return kCmdUnimplemented;
 }
@@ -76,12 +58,11 @@ CommandResult XCommand(const Invocation& I,
   if (Args.empty() || Args.size() > 2)
     return kCmdInvalidSyntax;
 
-  const std::string EmptyArgs("()");
-  EscArgument File = Args.front();
-  EscArgument Call = Args.size() > 1 ? Args.back() : EmptyArgs;
+  const llvm::StringRef File = Args.front();
+  const llvm::StringRef Call =
+      Args.size() > 1 ? Args.back().str() : llvm::StringRef("()");
   llvm::errs() << "'" << File << "' : " << Call << "\n";
-  // return I.actions().actOnxCommand(File, Call, Params.Val);
-  return kCmdUnimplemented;
+  return kCmdSuccess;
 }
 
 CommandResult ClassCommand(const Invocation& I, Argument Name) {
@@ -323,9 +304,14 @@ CommandResult QCommand(const Invocation& I) {
 }
 
 CommandResult AtCommand(const Invocation& I) {
-  //I.Processor->cancelContinuation();
-  //return kCmdSuccess;
+#if 0
+  if (!I.Processor)
+    return kCmdFailure;
+  I.Processor->cancelContinuation();
+  return kCmdSuccess;
+#else
   return kCmdUnimplemented;
+#endif
 }
 
 CommandResult HelpCommand(const Invocation& I) {
@@ -334,87 +320,87 @@ CommandResult HelpCommand(const Invocation& I) {
 
 } // anonymous namespace
 
-CommandResult AddBuiltinCommands(CommandHandler& Cmds) {
+CommandResult CommandHandler::AddBuiltinCommands() {
 
-  Cmds.AddCommand("!", ShellCommand, "Run shell command"); // "<cmd> [args]"
+  AddCommand("!", ShellCommand, "Run shell command"); // "<cmd> [args]"
 
-  Cmds.Alias("Class",
-    Cmds.AddCommand("class", &ClassCommand,
-                    "Prints out class <name> in a CINT-like style")); // "<name>"
+  Alias("Class",
+    AddCommand("class", &ClassCommand,
+               "Prints out class <name> in a CINT-like style")); // "<name>"
 
-  Cmds.AddCommand("debug", DebugCommand,
-                  "Generate debug information at given level"); // "[level|true|false]" Debug
+  AddCommand("debug", DebugCommand,
+             "Generate debug information at given level"); // "[level|true|false]" Debug
 
-  Cmds.AddCommand("dynamicExtensions", DynamicExtensionsCommand,
-                  "Toggles the use of the dynamic scopes and the late binding"); // [0|1]
+  AddCommand("dynamicExtensions", DynamicExtensionsCommand,
+             "Toggles the use of the dynamic scopes and the late binding"); // [0|1]
 
-  Cmds.AddCommand("files", FilesCommand,
-                  "Prints out some CINT-like file statistics");
+  AddCommand("files", FilesCommand,
+             "Prints out some CINT-like file statistics");
 
-  Cmds.AddCommand("filesEx", FileExCommand, "Prints out some file statistics"); // Debug
+  AddCommand("filesEx", FileExCommand, "Prints out some file statistics"); // Debug
 
-  Cmds.AddCommand("g", GCommand, "Prints out information about global variable "
-                                 "'name' - if no name is given, print them all"); // "[name]" Debug
+  AddCommand("g", GCommand, "Prints out information about global variable "
+                            "'name' - if no name is given, print them all"); // "[name]" Debug
 
-  Cmds.Alias("I",
-    Cmds.AddCommand("include", IncludesCommand,
-                    "Add give path to list of header search paths"
-                    ", or show the include paths if none is given.")); // "[path]"
+  Alias("I",
+    AddCommand("include", IncludesCommand,
+               "Add give path to list of header search paths"
+               ", or show the include paths if none is given.")); // "[path]"
 
-  Cmds.AddCommand("namespace", NamespaceCommand, ""); // "[name]"
+  AddCommand("namespace", NamespaceCommand, ""); // "[name]"
 
-  Cmds.AddCommand("O", OCommand, "Sets the optimization level (0-3), "
-                                 "or shows what it  currently is"); // [level]
+  AddCommand("O", OCommand, "Sets the optimization level (0-3), "
+                            "or shows what it  currently is"); // [level]
 
-  Cmds.AddCommand("printDebug", PrintDebugCommand,
-                  "Toggles the printing of input's corresponding"
-                  "\n\t\t\t\t  state changes"); // "[0|1]" Debug
+  AddCommand("printDebug", PrintDebugCommand,
+             "Toggles the printing of input's corresponding"
+             "\n\t\t\t\t  state changes"); // "[0|1]" Debug
 
-  Cmds.AddCommand("rawInput", RawInputCommand, "Toggle wrapping and printing "
-                  "the execution results of the input"); // "[0|1]"
+  AddCommand("rawInput", RawInputCommand, "Toggle wrapping and printing "
+             "the execution results of the input"); // "[0|1]"
 
-  Cmds.AddCommand("stats", StatsCommand,
-                  "Show stats for internal data structures"
-                  "\n\t\t\t\t  'ast'  abstract syntax tree stats"
-                  "\n\t\t\t\t  'decl' dump ast declarations"
-                  "\n\t\t\t\t  'undo' show undo stack"); // "<name>" Debug
+  AddCommand("stats", StatsCommand,
+             "Show stats for internal data structures"
+             "\n\t\t\t\t  'ast'  abstract syntax tree stats"
+             "\n\t\t\t\t  'decl' dump ast declarations"
+             "\n\t\t\t\t  'undo' show undo stack"); // "<name>" Debug
 
-  Cmds.AddCommand("storeState", StoreStateCommand,
-                  "Store the interpreter's state to as the given name"); // "<name>" Debug);
+  AddCommand("storeState", StoreStateCommand,
+             "Store the interpreter's state to as the given name"); // "<name>" Debug);
 
-  Cmds.AddCommand("compareState", &CompareStateCommand,
-                  "Compare the interpreter's state with the one saved "
-                  "with the given name"); // "<name>" Debug);
+  AddCommand("compareState", &CompareStateCommand,
+             "Compare the interpreter's state with the one saved "
+             "with the given name"); // "<name>" Debug);
 
-  Cmds.AddCommand("trace", TraceCommand, "");
+  AddCommand("trace", TraceCommand, "");
 
-  Cmds.AddCommand("typedef", TypedefCommand, ""); // "[name]"
+  AddCommand("typedef", TypedefCommand, ""); // "[name]"
 
-  Cmds.AddCommand("undo", UndoCommand,
-                  "Unloads the last 'n' inputs lines"); // "[n]"
+  AddCommand("undo", UndoCommand,
+             "Unloads the last 'n' inputs lines"); // "[n]"
 
-  Cmds.AddCommand("q", QCommand, "Exit the program"); //, MetaProcessor);
+  AddCommand("q", QCommand, "Exit the program"); //, MetaProcessor);
 
-  Cmds.AddCommand("@", AtCommand, "Cancels and ignores the multiline input"); //, MetaProcessor);
+  AddCommand("@", AtCommand, "Cancels and ignores the multiline input"); //, MetaProcessor);
 
-  Cmds.Alias("?",
-    Cmds.AddCommand("help", HelpCommand, "Shows this information"));
+  Alias("?",
+    AddCommand("help", HelpCommand, "Shows this information"));
 
 
-  Cmds.AddCommand("L", LCommand, "Load the given file(s) executing the "
-                                 "last comment if given"); // "<file|library> [//]", MetaProcessor
+  AddCommand("L", LCommand, "Load the given file(s) executing the "
+                            "last comment if given", CommandHandler::kPassComments); // "<file|library> [//]", MetaProcessor
 
-  Cmds.AddCommand("T", TCommand,
-                  "Generate autoloading map from 'infile' to 'outfile'"); // "<infile> <outfile>"
+  AddCommand("T", TCommand,
+             "Generate autoloading map from 'infile' to 'outfile'"); // "<infile> <outfile>"
 
-  Cmds.AddCommand("U", UCommand, "Unloads the given file"); // "<library>" MetaProcessor
-  
-  Cmds.Alias("x",
-    Cmds.AddCommand("X", XCommand,
-                    "Same as .L and runs a function with signature: "
-                    "ret_type filename(args)")); // "<filename> [args]" MetaProcessor
+  AddCommand("U", UCommand, "Unloads the given file"); // "<library>" MetaProcessor
 
-  Cmds.AddCommand(">", RedirectCommand,
+  Alias("x",
+    AddCommand("X", XCommand,
+               "Same as .L and runs a function with signature: "
+               "ret_type filename(args)")); // "<filename> [args]" MetaProcessor
+
+  AddCommand(">", RedirectCommand,
         "Redirect command to a given file\n"
         "      '>' or '1>'\t\t- Redirects the stdout stream only\n"
         "      '2>'\t\t\t- Redirects the stderr stream only\n"

@@ -8,6 +8,7 @@
 //------------------------------------------------------------------------------
 
 #include "cling/MetaProcessor/MetaProcessor.h"
+#include "cling/MetaProcessor/Commands.h"
 
 #include "Display.h"
 #include "InputValidator.h"
@@ -272,10 +273,15 @@ namespace cling {
       m_MetaProcessor.m_RedirectOutput->resetStdOut();
   }
 
-  MetaProcessor::MetaProcessor(Interpreter& interp, raw_ostream& outs)
+  MetaProcessor::MetaProcessor(Interpreter& interp, raw_ostream& outs, bool cmd)
     : m_Interp(interp), m_Outs(&outs) {
     m_InputValidator.reset(new InputValidator());
     m_MetaParser.reset(new MetaParser(new MetaSema(interp, *this)));
+    if (cmd) {
+      if (!interp.getCommandHandler())
+        interp.setCommandHandler(new meta::CommandHandler);
+      interp.getCommandHandler()->AddBuiltinCommands();
+    }
   }
 
   MetaProcessor::~MetaProcessor() {

@@ -100,17 +100,19 @@ namespace cling {
         bool operator==(const char* RHS) const { return RawStr == RHS; }
         bool operator!=(const char* RHS) const { return RawStr != RHS; }
 
-        operator llvm::StringRef() const {
-          if (!Escaped) return RawStr;
-          return static_cast<const std::string&>(*this);
-        }
-
         operator const std::string&() const {
           if (UnescapedStr.empty())
             (Escaped ? CommandHandler::Unescape(RawStr) : RawStr.str())
                 .swap(UnescapedStr);
           return UnescapedStr;
         }
+
+        llvm::StringRef str() const {
+          if (!Escaped) return RawStr;
+          return static_cast<const std::string&>(*this);
+        }
+
+        operator llvm::StringRef() const { return str(); }
 
         ///\brief Convert the string argument to an llvm::Optional.
         ///
@@ -119,13 +121,14 @@ namespace cling {
         template <class T>
         llvm::Optional<T> Optional(bool* WasBool = nullptr) const;
       
+
+        bool IsComment() const { return Group == '/'; }
+
         void dump(llvm::raw_ostream* OS = nullptr);
       };
 
       typedef llvm::SmallVectorImpl<SplitArgument> SplitArguments;
       typedef const SplitArgument& Argument;
-      typedef const std::string& EscArgument;
-      typedef std::vector<std::string> EscapedArgumentsList;
       typedef void* CommandID;
 
     private:
@@ -263,6 +266,10 @@ namespace cling {
       ///
       bool
       Alias(std::string Name, CommandID ID);
+
+      ///\brief Add the built-in commands.
+      ///
+      CommandResult AddBuiltinCommands();
 
       ///\brief Remove a previously registered command, and sets it to an
       //// invalid value.

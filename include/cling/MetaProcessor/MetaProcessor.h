@@ -80,7 +80,7 @@ namespace cling {
     };
 
   public:
-    MetaProcessor(Interpreter& interp, llvm::raw_ostream& outs);
+    MetaProcessor(Interpreter& interp, llvm::raw_ostream& outs, bool cmds = 1);
     ~MetaProcessor();
 
     const Interpreter& getInterpreter() const { return m_Interp; }

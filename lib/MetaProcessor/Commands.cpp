@@ -265,14 +265,14 @@ class Callback {
     kArgList = CommandHandler::kCommandFlagsEnd * 2,
     kSingleStr = CommandHandler::kCommandFlagsEnd * 4,
     kDualStr = CommandHandler::kCommandFlagsEnd * 8,
-    kNoStrArgs = 0,
+    kNoArgs = 0,
   };
 
   // Overloads to -easily- get get the proper flags for the type of arguments
   // the callback takes. kObjFunction must be set explicitly as both
   // free-standing and std::function callbacks with no strings are ambiguous.
-  static constexpr unsigned GetArgFlags(const ObjFunction::Base& B) { return kNoStrArgs; }
-  static constexpr unsigned GetArgFlags(const FreeFunction::Base&) { return kNoStrArgs; }
+  static constexpr unsigned GetArgFlags(const ObjFunction::Base& B) { return kNoArgs; }
+  static constexpr unsigned GetArgFlags(const FreeFunction::Base&) { return kNoArgs; }
 
   // Specializing for free-standing shouln't really be neccesssary, but clang is
   // complaining about ambiguity otherwise.
@@ -292,7 +292,7 @@ class Callback {
   }
 
   bool Skip(CommandHandler::Argument Arg) const {
-    return Flags & CommandHandler::kPassComments ? false : Arg.Group == '/';
+    return Flags & CommandHandler::kPassComments ? false : Arg.IsComment();
   }
 
   template <typename CFunc, typename ObjCall> CommandResult
@@ -348,11 +348,11 @@ public:
   ~Callback() {
     if (Flags & kObjFunction) {
       switch (Flags & (kArgList|kSingleStr|kDualStr)) {
-        case kNoStrArgs: delete Obj.B; break;
+        case kNoArgs:    delete Obj.B; break;
         case kArgList:   delete Obj.A; break;
         case kSingleStr: delete Obj.S; break;
         case kDualStr:   delete Obj.D; break;
-        default: llvm_unreachable("Unkown function type not deallocated");
+        default: llvm_unreachable("Unkown std::function type not deallocated");
       }
     }
   }
@@ -360,7 +360,7 @@ public:
   CommandResult Dispatch(const Invocation& I,
                          CommandHandler::SplitArguments& Args) {
     // Simplest callback (Invocation& I);
-    if (!Flags || Flags == kObjFunction)
+    if (Flags == kNoArgs || Flags == kObjFunction)
       return Call(Free.B, Obj.B, I);
 
     // callback (Invocation& I, ArgList);
