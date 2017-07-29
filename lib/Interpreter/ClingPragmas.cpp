@@ -208,9 +208,6 @@ namespace {
             Literal = PP.getSpelling(Tok, Buffer).str();
           }
         }
-      } else {
-        llvm::SmallString<64> Buffer;
-        Literal = PP.getSpelling(Tok, Buffer).str();
       }
 
       if (Literal.empty())
