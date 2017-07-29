@@ -23,8 +23,11 @@ static void DumpArgs(llvm::StringRef Str, llvm::raw_ostream& Out,
                      CommandHandler::kSplitWithGrouping) {
   CommandHandler::SplitArguments Args;
   Out << "<" << CommandHandler::Split(Str, Args, F) << ">\n";
-  for (auto&& A : Args)
-	Out << "  " << A << "\n";
+  for (auto&& A : Args) {
+    Out << "  ";
+    A.dump(&Out);
+	Out << "\n";
+  }
 }
 
 class TestImpl : public CommandHandler {

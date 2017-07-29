@@ -9,6 +9,7 @@
 
 #include "cling/MetaProcessor/Commands.h"
 #include "cling/Utils/Casting.h"
+#include "cling/Utils/Output.h"
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Compiler.h"
@@ -17,16 +18,6 @@
 #include <map>
 #include <vector>
 
-namespace llvm {
-raw_ostream& operator<<(raw_ostream& OS,
-                        cling::meta::CommandHandler::Argument Arg) {
-  OS << "{\"" << Arg.RawStr << "\"";
-  if (Arg.Escaped) OS << ", Escaped";
-  if (Arg.Group) OS << ", Group: '" << Arg.Group << '\'';
-  OS << "}";
-  return OS;
-}
-}
 namespace cling {
 namespace meta {
 
@@ -110,6 +101,14 @@ CommandHandler::SplitArgument::Optional<int>(bool* WasBool) const {
 template <> llvm::Optional<bool>
 CommandHandler::SplitArgument::Optional<bool>(bool* WasBool) const {
   return ArgToOptional<bool>(RawStr, WasBool);
+}
+
+void CommandHandler::SplitArgument::dump(llvm::raw_ostream* OS) {
+  if (!OS) OS = &cling::outs();
+  *OS << "{\"" << RawStr << "\"";
+  if (Escaped) *OS << ", Escaped";
+  if (Group) *OS << ", Group: '" << Group << '\'';
+  *OS << "}";
 }
 
 llvm::StringRef

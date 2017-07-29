@@ -118,6 +118,8 @@ namespace cling {
         ///
         template <class T>
         llvm::Optional<T> Optional(bool* WasBool = nullptr) const;
+      
+        void dump(llvm::raw_ostream* OS = nullptr);
       };
 
       ///\brief Convenience type for when 8 or less arguemnts expected.
@@ -282,11 +284,6 @@ namespace cling {
       virtual CommandResult Execute(const Invocation& I);
     };
   }
-}
-
-// Helper function to dump a CommandHandler::Argument into an llvm::raw_ostream
-namespace llvm {
-raw_ostream& operator<<(raw_ostream&, cling::meta::CommandHandler::Argument&);
 }
 
 #endif // CLING_META_COMMANDS_H
