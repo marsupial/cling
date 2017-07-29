@@ -25,6 +25,23 @@ using namespace cling::meta;
 CommandHandler Cmds;
 gCling->setCommandHandler(&Cmds);
 
+namespace cling { namespace meta {
+CommandResult AddBuiltinCommands(CommandHandler& Cmds);
+} }
+AddBuiltinCommands(Cmds);
+
+#pragma cling stats undo
+#pragma cling L "Filename Spaced" // Do something
+#pragma cling L AnotherFile //Contiguous
+#pragma cling x RunThis (1, 2, 3, 4)
+#pragma cling x RunThisNS("A", "B", {0,1}, 4)
+
+#pragma cling(!, "ls -l")
+#pragma cling ! ls -l
+#pragma cling debug true
+
+.q
+
 static CommandResult DoOneLArg(const Invocation& I, llvm::StringRef Arg) {
   I.Out << "llvm: " << Arg << "\n";
   return kCmdSuccess; 
