@@ -218,11 +218,10 @@ namespace cling {
            //fprintf(stderr,"DEBUG: On Unload For %s unloadPoint is %p\n",file.str().c_str(),unloadPoint);
           while(m_Interpreter.getLastTransaction() != unloadPoint) {
              //fprintf(stderr,"DEBUG: unload transaction %p (searching for %p)\n",m_Interpreter.getLastTransaction(),unloadPoint);
-            const clang::FileEntry* EntryUnloaded
-              = m_Watermarks->second[m_Interpreter.getLastTransaction()];
-            if (EntryUnloaded) {
+            auto Unloaded = m_Watermarks->second.find(m_Interpreter.getLastTransaction());
+            if (Unloaded != m_Watermarks->second.end()) {
               Watermarks::iterator PosUnloaded
-                = m_Watermarks->first.find(EntryUnloaded);
+                = m_Watermarks->first.find(Unloaded->second);
               if (PosUnloaded != m_Watermarks->first.end()) {
                 m_Watermarks->first.erase(PosUnloaded);
               }
@@ -233,6 +232,7 @@ namespace cling {
         DynamicLibraryManager* DLM = m_Interpreter.getDynamicLibraryManager();
         DLM->unloadLibrary(std::move(fe));
         m_Watermarks->first.erase(Pos);
+        m_Watermarks->second.erase(Pos->second);
       }
     }
     return AR_Success;
@@ -507,10 +507,9 @@ namespace cling {
           return false;
         }
       }
-      if (!m_Watermarks->first[Entry]) {
-        // register as a watermark
-        m_Watermarks->first[Entry] = unloadPoint;
-        m_Watermarks->second[unloadPoint] = Entry;
+      // register as a watermark, or error if already registered
+      if (m_Watermarks->first.try_emplace(Entry, unloadPoint).second) {
+        m_Watermarks->second.try_emplace(unloadPoint, Entry);
         return true;
       }
       m_Interpreter.getDiagnostics().Report(m_Interpreter.getSourceLocation(),
