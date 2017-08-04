@@ -6,10 +6,10 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: clang -shared -DCLING_EXPORT=%dllexport %S/call_lib.c -o%T/libcall_lib2%shlibext
+// RUN: clang -shared -DCLING_EXPORT=%dllexport %S/Call.cxx -o%T/libcall2%shlibext
 // RUN: cat %s | %cling -L%T | FileCheck %s
 
-.L libcall_lib2
+.L libcall2
 extern "C" int cling_testlibrary_function();
 int i = cling_testlibrary_function();
 extern "C" int printf(const char* fmt, ...);

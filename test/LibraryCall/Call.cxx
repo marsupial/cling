@@ -6,8 +6,7 @@
 // LICENSE.TXT for details.
 //----------------------------------------------------------------------------*/
 
-// RUN: true
 // Used as library source by call.c
-CLING_EXPORT int cling_testlibrary_function() {
+extern "C" CLING_EXPORT int cling_testlibrary_function() {
   return 0x42;
 }
