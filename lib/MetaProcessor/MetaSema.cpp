@@ -16,6 +16,7 @@
 #include "cling/Interpreter/Transaction.h"
 #include "cling/Interpreter/Value.h"
 #include "cling/MetaProcessor/MetaProcessor.h"
+#include "cling/Utils/Output.h"
 
 #include "clang/AST/ASTContext.h"
 #include "clang/Basic/SourceManager.h"
@@ -193,48 +194,40 @@ namespace cling {
     if (!Entry)
       Entry = m_Interpreter.get<clang::FileManager>().getFile(fe.name(), 0, 0);
 
-    if (Entry) {
-      Watermarks::iterator Pos = m_Watermarks->first.find(Entry);
-       //fprintf(stderr,"DEBUG: unload request for %s\n",file.str().c_str());
+    Watermarks::iterator Pos = m_Watermarks->first.find(Entry);
+    if (Pos == m_Watermarks->first.end())
+      return AR_Success;
 
-      if (Pos != m_Watermarks->first.end()) {
-        const Transaction* unloadPoint = Pos->second;
-        // Search for the transaction, i.e. verify that is has not already
-        // been unloaded ; This can be removed once all transaction unload
-        // properly information MetaSema that it has been unloaded.
-        bool found = false;
-        //for (auto t : m_Interpreter.m_IncrParser->getAllTransactions()) {
-        for(const Transaction *t = m_Interpreter.getFirstTransaction();
-            t != 0; t = t->getNext()) {
-           //fprintf(stderr,"DEBUG: On unload check For %s unloadPoint is %p are t == %p\n",file.str().c_str(),unloadPoint, t);
-          if (t == unloadPoint ) {
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          m_MetaProcessor.getOuts() << "!!!ERROR: Transaction for file: " << file << " has already been unloaded\n";
-        } else {
-           //fprintf(stderr,"DEBUG: On Unload For %s unloadPoint is %p\n",file.str().c_str(),unloadPoint);
-          while(m_Interpreter.getLastTransaction() != unloadPoint) {
-             //fprintf(stderr,"DEBUG: unload transaction %p (searching for %p)\n",m_Interpreter.getLastTransaction(),unloadPoint);
-            auto Unloaded = m_Watermarks->second.find(m_Interpreter.getLastTransaction());
-            if (Unloaded != m_Watermarks->second.end()) {
-              Watermarks::iterator PosUnloaded
-                = m_Watermarks->first.find(Unloaded->second);
-              if (PosUnloaded != m_Watermarks->first.end()) {
-                m_Watermarks->first.erase(PosUnloaded);
-              }
-            }
-            m_Interpreter.unload(/*numberOfTransactions*/1);
-          }
-        }
-        DynamicLibraryManager* DLM = m_Interpreter.getDynamicLibraryManager();
-        DLM->unloadLibrary(std::move(fe));
-        m_Watermarks->first.erase(Pos);
-        m_Watermarks->second.erase(Pos->second);
+    // Search for the transaction, i.e. verify that is has not already
+    // been unloaded ; This can be removed once all transaction unload
+    // properly information MetaSema that it has been unloaded.
+    const Transaction* unloadPoint = nullptr;
+    for (const Transaction* T = m_Interpreter.getFirstTransaction(); T != 0;
+         T = T->getNext()) {
+      if (T == Pos->second) {
+        unloadPoint = T;
+        break;
       }
     }
+    if (unloadPoint) {
+      while (m_Interpreter.getLastTransaction() != unloadPoint) {
+        auto Unloaded =
+            m_Watermarks->second.find(m_Interpreter.getLastTransaction());
+        if (Unloaded != m_Watermarks->second.end()) {
+          auto PosUnloaded = m_Watermarks->first.find(Unloaded->second);
+          if (PosUnloaded != m_Watermarks->first.end())
+            m_Watermarks->first.erase(PosUnloaded);
+          m_Watermarks->second.erase(Unloaded);
+        }
+        m_Interpreter.unload(/*numberOfTransactions*/ 1);
+      }
+    } else {
+      cling::errs() << ">>> ERROR: Transaction for file: '" << file
+                    << "' has already been unloaded\n";
+    }
+    m_Interpreter.getDynamicLibraryManager()->unloadLibrary(std::move(fe));
+    m_Watermarks->first.erase(Pos);
+    m_Watermarks->second.erase(Pos->second);
     return AR_Success;
   }
   MetaSema::ActionResult MetaSema::actOnUCommand(llvm::StringRef file) {
