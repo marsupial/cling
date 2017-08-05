@@ -188,7 +188,12 @@ namespace cling {
 
     // FIXME: unload, once implemented, must return success / failure
     // Lookup the file
-    if (const clang::FileEntry* Entry = fe) {
+
+    const clang::FileEntry* Entry = fe;
+    if (!Entry)
+      Entry = m_Interpreter.get<clang::FileManager>().getFile(fe.name(), 0, 0);
+
+    if (Entry) {
       Watermarks::iterator Pos = m_Watermarks->first.find(Entry);
        //fprintf(stderr,"DEBUG: unload request for %s\n",file.str().c_str());
 
