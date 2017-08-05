@@ -189,9 +189,9 @@ namespace cling {
       return canFail ? AR_Failure : AR_Success;
 
     const clang::FileEntry* Entry = fe;
+    clang::FileManager& FM = m_Interpreter.get<clang::FileManager>();
     if (!Entry) {
-      if (!(Entry = m_Interpreter.get<clang::FileManager>().getFile(
-                fe.name(), /*OpenFile*/ false, /*CacheFailure*/ false)))
+      if (!(Entry = FM.getFile(fe.name(), false, false)))
         return AR_Failure;
     }
 
@@ -210,14 +210,24 @@ namespace cling {
         break;
       }
     }
+	llvm::SmallString<512> Buf;
+    DynamicLibraryManager* DLM = m_Interpreter.getDynamicLibraryManager();
     if (unloadPoint) {
       while (m_Interpreter.getLastTransaction() != unloadPoint) {
         auto Unloaded =
             m_Watermarks->second.find(m_Interpreter.getLastTransaction());
         if (Unloaded != m_Watermarks->second.end()) {
           auto PosUnloaded = m_Watermarks->first.find(Unloaded->second);
-          if (PosUnloaded != m_Watermarks->first.end())
+          if (PosUnloaded != m_Watermarks->first.end()) {
+            llvm::StringRef Path = PosUnloaded->first->tryGetRealPathName();
+            if (Path.empty()) {
+              Buf = PosUnloaded->first->getName();
+              FM.makeAbsolutePath(Buf);
+              Path = Buf;
+            }
             m_Watermarks->first.erase(PosUnloaded);
+            DLM->unloadLibrary(Path);
+          }
           m_Watermarks->second.erase(Unloaded);
         }
         m_Interpreter.unload(/*numberOfTransactions*/ 1);
@@ -226,7 +236,7 @@ namespace cling {
       cling::errs() << ">>> ERROR: Transaction for file: '" << file
                     << "' has already been unloaded\n";
     }
-    m_Interpreter.getDynamicLibraryManager()->unloadLibrary(std::move(fe));
+    DLM->unloadLibrary(std::move(fe));
     m_Watermarks->first.erase(Pos);
     m_Watermarks->second.erase(Pos->second);
     return AR_Success;
