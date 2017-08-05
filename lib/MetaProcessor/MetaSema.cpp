@@ -46,7 +46,7 @@ namespace cling {
   MetaSema::ActionResult MetaSema::actOnLCommand(llvm::StringRef file,
                                              Transaction** transaction /*= 0*/){
     FileEntry fe = m_Interpreter.lookupFileOrLibrary(file);
-    ActionResult result = actOnUCommand(file, fe);
+    ActionResult result = actOnUCommand(file, fe, false);
     if (result != AR_Success)
       return result;
 
@@ -183,20 +183,21 @@ namespace cling {
     return AR_Success;
   }
 
-  MetaSema::ActionResult MetaSema::actOnUCommand(const llvm::StringRef &file, FileEntry fe ) {
+  MetaSema::ActionResult MetaSema::actOnUCommand(const llvm::StringRef &file,
+                                                 FileEntry fe, bool canFail) {
     if (!m_Watermarks.get())
-      return AR_Success;
-
-    // FIXME: unload, once implemented, must return success / failure
-    // Lookup the file
+      return canFail ? AR_Failure : AR_Success;
 
     const clang::FileEntry* Entry = fe;
-    if (!Entry)
-      Entry = m_Interpreter.get<clang::FileManager>().getFile(fe.name(), 0, 0);
+    if (!Entry) {
+      if (!(Entry = m_Interpreter.get<clang::FileManager>().getFile(
+                fe.name(), /*OpenFile*/ false, /*CacheFailure*/ false)))
+        return AR_Failure;
+    }
 
     Watermarks::iterator Pos = m_Watermarks->first.find(Entry);
     if (Pos == m_Watermarks->first.end())
-      return AR_Success;
+      return canFail ? AR_Failure : AR_Success;
 
     // Search for the transaction, i.e. verify that is has not already
     // been unloaded ; This can be removed once all transaction unload
@@ -230,9 +231,10 @@ namespace cling {
     m_Watermarks->second.erase(Pos->second);
     return AR_Success;
   }
+
   MetaSema::ActionResult MetaSema::actOnUCommand(llvm::StringRef file) {
     //Get the canonical path, taking into account interp and system search paths
-    return actOnUCommand(file, m_Interpreter.lookupFileOrLibrary(file));
+    return actOnUCommand(file, m_Interpreter.lookupFileOrLibrary(file), true);
   }
 
   void MetaSema::actOnICommand(llvm::StringRef path) const {

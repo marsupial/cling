@@ -136,7 +136,8 @@ namespace cling {
     ///\param[in] file - The file to unload.
     ///
     ActionResult actOnUCommand(llvm::StringRef file);
-    ActionResult actOnUCommand(const llvm::StringRef &file, FileEntry fileEntry);
+    ActionResult actOnUCommand(const llvm::StringRef &file, FileEntry fileEntry,
+                               bool failNotFound);
 
     ///\brief Actions to be performed on add include path. It registers new
     /// folder where header files can be searched.
