@@ -86,6 +86,20 @@ public:
   iterator end() { return m_Map.end(); }
   const_iterator end() const { return m_Map.end(); }
 
+  const_iterator find_value(const Value& Val) const {
+    auto Fnd =
+        std::find_if(m_Order.begin(), m_Order.end(),
+                     [Val](const_iterator Itr) { return Itr->second == Val; });
+    return Fnd == m_Order.end() ? m_Map.end() : *Fnd;
+  }
+
+  const_iterator rfind_value(const Value& Val) const {
+    auto Fnd =
+        std::find_if(m_Order.rbegin(), m_Order.rend(),
+                     [Val](const_iterator Itr) { return Itr->second == Val; });
+    return Fnd == m_Order.rend() ? m_Map.end() : *Fnd;
+  }
+
   void swap(OrderedMap& Other) {
     m_Map.swap(Other.m_Map);
     m_Order.swap(Other.m_Order);
