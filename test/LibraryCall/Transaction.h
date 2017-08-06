@@ -6,7 +6,7 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-struct BaseClass {
+struct CLING_EXPORT BaseClass {
   const char* const Name;
   void dump(const char* What) const;
 
@@ -15,8 +15,10 @@ struct BaseClass {
   virtual void DoSomething() const;
 };
 
-struct SubClass : public BaseClass {
+#ifdef CLING_SUBCLASS
+struct CLING_EXPORT SubClass : public BaseClass {
   SubClass();
   virtual void DoSomething() const;
 };
+#endif
 

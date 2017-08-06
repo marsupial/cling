@@ -6,15 +6,15 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: clang -shared -fno-rtti -I%S -DCLING_EXPORT=%dllexport -DCLING_LIBTEST %S/Transaction.cxx -o%T/libTransactionA%shlibext
-// RUN: clang -shared -fno-rtti -I%S -DCLING_EXPORT=%dllexport -DCLING_SUBCLASS %S/Transaction.cxx -L%T -lTransactionA -o%T/libTransactionB%shlibext
-// RUN: cat %s | %cling -I%S -L%T -Xclang -verify 2>&1 | FileCheck %s
+// RUN: clang -shared %fPIC -fno-rtti -I%S -DCLING_EXPORT=%dllexport -DCLING_LIBTEST %S/Transaction.cxx -o%T/%shlibprefixTransactionA%shlibext
+// RUN: clang -shared %fPIC -fno-rtti -I%S -DCLING_EXPORT=%dllexport -DCLING_SUBCLASS %S/Transaction.cxx -L%T -lTransactionA -o%T/%shlibprefixTransactionB%shlibext
+// RUN: cat %s | %cling -I%S -L%T -DCLING_SUBCLASS -Xclang -verify 2>&1 | FileCheck %s
 
 
-.L libTransactionA
+.L TransactionA
 #include "Transaction.h"
-.L libTransactionB
-.U libTransactionA
+.L TransactionB
+.U TransactionA
 
 //      CHECK: BaseClass::construct
 // CHECK-NEXT: SubClass::construct
@@ -23,11 +23,9 @@
 
 #include "Transaction.h"
 SubClass SC;
-.U libTransactionB
+.U TransactionB
 
-// CHECK: You are probably missing the definition of SubClass::SubClass()
-// CHECK: Maybe you need to load the corresponding shared library?
-// CHECK: You are probably missing the definition of BaseClass::~BaseClass()
+// CHECK: You are probably missing the definition of {{(public: __cdecl )?}}SubClass::SubClass
 // CHECK: Maybe you need to load the corresponding shared library?
 
 // expected-no-diagnostics
