@@ -195,8 +195,8 @@ namespace cling {
         return AR_Failure;
     }
 
-    Watermarks::iterator Pos = m_Watermarks->first.find(Entry);
-    if (Pos == m_Watermarks->first.end())
+    auto Pos = m_Watermarks->find(Entry);
+    if (Pos == m_Watermarks->end())
       return canFail ? AR_Failure : AR_Success;
 
     // Search for the transaction, i.e. verify that is has not already
@@ -210,25 +210,21 @@ namespace cling {
         break;
       }
     }
-	llvm::SmallString<512> Buf;
+    llvm::SmallString<512> Buf;
     DynamicLibraryManager* DLM = m_Interpreter.getDynamicLibraryManager();
     if (unloadPoint) {
       while (m_Interpreter.getLastTransaction() != unloadPoint) {
         auto Unloaded =
-            m_Watermarks->second.find(m_Interpreter.getLastTransaction());
-        if (Unloaded != m_Watermarks->second.end()) {
-          auto PosUnloaded = m_Watermarks->first.find(Unloaded->second);
-          if (PosUnloaded != m_Watermarks->first.end()) {
-            llvm::StringRef Path = PosUnloaded->first->tryGetRealPathName();
-            if (Path.empty()) {
-              Buf = PosUnloaded->first->getName();
-              FM.makeAbsolutePath(Buf);
-              Path = Buf;
-            }
-            m_Watermarks->first.erase(PosUnloaded);
-            DLM->unloadLibrary(Path);
+            m_Watermarks->rfind_value(m_Interpreter.getLastTransaction());
+        if (Unloaded.first != m_Watermarks->end()) {
+          llvm::StringRef Path = Unloaded.first->first->tryGetRealPathName();
+          if (Path.empty()) {
+            Buf = Unloaded.first->first->getName();
+            FM.makeAbsolutePath(Buf);
+            Path = Buf;
           }
-          m_Watermarks->second.erase(Unloaded);
+          m_Watermarks->erase(Unloaded);
+          DLM->unloadLibrary(Path);
         }
         m_Interpreter.unload(/*numberOfTransactions*/ 1);
       }
@@ -237,8 +233,7 @@ namespace cling {
                     << "' has already been unloaded\n";
     }
     DLM->unloadLibrary(std::move(fe));
-    m_Watermarks->first.erase(Pos);
-    m_Watermarks->second.erase(Pos->second);
+    m_Watermarks->erase(Pos);
     return AR_Success;
   }
 
@@ -506,17 +501,16 @@ namespace cling {
     }
     if (Entry) {
       if (!m_Watermarks.get()) {
-        m_Watermarks.reset(new std::pair<Watermarks, ReverseWatermarks>);
+        m_Watermarks.reset(new Watermarks);
         if (!m_Watermarks.get()) {
           ::perror("Could not allocate watermarks");
           return false;
         }
       }
       // register as a watermark, or error if already registered
-      if (m_Watermarks->first.try_emplace(Entry, unloadPoint).second) {
-        m_Watermarks->second.try_emplace(unloadPoint, Entry);
+      if (m_Watermarks->emplace(Entry, unloadPoint).second)
         return true;
-      }
+
       m_Interpreter.getDiagnostics().Report(m_Interpreter.getSourceLocation(),
                          clang::diag::err_duplicate_member) << fileEntry.name();
     } else {
@@ -526,3 +520,4 @@ namespace cling {
     return false;
   }
 } // end namespace cling
+

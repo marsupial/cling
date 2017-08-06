@@ -13,6 +13,7 @@
 #include "cling/MetaProcessor/MetaProcessor.h"
 
 #include "cling/Interpreter/Transaction.h"
+#include "cling/Utils/OrderedMap.h"
 
 #include "clang/Basic/FileManager.h" // for DenseMap<FileEntry*>
 
@@ -35,10 +36,11 @@ namespace cling {
   private:
     Interpreter& m_Interpreter;
     MetaProcessor& m_MetaProcessor;
+    typedef cling::utils::OrderedMap<const clang::FileEntry*,
+                                     const Transaction*>
+        Watermarks;
+    std::unique_ptr<Watermarks> m_Watermarks;
     bool m_IsQuitRequested;
-    typedef llvm::DenseMap<const clang::FileEntry*, const Transaction*> Watermarks;
-    typedef llvm::DenseMap<const Transaction*, const clang::FileEntry*> ReverseWatermarks;
-    std::unique_ptr< std::pair<Watermarks, ReverseWatermarks> > m_Watermarks;
 
   public:
     enum SwitchMode {
