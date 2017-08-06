@@ -36,6 +36,7 @@ public:
   typedef typename map_t::iterator iterator;
   typedef typename map_t::const_iterator const_iterator;
   typedef typename map_t::mapped_type mapped_type;
+  enum { npos = -1 };
 
   template <typename... Args>
   std::pair<iterator, bool> emplace(Args&&... args) {
@@ -66,18 +67,36 @@ public:
   ///
   ///\param [in] Itr - The iterator to erase.
   ///\param [out] Move - Move the mapped object to this pointer before erasing.
+  ///\param [in] Rev - Hint that the object is closer to the ordered end.
   ///
-  void erase(const_iterator Itr, mapped_type* Move = nullptr) {
+  void erase(const_iterator Itr, mapped_type* Move = nullptr, bool Rev = 0) {
     assert(std::find(m_Order.begin(), m_Order.end(), Itr) != m_Order.end());
-    for (auto Otr = m_Order.begin(), End = m_Order.end(); Otr != End; ++Otr) {
-      if (Itr == *Otr) {
-        m_Order.erase(Otr);
-        break;
+    if (!Rev) {
+      for (auto Otr = m_Order.begin(), End = m_Order.end(); Otr != End; ++Otr) {
+        if (Itr == *Otr) {
+          m_Order.erase(Otr);
+          break;
+        }
+      }
+    } else {
+      for (auto R = m_Order.rbegin(), End = m_Order.rend(); R != End; ++R) {
+        if (Itr == *R) {
+          m_Order.erase(std::next(R).base());
+          break;
+        }
       }
     }
     assert(std::find(m_Order.begin(), m_Order.end(), Itr) == m_Order.end());
     if (Move) *Move = std::move(Itr->second);
     m_Map.erase(Itr);
+  }
+  void erase(const_iterator Itr, bool Reverse) {
+    return erase(Itr, nullptr, Reverse);
+  }
+  void erase(const std::pair<const_iterator, size_t>& OItr) {
+    assert(OItr.first != m_Map.end() && OItr.second != size_t(npos));
+    m_Map.erase(OItr.first);
+	m_Order.erase(m_Order.begin() + OItr.second);
   }
 
   iterator find(const Key& K) { return m_Map.find(K); }
@@ -86,18 +105,24 @@ public:
   iterator end() { return m_Map.end(); }
   const_iterator end() const { return m_Map.end(); }
 
-  const_iterator find_value(const Value& Val) const {
+  std::pair<const_iterator, size_t> find_value(const Value& Val) const {
     auto Fnd =
         std::find_if(m_Order.begin(), m_Order.end(),
                      [Val](const_iterator Itr) { return Itr->second == Val; });
-    return Fnd == m_Order.end() ? m_Map.end() : *Fnd;
+    return Fnd == m_Order.end()
+               ? std::make_pair(m_Map.end(), npos)
+               : std::make_pair(*Fnd, std::distance(m_Order.begin(), Fnd));
   }
 
-  const_iterator rfind_value(const Value& Val) const {
+  std::pair<const_iterator, size_t> rfind_value(const Value& Val) const {
     auto Fnd =
         std::find_if(m_Order.rbegin(), m_Order.rend(),
                      [Val](const_iterator Itr) { return Itr->second == Val; });
-    return Fnd == m_Order.rend() ? m_Map.end() : *Fnd;
+    return Fnd == m_Order.rend()
+               ? std::make_pair(m_Map.end(), npos)
+               : std::make_pair(*Fnd,
+                                m_Order.size() -
+                                    (std::distance(m_Order.rbegin(), Fnd) + 1));
   }
 
   void swap(OrderedMap& Other) {
