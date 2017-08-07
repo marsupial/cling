@@ -8,29 +8,50 @@
 
 #include "Transaction.h"
 
+#ifndef CLING_REGB
+
+#include <stddef.h>
+
+#ifdef _WIN32
+#define strdup _strdup
+#endif
+
 extern "C" int printf(const char*, ...);
+extern "C" char* strdup(const char*);
+extern "C" void* realloc(void*, size_t);
+extern "C" void free(void*);
 
-#ifndef CLING_SUBCLASS
+static struct Registry {
+  char** Names;
+  unsigned Num;
+  Registry() : Names(0), Num(0) {}
+  ~Registry() {
+    if (!Names) return;
+    for (unsigned I = 0; I < Num; ++I) {
+      printf("Unreg.%d: %s\n", I, Names[I]);
+      free(Names[I]);
+    }
+    free(Names);
+  }
+  void operator() (const char* N) {
+    printf("Reg.%d: %s\n", ++Num, N);
+    Names = (char**) realloc(Names, Num * sizeof(const char*));
+    Names[Num-1] = strdup(N);
+  }
+} sRegistry;
 
-void BaseClass::dump(const char* What) const { printf("%s::%s\n", Name, What); }
-BaseClass::BaseClass(const char* N) : Name(N) { dump("construct"); }
-BaseClass::~BaseClass() { dump("destruct"); }
-void BaseClass::DoSomething() const { dump("virtual"); }
-
-static BaseClass B;
+extern "C" void CLING_EXPORT RegisterPlugin(const char* Name) {
+  sRegistry(Name);
+}
 
 #else
 
-SubClass::SubClass() : BaseClass("SubClass") {}
-void SubClass::DoSomething() const {
-  printf("<");
-  BaseClass::DoSomething();
-  printf(">\n");
+extern "C" void CLING_EXPORT RegisterPluginB(void (*RegisterPlugin)(const char*)) {
+  RegisterPlugin("B");
 }
 
-static SubClass SC;
-
 #endif
+
 
 
 

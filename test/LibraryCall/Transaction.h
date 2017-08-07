@@ -6,19 +6,5 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-struct CLING_EXPORT BaseClass {
-  const char* const Name;
-  void dump(const char* What) const;
-
-  BaseClass(const char* N = "BaseClass");
-  ~BaseClass();
-  virtual void DoSomething() const;
-};
-
-#ifdef CLING_SUBCLASS
-struct CLING_EXPORT SubClass : public BaseClass {
-  SubClass();
-  virtual void DoSomething() const;
-};
-#endif
-
+extern "C" void CLING_EXPORT RegisterPlugin(const char*);
+extern "C" void CLING_EXPORT RegisterPluginB(void (*)(const char*));
