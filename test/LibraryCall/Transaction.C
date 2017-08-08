@@ -6,8 +6,8 @@
 // LICENSE.TXT for details.
 //------------------------------------------------------------------------------
 
-// RUN: clang -shared %fPIC -fno-rtti -I%S -DCLING_EXPORT=%dllexport -DCLING_LIBTEST %S/Transaction.cxx -o%T/libTransactionA%shlibext
-// RUN: clang -shared %fPIC -fno-rtti -I%S -DCLING_EXPORT=%dllexport -DCLING_REGB %S/Transaction.cxx -o%T/libTransactionB%shlibext
+// RUN: clang -shared %fPIC %RTTI -I%S -DCLING_EXPORT=%dllexport -DCLING_LIBTEST %S/Transaction.cxx -o%T/libTransactionA%shlibext
+// RUN: clang -shared %fPIC %RTTI -I%S -DCLING_EXPORT=%dllexport -DCLING_REGB %S/Transaction.cxx -o%T/libTransactionB%shlibext
 // RUN: cat %s | %cling -I%S -L%T -Xclang -verify 2>&1 | FileCheck %s
 
 
